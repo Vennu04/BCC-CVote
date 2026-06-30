@@ -1,0 +1,70 @@
+# DEV ONLY — Local workstation
+# Usage:
+#   docker compose up              → starts all services
+#   docker compose --profile seed up  → also seeds DB on first run
+#   docker compose up --build      → rebuild images after code change
+
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bcc-backend
+    environment:
+      FLASK_ENV: development
+      MONGODB_URI: mongodb://mongo:27017/bcc_cvote
+      JWT_SECRET_KEY: dev-jwt-secret-local
+      SECRET_KEY: dev-secret-local
+      FRONTEND_URL: "http://localhost:5173"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app    # hot-reload in dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bcc-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7.0
+    container_name: bcc-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Run once to seed admin + slots: docker compose --profile seed up seed
+  seed:
+    build:
+      context: ./backend
+    container_name: bcc-seed
+    command: python scripts/seed.py
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/bcc_cvote
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles:
+      - seed
+
+volumes:
+  mongo_data:

@@ -1,0 +1,32 @@
+replicaCount:
+  backend: 2
+  frontend: 2
+
+image:
+  backend:
+    tag: prod-latest
+  frontend:
+    tag: prod-latest
+
+namespace: voting-prod
+
+ingress:
+  host: bcc-cvote.yourdomain.com
+  tls:
+    - secretName: bcc-cvote-tls
+      hosts:
+        - bcc-cvote.yourdomain.com
+
+env:
+  backend:
+    FLASK_ENV: production
+    FRONTEND_URL: "https://bcc-cvote.yourdomain.com"
+    GUNICORN_WORKERS: "3"
+
+hpa:
+  backend:
+    minReplicas: 2
+    maxReplicas: 6
+  frontend:
+    minReplicas: 2
+    maxReplicas: 4

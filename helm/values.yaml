@@ -1,0 +1,79 @@
+replicaCount:
+  backend: 1
+  frontend: 1
+
+image:
+  registry: ""    # set per env e.g. 123456789.dkr.ecr.ap-south-1.amazonaws.com
+  backend:
+    repository: bcc-cvote-backend
+    tag: latest
+    pullPolicy: Always
+  frontend:
+    repository: bcc-cvote-frontend
+    tag: latest
+    pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace: bcc-cvote
+
+service:
+  backend:
+    type: ClusterIP
+    port: 5000
+  frontend:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  host: bcc-cvote.local
+  tls: []
+
+env:
+  backend:
+    FLASK_ENV: production
+    FRONTEND_URL: "https://bcc-cvote.local"
+    GUNICORN_WORKERS: "2"
+    LOG_LEVEL: info
+
+secrets:
+  # These are populated from AWS Secrets Manager / K8s Secret
+  # Do NOT commit real values here
+  backendSecretName: bcc-cvote-backend-secret
+
+resources:
+  backend:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  frontend:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+hpa:
+  enabled: true
+  backend:
+    minReplicas: 1
+    maxReplicas: 4
+    cpuUtilization: 70
+  frontend:
+    minReplicas: 1
+    maxReplicas: 3
+    cpuUtilization: 70
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "5000"
+  prometheus.io/path: "/metrics"

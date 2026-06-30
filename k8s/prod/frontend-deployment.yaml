@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bcc-frontend
+  namespace: voting-prod
+  labels:
+    app: bcc-cvote
+    component: frontend
+    environment: production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bcc-cvote
+      component: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: bcc-cvote
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          # Image tag updated by GitHub Actions prod-cd.yml
+          image: ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-frontend:IMAGE_TAG
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health.txt
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health.txt
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      imagePullSecrets:
+        - name: ecr-pull-secret

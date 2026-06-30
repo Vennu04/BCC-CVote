@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: voting-prod
+  labels:
+    app: bcc-cvote
+    environment: production

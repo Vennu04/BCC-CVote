@@ -1,0 +1,27 @@
+replicaCount:
+  backend: 1
+  frontend: 1
+
+image:
+  backend:
+    tag: staging-latest
+  frontend:
+    tag: staging-latest
+
+namespace: voting-staging
+
+ingress:
+  host: staging.bcc-cvote.yourdomain.com
+
+env:
+  backend:
+    FLASK_ENV: staging
+    FRONTEND_URL: "https://staging.bcc-cvote.yourdomain.com"
+
+hpa:
+  backend:
+    minReplicas: 1
+    maxReplicas: 2
+  frontend:
+    minReplicas: 1
+    maxReplicas: 2

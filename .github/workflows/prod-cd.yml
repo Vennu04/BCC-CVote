@@ -1,0 +1,133 @@
+name: Prod CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
+  BACKEND_REPO: bcc-cvote-backend
+  FRONTEND_REPO: bcc-cvote-frontend
+
+jobs:
+  build-and-deploy:
+    name: Build, Scan & Deploy to K3s
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── AWS Auth ──────────────────────────────────────────────────────────
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Image tags ────────────────────────────────────────────────────────
+      - name: Set image tag
+        id: tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      # ── Build backend ─────────────────────────────────────────────────────
+      - name: Build backend image
+        working-directory: backend
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest \
+            .
+
+      # ── Trivy scan backend ────────────────────────────────────────────────
+      - name: Trivy image scan (backend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      # ── Build frontend ────────────────────────────────────────────────────
+      - name: Build frontend image
+        working-directory: frontend
+        run: |
+          docker build \
+            --build-arg VITE_API_URL="" \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest \
+            .
+
+      # ── Trivy scan frontend ───────────────────────────────────────────────
+      - name: Trivy image scan (frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      # ── Push images ───────────────────────────────────────────────────────
+      - name: Push backend to ECR
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
+
+      - name: Push frontend to ECR
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+
+      # ── Update K8s manifests (GitOps) ─────────────────────────────────────
+      - name: Update image tags in manifests
+        run: |
+          ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
+          TAG=${{ steps.tag.outputs.IMAGE_TAG }}
+          REGION=${{ env.AWS_REGION }}
+
+          sed -i "s|ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-backend:IMAGE_TAG|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.BACKEND_REPO }}:${TAG}|g" \
+            k8s/prod/backend-deployment.yaml
+
+          sed -i "s|ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-frontend:IMAGE_TAG|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
+            k8s/prod/frontend-deployment.yaml
+
+      # ── Inject real secrets into K8s secret manifest ──────────────────────
+      - name: Fetch secrets from AWS Secrets Manager and update K8s secret
+        run: |
+          MONGODB_URI=$(aws secretsmanager get-secret-value \
+            --secret-id bcc-cvote/prod/mongodb-uri \
+            --query SecretString --output text | jq -r .MONGODB_URI)
+
+          JWT_SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id bcc-cvote/prod/jwt-secret \
+            --query SecretString --output text | jq -r .JWT_SECRET_KEY)
+
+          APP_SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id bcc-cvote/prod/app-secret \
+            --query SecretString --output text | jq -r .SECRET_KEY)
+
+          MONGO_B64=$(echo -n "$MONGODB_URI" | base64 -w0)
+          JWT_B64=$(echo -n "$JWT_SECRET" | base64 -w0)
+          APP_B64=$(echo -n "$APP_SECRET" | base64 -w0)
+
+          sed -i "s|MONGODB_URI: .*|MONGODB_URI: ${MONGO_B64}|g" k8s/prod/secret.yaml
+          sed -i "s|JWT_SECRET_KEY: .*|JWT_SECRET_KEY: ${JWT_B64}|g" k8s/prod/secret.yaml
+          sed -i "s|SECRET_KEY: .*|SECRET_KEY: ${APP_B64}|g" k8s/prod/secret.yaml
+
+      # ── Commit updated manifests (ArgoCD picks up changes) ────────────────
+      - name: Commit & push updated manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/prod/backend-deployment.yaml k8s/prod/frontend-deployment.yaml k8s/prod/secret.yaml
+          git commit -m "chore: deploy ${{ steps.tag.outputs.IMAGE_TAG }} to prod [skip ci]"
+          git push
