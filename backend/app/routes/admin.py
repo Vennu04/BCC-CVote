@@ -22,6 +22,9 @@ def _user_to_dict(u):
         "team_code": u["team_code"],
         "role": u["role"],
         "is_active": u.get("is_active", True),
+        "matches_scheduled": u.get("matches_scheduled", 0),
+        "matches_played": u.get("matches_played", 0),
+        "tournament_status": u.get("tournament_status", "not_played"),
         "created_at": format_ist(u.get("created_at")),
     }
 
@@ -129,6 +132,9 @@ def add_captain():
         "password_hash": generate_password_hash(password),
         "role": "captain",
         "is_active": True,
+        "matches_scheduled": 0,
+        "matches_played": 0,
+        "tournament_status": "not_played",
         "created_at": datetime.utcnow(),
     }
     result = mongo.db.users.insert_one(doc)
@@ -156,6 +162,15 @@ def update_captain(captain_id):
         if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(captain_id)}}):
             return jsonify({"error": "Team code already taken"}), 409
         updates["team_code"] = new_code
+    if "matches_scheduled" in data:
+        updates["matches_scheduled"] = max(0, int(data["matches_scheduled"]))
+    if "matches_played" in data:
+        updates["matches_played"] = max(0, int(data["matches_played"]))
+    if "tournament_status" in data:
+        valid = {"not_played", "in_progress", "qualified", "eliminated"}
+        if data["tournament_status"] not in valid:
+            return jsonify({"error": "Invalid tournament_status"}), 400
+        updates["tournament_status"] = data["tournament_status"]
 
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
