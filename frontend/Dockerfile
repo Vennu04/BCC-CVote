@@ -13,6 +13,11 @@ RUN npm run build
 # Production stage
 FROM nginx:1.27-alpine
 
+# The nginx:1.27-alpine tag doesn't always carry the latest Alpine security
+# patches (openssl/libexpat/libpng CVEs caught by CI here) — apply whatever's
+# available at build time rather than waiting on the upstream tag to refresh.
+RUN apk update && apk upgrade --no-cache
+
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
