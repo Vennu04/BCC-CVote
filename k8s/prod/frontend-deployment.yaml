@@ -8,7 +8,8 @@ metadata:
     component: frontend
     environment: production
 spec:
-  replicas: 2
+  # 1 replica — see note in backend-deployment.yaml on t3.micro RAM budget.
+  replicas: 1
   selector:
     matchLabels:
       app: bcc-cvote

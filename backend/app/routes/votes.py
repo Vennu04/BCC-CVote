@@ -5,17 +5,38 @@ from datetime import datetime
 import pytz
 
 from .. import mongo
-from ..utils.auth import captain_required, get_current_user
+from ..utils.auth import get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, seconds_until_close,
-    format_ist, now_ist, get_upcoming_weekend_dates
+    format_ist, now_ist, suggested_window_for_slot,
+    can_revoke_vote, revoke_deadline_for_window
 )
 
 votes_bp = Blueprint("votes", __name__)
 
 
-def _get_active_window():
-    return mongo.db.voting_windows.find_one({"is_active": True})
+def _get_active_window(slot_id):
+    return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
+
+
+def _window_info(window, slot=None):
+    if not window:
+        return {"is_open": False, "opens_at": None, "closes_at": None, "seconds_remaining": 0,
+                "can_revoke": False, "revoke_deadline": None}
+    is_open = is_voting_window_open(window["opens_at"], window["closes_at"])
+    info = {
+        "is_open": is_open,
+        "opens_at": format_ist(window["opens_at"]),
+        "closes_at": format_ist(window["closes_at"]),
+        "seconds_remaining": seconds_until_close(window["closes_at"]) if is_open else 0,
+        "can_revoke": False,
+        "revoke_deadline": None,
+    }
+    if slot:
+        info["can_revoke"] = can_revoke_vote(window, slot)
+        deadline = revoke_deadline_for_window(window, slot)
+        info["revoke_deadline"] = format_ist(deadline) if deadline else None
+    return info
 
 
 def _serialize_slot(slot):
@@ -24,7 +45,9 @@ def _serialize_slot(slot):
         "slot_number": slot["slot_number"],
         "day": slot["day"],
         "time_of_day": slot["time_of_day"],
-        "label": f"Slot {slot['slot_number']} — {slot['day']} {slot['time_of_day']}",
+        "match_time": slot.get("match_time", ""),
+        "description": slot.get("description", ""),
+        "label": f"{slot['day']} {slot.get('match_time', slot['time_of_day'])}",
     }
 
 
@@ -42,21 +65,12 @@ def get_slots():
 @votes_bp.route("/votes/status", methods=["GET"])
 @jwt_required()
 def voting_status():
-    window = _get_active_window()
-    if not window:
-        return jsonify({"is_open": False, "message": "No active voting window set"})
-
-    opens_at = window["opens_at"]
-    closes_at = window["closes_at"]
-    is_open = is_voting_window_open(opens_at, closes_at)
-
-    return jsonify({
-        "is_open": is_open,
-        "opens_at": format_ist(opens_at),
-        "closes_at": format_ist(closes_at),
-        "seconds_remaining": seconds_until_close(closes_at) if is_open else 0,
-        "weekend": get_upcoming_weekend_dates(),
-    })
+    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    result = []
+    for slot in slots:
+        window = _get_active_window(str(slot["_id"]))
+        result.append({"slot": _serialize_slot(slot), **_window_info(window)})
+    return jsonify({"slots": result})
 
 
 # ── Captain's own votes ────────────────────────────────────────────────────────
@@ -65,36 +79,27 @@ def voting_status():
 @jwt_required()
 def my_votes():
     user = get_current_user()
-    window = _get_active_window()
-    if not window:
-        return jsonify({"votes": [], "window": None})
-
-    my_votes = list(mongo.db.votes.find({
-        "captain_id": str(user["_id"]),
-        "window_id": str(window["_id"]),
-    }))
-
-    votes_by_slot = {v["slot_id"]: v for v in my_votes}
     slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
 
     result = []
     for slot in slots:
         sid = str(slot["_id"])
-        vote = votes_by_slot.get(sid)
+        window = _get_active_window(sid)
+        vote = None
+        if window:
+            vote = mongo.db.votes.find_one({
+                "captain_id": str(user["_id"]),
+                "slot_id": sid,
+                "window_id": str(window["_id"]),
+            })
         result.append({
             "slot": _serialize_slot(slot),
             "availability": vote["availability"] if vote else None,
             "voted_at": format_ist(vote["voted_at"]) if vote else None,
+            "window": _window_info(window, slot),
         })
 
-    return jsonify({
-        "votes": result,
-        "window": {
-            "is_open": is_voting_window_open(window["opens_at"], window["closes_at"]),
-            "closes_at": format_ist(window["closes_at"]),
-            "seconds_remaining": seconds_until_close(window["closes_at"]),
-        },
-    })
+    return jsonify({"votes": result})
 
 
 # ── Submit / update a vote ─────────────────────────────────────────────────────
@@ -102,13 +107,6 @@ def my_votes():
 @votes_bp.route("/votes", methods=["POST"])
 @jwt_required()
 def submit_vote():
-    window = _get_active_window()
-    if not window:
-        return jsonify({"error": "No active voting window"}), 400
-
-    if not is_voting_window_open(window["opens_at"], window["closes_at"]):
-        return jsonify({"error": "Voting window is closed"}), 403
-
     user = get_current_user()
     data = request.get_json(silent=True) or {}
     slot_id = data.get("slot_id")
@@ -120,6 +118,12 @@ def submit_vote():
     slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
     if not slot:
         return jsonify({"error": "Slot not found"}), 404
+
+    window = _get_active_window(slot_id)
+    if not window:
+        return jsonify({"error": "No active voting window for this match"}), 400
+    if not is_voting_window_open(window["opens_at"], window["closes_at"]):
+        return jsonify({"error": "Voting window is closed for this match"}), 403
 
     now = datetime.utcnow()
     filter_q = {
@@ -137,42 +141,93 @@ def submit_vote():
     return jsonify({"message": "Vote recorded", "slot_id": slot_id, "availability": availability})
 
 
-# ── Public vote summary (counts per slot — visible to all captains) ────────────
+# ── Emergency revoke: withdraw a vote after the window has closed ─────────────
+
+@votes_bp.route("/votes/<slot_id>", methods=["DELETE"])
+@jwt_required()
+def revoke_vote(slot_id):
+    user = get_current_user()
+    slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
+    if not slot:
+        return jsonify({"error": "Slot not found"}), 404
+
+    window = _get_active_window(slot_id)
+    if not window or not can_revoke_vote(window, slot):
+        deadline = format_ist(revoke_deadline_for_window(window, slot)) if window else None
+        msg = f"Revoke deadline has passed (was {deadline})" if deadline else "No voting window for this match"
+        return jsonify({"error": msg}), 403
+
+    result = mongo.db.votes.delete_one({
+        "captain_id": str(user["_id"]),
+        "slot_id": slot_id,
+        "window_id": str(window["_id"]),
+    })
+    if result.deleted_count == 0:
+        return jsonify({"error": "No vote to revoke"}), 404
+
+    return jsonify({"message": "Vote revoked"})
+
+
+# ── Bulk: mark captain not available for entire week ──────────────────────────
+
+@votes_bp.route("/votes/not-available-week", methods=["POST"])
+@jwt_required()
+def not_available_week():
+    user = get_current_user()
+    slots = list(mongo.db.match_slots.find())
+    now = datetime.utcnow()
+
+    updated, skipped = 0, 0
+    for slot in slots:
+        slot_id = str(slot["_id"])
+        window = _get_active_window(slot_id)
+        if not window or not is_voting_window_open(window["opens_at"], window["closes_at"]):
+            skipped += 1
+            continue
+
+        filter_q = {
+            "captain_id": str(user["_id"]),
+            "slot_id": slot_id,
+            "window_id": str(window["_id"]),
+        }
+        mongo.db.votes.update_one(filter_q, {
+            "$set": {"availability": "not_available", "updated_at": now},
+            "$setOnInsert": {"captain_id": str(user["_id"]), "slot_id": slot_id,
+                             "window_id": str(window["_id"]), "voted_at": now},
+        }, upsert=True)
+        updated += 1
+
+    if updated == 0:
+        return jsonify({"error": "No open voting windows right now"}), 400
+
+    return jsonify({"message": f"Marked not available for {updated} match(es)", "updated": updated, "skipped": skipped})
+
+
+# ── Vote summary — admin only ──────────────────────────────────────────────────
 
 @votes_bp.route("/votes/summary", methods=["GET"])
 @jwt_required()
 def vote_summary():
-    window = _get_active_window()
-    if not window:
-        return jsonify({"summary": [], "window": None})
-
     slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
-    all_votes = list(mongo.db.votes.find({"window_id": str(window["_id"])}))
+    total_captains = mongo.db.users.count_documents({"is_active": True, "role": {"$in": ["captain", "player"]}})
 
     summary = []
     for slot in slots:
         sid = str(slot["_id"])
-        slot_votes = [v for v in all_votes if v["slot_id"] == sid]
+        window = _get_active_window(sid)
+        slot_votes = list(mongo.db.votes.find({"slot_id": sid, "window_id": str(window["_id"])})) if window else []
+        total_voted = len(slot_votes)
         summary.append({
             "slot": _serialize_slot(slot),
+            "window": _window_info(window),
             "counts": {
                 "available": sum(1 for v in slot_votes if v["availability"] == "available"),
                 "not_available": sum(1 for v in slot_votes if v["availability"] == "not_available"),
                 "maybe": sum(1 for v in slot_votes if v["availability"] == "maybe"),
-                "no_response": 0,  # filled in after fetching total captains
+                "no_response": total_captains - total_voted,
             },
-            "total_voted": len(slot_votes),
+            "total_voted": total_voted,
+            "total_captains": total_captains,
         })
 
-    total_captains = mongo.db.users.count_documents({"role": "captain", "is_active": True})
-    for item in summary:
-        item["counts"]["no_response"] = total_captains - item["total_voted"]
-        item["total_captains"] = total_captains
-
-    return jsonify({
-        "summary": summary,
-        "window": {
-            "is_open": is_voting_window_open(window["opens_at"], window["closes_at"]),
-            "closes_at": format_ist(window["closes_at"]),
-        },
-    })
+    return jsonify({"summary": summary})

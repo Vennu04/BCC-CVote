@@ -10,12 +10,17 @@ variable "subnet_id" {
   description = "Public subnet ID for K3s EC2 instance"
 }
 
-variable "key_pair_name" {
-  description = "EC2 key pair name for SSH access"
-}
-
 variable "admin_cidr" {
   description = "Your IP CIDR for SSH/K3s API access (e.g. 203.0.113.0/32)"
+}
+
+variable "acme_email" {
+  description = "Email for Let's Encrypt certificate registration/expiry notices"
+}
+
+variable "github_repo" {
+  description = "GitHub repo as owner/name, used for OIDC trust policy and pulling GitOps manifests (e.g. Vennu04/BCC-CVote)"
+  default     = "Vennu04/BCC-CVote"
 }
 
 locals {

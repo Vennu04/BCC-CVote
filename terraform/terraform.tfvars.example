@@ -1,0 +1,18 @@
+# Copy this to terraform.tfvars and fill in the real values (terraform.tfvars
+# is gitignored — never commit it).
+
+aws_region = "ap-south-1"
+
+# Discovered from this AWS account's default VPC — override if you'd rather
+# use a custom VPC.
+vpc_id    = "vpc-01fc80e8f55088970"
+subnet_id = "subnet-0d648ef4af397ecc3" # ap-south-1c, public
+
+# Your IP, so only you can SSH in / reach the K3s API / Grafana.
+# Find it with: curl -s https://checkip.amazonaws.com
+admin_cidr = "YOUR.IP.ADDRESS.HERE/32"
+
+# Email for Let's Encrypt certificate expiry notices.
+acme_email = "you@example.com"
+
+github_repo = "Vennu04/BCC-CVote"

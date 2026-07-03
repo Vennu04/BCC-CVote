@@ -1,6 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+export function homePathFor(user) {
+  if (!user) return "/login";
+  if (user.role === "admin") return "/admin";
+  if (user.role === "player") return "/player/dashboard";
+  return "/captain/dashboard";
+}
+
 export function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -14,6 +21,24 @@ export function AdminRoute({ children }) {
   const location = useLocation();
   if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (user.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (user.role !== "admin") return <Navigate to={homePathFor(user)} replace />;
+  return children;
+}
+
+export function CaptainRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (user.role !== "captain") return <Navigate to={homePathFor(user)} replace />;
+  return children;
+}
+
+export function PlayerRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (user.role !== "player") return <Navigate to={homePathFor(user)} replace />;
   return children;
 }

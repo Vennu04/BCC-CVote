@@ -7,4 +7,6 @@ data:
   FLASK_ENV: "production"
   GUNICORN_WORKERS: "2"
   LOG_LEVEL: "info"
-  FRONTEND_URL: "https://bcc-cvote.yourdomain.com"
+  # Same one-time manual step as ingress.yaml — replace with the real value
+  # from `terraform output app_url` after the first apply.
+  FRONTEND_URL: "https://13-206-106-36.sslip.io"

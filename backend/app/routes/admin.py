@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response, send_file
+import io
 from flask_jwt_extended import jwt_required
 from bson import ObjectId
 from werkzeug.security import generate_password_hash
@@ -8,7 +9,7 @@ import pytz
 from .. import mongo
 from ..utils.auth import admin_required
 from ..utils.time_utils import (
-    is_voting_window_open, format_ist, now_ist, IST
+    is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot
 )
 from ..utils.export import build_csv_report
 
@@ -16,12 +17,18 @@ admin_bp = Blueprint("admin", __name__)
 
 
 def _user_to_dict(u):
+    # Every captain is also a player — they should be able to cast their own
+    # vote even on a weekend their team has no match scheduled — so this isn't
+    # a one-off flag, it's implied by the role.
+    is_player = True if u["role"] == "captain" else u.get("is_player", False)
     return {
         "id": str(u["_id"]),
         "name": u["name"],
         "team_code": u["team_code"],
+        "team_name": u.get("team_name", ""),
         "role": u["role"],
         "is_active": u.get("is_active", True),
+        "is_player": is_player,
         "matches_scheduled": u.get("matches_scheduled", 0),
         "matches_played": u.get("matches_played", 0),
         "tournament_status": u.get("tournament_status", "not_played"),
@@ -29,8 +36,19 @@ def _user_to_dict(u):
     }
 
 
-def _get_active_window():
-    return mongo.db.voting_windows.find_one({"is_active": True})
+def _get_active_window(slot_id):
+    return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
+
+
+def _window_info(window):
+    if not window:
+        return {"id": None, "is_open": False, "opens_at": None, "closes_at": None}
+    return {
+        "id": str(window["_id"]),
+        "is_open": is_voting_window_open(window["opens_at"], window["closes_at"]),
+        "opens_at": format_ist(window["opens_at"]),
+        "closes_at": format_ist(window["closes_at"]),
+    }
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────
@@ -38,26 +56,25 @@ def _get_active_window():
 @admin_bp.route("/dashboard", methods=["GET"])
 @admin_required
 def dashboard():
-    window = _get_active_window()
-    captains = list(mongo.db.users.find({"role": "captain", "is_active": True}).sort("name", 1))
+    voters = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
     slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
 
-    if not window:
-        return jsonify({
-            "window": None,
-            "captains": [_user_to_dict(c) for c in captains],
-            "slots": [],
-            "vote_matrix": [],
-        })
+    # Resolve each slot's own active window up front
+    slot_windows = {str(s["_id"]): _get_active_window(str(s["_id"])) for s in slots}
 
-    all_votes = list(mongo.db.votes.find({"window_id": str(window["_id"])}))
+    all_votes = list(mongo.db.votes.find({
+        "$or": [
+            {"slot_id": sid, "window_id": str(w["_id"])}
+            for sid, w in slot_windows.items() if w
+        ]
+    })) if any(slot_windows.values()) else []
     vote_map = {(v["captain_id"], v["slot_id"]): v for v in all_votes}
 
-    # Build captain × slot matrix
+    # Build voter × slot matrix
     matrix = []
-    for captain in captains:
-        cid = str(captain["_id"])
-        row = {"captain": _user_to_dict(captain), "votes": []}
+    for voter in voters:
+        cid = str(voter["_id"])
+        row = {"captain": _user_to_dict(voter), "votes": []}
         for slot in slots:
             sid = str(slot["_id"])
             vote = vote_map.get((cid, sid))
@@ -73,9 +90,13 @@ def dashboard():
 
     # Per-slot summary
     slot_summary = []
+    open_count = 0
     for slot in slots:
         sid = str(slot["_id"])
         slot_votes = [v for v in all_votes if v["slot_id"] == sid]
+        window_info = _window_info(slot_windows[sid])
+        if window_info["is_open"]:
+            open_count += 1
         slot_summary.append({
             "slot_id": sid,
             "slot_number": slot["slot_number"],
@@ -85,18 +106,14 @@ def dashboard():
             "available": sum(1 for v in slot_votes if v["availability"] == "available"),
             "not_available": sum(1 for v in slot_votes if v["availability"] == "not_available"),
             "maybe": sum(1 for v in slot_votes if v["availability"] == "maybe"),
-            "no_response": len(captains) - len(slot_votes),
+            "no_response": len(voters) - len(slot_votes),
+            "window": window_info,
         })
 
-    is_open = is_voting_window_open(window["opens_at"], window["closes_at"])
     return jsonify({
-        "window": {
-            "id": str(window["_id"]),
-            "is_open": is_open,
-            "opens_at": format_ist(window["opens_at"]),
-            "closes_at": format_ist(window["closes_at"]),
-        },
-        "captains_total": len(captains),
+        "open_count": open_count,
+        "total_slots": len(slots),
+        "captains_total": len(voters),
         "captains_voted": len({v["captain_id"] for v in all_votes}),
         "slots": slot_summary,
         "vote_matrix": matrix,
@@ -108,7 +125,7 @@ def dashboard():
 @admin_bp.route("/captains", methods=["GET"])
 @admin_required
 def list_captains():
-    captains = list(mongo.db.users.find({"role": "captain"}).sort("name", 1))
+    captains = list(mongo.db.users.find({"role": "captain", "is_active": True}).sort("name", 1))
     return jsonify([_user_to_dict(c) for c in captains])
 
 
@@ -153,6 +170,8 @@ def update_captain(captain_id):
     updates = {}
     if "name" in data:
         updates["name"] = data["name"].strip()
+    if "team_name" in data:
+        updates["team_name"] = data["team_name"].strip()
     if "is_active" in data:
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
@@ -195,32 +214,135 @@ def remove_captain(captain_id):
     return jsonify({"message": "Captain deactivated"})
 
 
-# ── Voting window management ───────────────────────────────────────────────────
+# ── Players management ──────────────────────────────────────────────────────────
+
+@admin_bp.route("/players", methods=["GET"])
+@admin_required
+def list_players():
+    # Captains are players too — they need the chance to vote even on a
+    # weekend their own team has no match scheduled — so this roster is
+    # everyone who can cast an availability vote, not just the dedicated
+    # player-only accounts.
+    players = list(mongo.db.users.find(
+        {"role": {"$in": ["player", "captain"]}, "is_active": True}
+    ).sort("name", 1))
+    return jsonify([_user_to_dict(p) for p in players])
+
+
+@admin_bp.route("/players", methods=["POST"])
+@admin_required
+def add_player():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    team_code = (data.get("team_code") or "").strip().upper()
+    password = data.get("password") or team_code.lower()
+
+    if not name or not team_code:
+        return jsonify({"error": "name and team_code are required"}), 400
+
+    if mongo.db.users.find_one({"team_code": team_code}):
+        return jsonify({"error": "Player code already exists"}), 409
+
+    doc = {
+        "name": name,
+        "team_code": team_code,
+        "password_hash": generate_password_hash(password),
+        "role": "player",
+        "is_player": True,
+        "is_active": True,
+        "created_at": datetime.utcnow(),
+    }
+    result = mongo.db.users.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return jsonify({
+        "message": "Player added",
+        "player": _user_to_dict(doc),
+        "default_password": password,
+    }), 201
+
+
+@admin_bp.route("/players/<player_id>", methods=["PUT"])
+@admin_required
+def update_player(player_id):
+    data = request.get_json(silent=True) or {}
+    updates = {}
+    if "name" in data:
+        updates["name"] = data["name"].strip()
+    if "is_active" in data:
+        updates["is_active"] = bool(data["is_active"])
+    if "password" in data and data["password"]:
+        updates["password_hash"] = generate_password_hash(data["password"])
+    if "team_code" in data:
+        new_code = data["team_code"].strip().upper()
+        if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(player_id)}}):
+            return jsonify({"error": "Player code already taken"}), 409
+        updates["team_code"] = new_code
+
+    if not updates:
+        return jsonify({"error": "No fields to update"}), 400
+
+    result = mongo.db.users.update_one({"_id": ObjectId(player_id), "role": "player"}, {"$set": updates})
+    if result.matched_count == 0:
+        return jsonify({"error": "Player not found"}), 404
+
+    updated = mongo.db.users.find_one({"_id": ObjectId(player_id)})
+    return jsonify({"message": "Player updated", "player": _user_to_dict(updated)})
+
+
+@admin_bp.route("/players/<player_id>", methods=["DELETE"])
+@admin_required
+def remove_player(player_id):
+    result = mongo.db.users.update_one(
+        {"_id": ObjectId(player_id), "role": "player"},
+        {"$set": {"is_active": False}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Player not found"}), 404
+    return jsonify({"message": "Player deactivated"})
+
+
+# ── Voting window management (per match slot) ──────────────────────────────────
 
 @admin_bp.route("/window", methods=["GET"])
 @admin_required
 def get_window():
-    window = _get_active_window()
-    if not window:
-        return jsonify({"window": None})
-    return jsonify({
-        "window": {
-            "id": str(window["_id"]),
-            "is_open": is_voting_window_open(window["opens_at"], window["closes_at"]),
-            "opens_at": format_ist(window["opens_at"]),
-            "closes_at": format_ist(window["closes_at"]),
-        }
-    })
+    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    windows = []
+    for slot in slots:
+        sid = str(slot["_id"])
+        window = _get_active_window(sid)
+        suggested = suggested_window_for_slot(slot)
+        windows.append({
+            "slot": {
+                "id": sid,
+                "slot_number": slot["slot_number"],
+                "day": slot["day"],
+                "time_of_day": slot["time_of_day"],
+                "match_time": slot.get("match_time", ""),
+            },
+            "window": _window_info(window) if window else None,
+            "suggested": {
+                "opens_at": suggested["opens_at_display"],
+                "closes_at": suggested["closes_at_display"],
+                "opens_at_iso": suggested["opens_at_ist_iso"],
+                "closes_at_iso": suggested["closes_at_ist_iso"],
+            } if suggested else None,
+        })
+    return jsonify({"windows": windows})
 
 
 @admin_bp.route("/window", methods=["POST"])
 @admin_required
 def set_window():
     """
-    Body: { "opens_at": "2024-06-06T12:30:00", "closes_at": "2024-06-07T14:30:00" }
+    Body: { "slot_id": "...", "opens_at": "2024-06-06T12:30:00", "closes_at": "2024-06-07T14:30:00" }
     Datetimes treated as IST.
     """
     data = request.get_json(silent=True) or {}
+    slot_id = data.get("slot_id")
+    if not slot_id or not mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)}):
+        return jsonify({"error": "Valid slot_id is required"}), 400
+
     try:
         opens_str = data["opens_at"]
         closes_str = data["closes_at"]
@@ -234,9 +356,10 @@ def set_window():
     if opens_at >= closes_at:
         return jsonify({"error": "opens_at must be before closes_at"}), 400
 
-    # Deactivate previous windows
-    mongo.db.voting_windows.update_many({}, {"$set": {"is_active": False}})
+    # Deactivate previous windows for this slot only
+    mongo.db.voting_windows.update_many({"slot_id": slot_id}, {"$set": {"is_active": False}})
     result = mongo.db.voting_windows.insert_one({
+        "slot_id": slot_id,
         "opens_at": opens_at,
         "closes_at": closes_at,
         "is_active": True,
@@ -253,9 +376,14 @@ def set_window():
 @admin_bp.route("/window/close", methods=["POST"])
 @admin_required
 def close_window_early():
-    window = _get_active_window()
+    data = request.get_json(silent=True) or {}
+    slot_id = data.get("slot_id")
+    if not slot_id:
+        return jsonify({"error": "slot_id is required"}), 400
+
+    window = _get_active_window(slot_id)
     if not window:
-        return jsonify({"error": "No active window to close"}), 404
+        return jsonify({"error": "No active window to close for this slot"}), 404
     now = datetime.utcnow()
     mongo.db.voting_windows.update_one(
         {"_id": window["_id"]},
@@ -266,15 +394,24 @@ def close_window_early():
 
 # ── Export ─────────────────────────────────────────────────────────────────────
 
+def _votes_for_current_windows(slots):
+    slot_windows = {str(s["_id"]): _get_active_window(str(s["_id"])) for s in slots}
+    if not any(slot_windows.values()):
+        return []
+    return list(mongo.db.votes.find({
+        "$or": [
+            {"slot_id": sid, "window_id": str(w["_id"])}
+            for sid, w in slot_windows.items() if w
+        ]
+    }))
+
+
 @admin_bp.route("/export/csv", methods=["GET"])
 @admin_required
 def export_csv():
-    window = _get_active_window()
-    captains = list(mongo.db.users.find({"role": "captain", "is_active": True}).sort("name", 1))
+    captains = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
     slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
-    votes = list(mongo.db.votes.find(
-        {"window_id": str(window["_id"])} if window else {"_id": None}
-    ))
+    votes = _votes_for_current_windows(slots)
 
     csv_data = build_csv_report(captains, slots, votes)
     response = make_response(csv_data)
@@ -283,3 +420,193 @@ def export_csv():
         f"attachment; filename=bcc-cvote-availability-{datetime.utcnow().strftime('%Y%m%d')}.csv"
     )
     return response
+
+
+@admin_bp.route("/export/excel", methods=["GET"])
+@admin_required
+def export_excel():
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    captains = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
+    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    votes = _votes_for_current_windows(slots)
+    vote_map = {(v["captain_id"], v["slot_id"]): v["availability"] for v in votes}
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Availability"
+
+    # Fills
+    green  = PatternFill("solid", fgColor="C6EFCE")
+    red    = PatternFill("solid", fgColor="FFC7CE")
+    yellow = PatternFill("solid", fgColor="FFEB9C")
+    grey   = PatternFill("solid", fgColor="EFEFEF")
+    navy   = PatternFill("solid", fgColor="1E3A5F")
+
+    bold_white = Font(bold=True, color="FFFFFF")
+    bold       = Font(bold=True)
+    center     = Alignment(horizontal="center", vertical="center")
+    thin = Border(
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin"),
+    )
+
+    # Header row
+    headers = ["#", "Captain", "Team Name", "Team Code"] + [
+        f"{s['day']}\n{s.get('match_time', s['time_of_day'])}" for s in slots
+    ] + ["Total Available"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = navy
+        cell.font = bold_white
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = thin
+    ws.row_dimensions[1].height = 36
+
+    # Data rows
+    avail_map = {
+        "available":     ("✅ Available",     green),
+        "not_available": ("❌ Not Available", red),
+        "maybe":         ("🤔 Maybe",         yellow),
+        None:            ("—",               grey),
+    }
+
+    for row_idx, captain in enumerate(captains, 2):
+        cid = str(captain["_id"])
+        avail_count = 0
+        ws.cell(row=row_idx, column=1, value=row_idx - 1).alignment = center
+        ws.cell(row=row_idx, column=2, value=captain["name"]).font = bold
+        ws.cell(row=row_idx, column=3, value=captain.get("team_name", ""))
+        ws.cell(row=row_idx, column=4, value=captain["team_code"]).alignment = center
+
+        for col_idx, slot in enumerate(slots, 5):
+            sid = str(slot["_id"])
+            avail = vote_map.get((cid, sid))
+            label, fill = avail_map.get(avail, avail_map[None])
+            cell = ws.cell(row=row_idx, column=col_idx, value=label)
+            cell.fill = fill
+            cell.alignment = center
+            cell.border = thin
+            if avail == "available":
+                avail_count += 1
+
+        total_cell = ws.cell(row=row_idx, column=5 + len(slots), value=avail_count)
+        total_cell.alignment = center
+        total_cell.font = bold
+        total_cell.border = thin
+
+        for col in range(1, 5):
+            ws.cell(row=row_idx, column=col).border = thin
+
+    # Column widths
+    ws.column_dimensions["A"].width = 5
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 24
+    ws.column_dimensions["D"].width = 10
+    for i in range(len(slots)):
+        ws.column_dimensions[get_column_letter(5 + i)].width = 18
+    ws.column_dimensions[get_column_letter(5 + len(slots))].width = 16
+
+    # Summary row
+    sum_row = len(captains) + 2
+    ws.cell(row=sum_row, column=1, value="").fill = grey
+    ws.cell(row=sum_row, column=2, value="AVAILABLE COUNT").font = bold
+    ws.cell(row=sum_row, column=3, value="").fill = grey
+    ws.cell(row=sum_row, column=4, value="").fill = grey
+    for col_idx, slot in enumerate(slots, 5):
+        sid = str(slot["_id"])
+        count = sum(1 for v in votes if v["slot_id"] == sid and v["availability"] == "available")
+        cell = ws.cell(row=sum_row, column=col_idx, value=count)
+        cell.font = bold
+        cell.alignment = center
+        cell.fill = green
+        cell.border = thin
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"BCC-Availability-{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name=filename)
+
+
+@admin_bp.route("/export/available-players", methods=["GET"])
+@admin_required
+def export_available_players():
+    """
+    One sheet per match slot, listing just the players who voted "available" —
+    a ready-to-use roster for picking teams/lineups, instead of the full
+    everyone-x-every-status grid in /export/excel.
+    """
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+
+    voters = {str(u["_id"]): u for u in mongo.db.users.find(
+        {"role": {"$in": ["captain", "player"]}, "is_active": True}
+    )}
+    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    votes = _votes_for_current_windows(slots)
+
+    navy = PatternFill("solid", fgColor="1E3A5F")
+    gold = PatternFill("solid", fgColor="FFF3CD")
+    bold_white = Font(bold=True, color="FFFFFF")
+    bold = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center")
+    thin = Border(*(Side(style="thin"),) * 4)
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    for slot in slots:
+        sid = str(slot["_id"])
+        sheet_name = f"{slot['day']} {slot['time_of_day']}"[:31]
+        ws = wb.create_sheet(sheet_name)
+
+        title = f"{slot['day']} {slot['time_of_day']} Match — {slot.get('match_time', '')}"
+        ws.merge_cells("A1:C1")
+        ws["A1"] = title
+        ws["A1"].font = Font(bold=True, size=13, color="1E3A5F")
+
+        headers = ["#", "Player Name", "Code"]
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col, value=h)
+            cell.fill = navy
+            cell.font = bold_white
+            cell.alignment = center
+            cell.border = thin
+
+        available = sorted(
+            (voters[v["captain_id"]] for v in votes
+             if v["slot_id"] == sid and v["availability"] == "available" and v["captain_id"] in voters),
+            key=lambda u: u["name"].lower(),
+        )
+
+        row = 4
+        for i, user in enumerate(available, 1):
+            ws.cell(row=row, column=1, value=i).alignment = center
+            ws.cell(row=row, column=2, value=user["name"])
+            ws.cell(row=row, column=3, value=user["team_code"]).alignment = center
+            for col in range(1, 4):
+                ws.cell(row=row, column=col).border = thin
+            row += 1
+
+        summary_row = max(row, 5)
+        ws.cell(row=summary_row + 1, column=1, value="Available:").font = bold
+        ws.cell(row=summary_row + 1, column=2, value=len(available)).fill = gold
+
+        ws.column_dimensions["A"].width = 6
+        ws.column_dimensions["B"].width = 26
+        ws.column_dimensions["C"].width = 12
+
+        if not available:
+            ws.cell(row=4, column=1, value="No one has voted available for this match yet.")
+            ws.merge_cells("A4:C4")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"BCC-Available-Players-{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True, download_name=filename)

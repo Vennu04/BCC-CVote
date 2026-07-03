@@ -91,7 +91,7 @@ def seed():
     # Indexes
     db.users.create_index("team_code", unique=True)
     db.votes.create_index([("captain_id", 1), ("slot_id", 1), ("window_id", 1)])
-    db.voting_windows.create_index("is_active")
+    db.voting_windows.create_index([("slot_id", 1), ("is_active", 1)])
     print("  ✅ Indexes ensured")
     print("🏏 Seed complete!")
 

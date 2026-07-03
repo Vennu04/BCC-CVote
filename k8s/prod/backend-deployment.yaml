@@ -8,7 +8,10 @@ metadata:
     component: backend
     environment: production
 spec:
-  replicas: 2
+  # 1 replica — t3.micro (1GB RAM) free-tier node doesn't have headroom for
+  # redundant replicas alongside ArgoCD/Traefik/CoreDNS. Bump this (and node
+  # size) if usage grows beyond the free tier.
+  replicas: 1
   selector:
     matchLabels:
       app: bcc-cvote

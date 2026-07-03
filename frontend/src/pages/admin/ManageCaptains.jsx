@@ -21,7 +21,7 @@ export default function ManageCaptains() {
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState(null);
   const [form, setForm]           = useState({ name: "", team_code: "", password: "" });
-  const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", matches_scheduled: 0, matches_played: 0 });
+  const [editRow, setEditRow]     = useState({ name: "", team_code: "", team_name: "", password: "", matches_scheduled: 0, matches_played: 0 });
   const [submitting, setSubmitting] = useState(false);
 
   const fetchCaptains = async () => {
@@ -82,6 +82,7 @@ export default function ManageCaptains() {
     setEditRow({
       name: c.name,
       team_code: c.team_code,
+      team_name: c.team_name || "",
       password: "",
       matches_scheduled: c.matches_scheduled ?? 0,
       matches_played: c.matches_played ?? 0,
@@ -145,8 +146,10 @@ export default function ManageCaptains() {
               <thead className="bg-cricket-navy text-white">
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">#</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Team Name</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Captain</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Player</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Matches Scheduled</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Matches Played</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Status</th>
@@ -163,7 +166,7 @@ export default function ManageCaptains() {
                       {/* # */}
                       <td className="px-4 py-3 text-gray-400 font-mono">{i + 1}</td>
 
-                      {/* Team Name */}
+                      {/* Code */}
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <input
@@ -178,6 +181,20 @@ export default function ManageCaptains() {
                         )}
                       </td>
 
+                      {/* Team Name */}
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input
+                            className="input-field py-1.5 text-sm"
+                            value={editRow.team_name || ""}
+                            onChange={e => setEditRow({ ...editRow, team_name: e.target.value })}
+                            placeholder="Team name"
+                          />
+                        ) : (
+                          <span className="text-gray-800 font-medium">{c.team_name || <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
                       {/* Captain name */}
                       <td className="px-4 py-3">
                         {isEditing ? (
@@ -189,6 +206,11 @@ export default function ManageCaptains() {
                         ) : (
                           <span className="font-medium text-gray-900">{c.name}</span>
                         )}
+                      </td>
+
+                      {/* Also votes as a player */}
+                      <td className="px-4 py-3 text-center">
+                        {c.is_player && <span title="Also votes as a player">🏏</span>}
                       </td>
 
                       {/* Matches Scheduled */}

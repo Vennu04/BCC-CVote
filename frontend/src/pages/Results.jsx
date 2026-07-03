@@ -28,7 +28,6 @@ export default function Results() {
   );
 
   const summary = data?.summary || [];
-  const window = data?.window;
 
   return (
     <div className="min-h-screen bg-cricket-cream">
@@ -38,9 +37,7 @@ export default function Results() {
           <BarChart2 className="text-pitch-600" size={24} />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Availability Results</h1>
-            <p className="text-sm text-gray-500">
-              {window?.is_open ? `Voting closes: ${window.closes_at}` : "Voting is closed"}
-            </p>
+            <p className="text-sm text-gray-500">Each match has its own voting window</p>
           </div>
         </div>
 
@@ -51,12 +48,12 @@ export default function Results() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {summary.map((item) => {
-              const { slot, counts, total_captains, total_voted } = item;
+              const { slot, counts, total_captains, total_voted, window } = item;
               const pct = (v) => total_captains > 0 ? Math.round((v / total_captains) * 100) : 0;
 
               return (
                 <div key={slot.id} className="card">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-2">
                     <div>
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{slot.day}</p>
                       <p className="font-bold text-gray-900">{slot.time_of_day}</p>
@@ -65,6 +62,12 @@ export default function Results() {
                       {total_voted}/{total_captains} voted
                     </span>
                   </div>
+
+                  {window && (
+                    <p className={`text-xs mb-3 ${window.is_open ? "text-green-600" : "text-gray-400"}`}>
+                      {window.is_open ? `🟢 Open — closes ${window.closes_at}` : window.closes_at ? `🔴 Closed — was ${window.opens_at} to ${window.closes_at}` : "No window set"}
+                    </p>
+                  )}
 
                   {/* Stacked bar */}
                   <div className="flex h-3 rounded-full overflow-hidden mb-3 bg-gray-100">

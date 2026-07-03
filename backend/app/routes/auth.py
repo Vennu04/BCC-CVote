@@ -7,6 +7,24 @@ from ..utils.auth import get_current_user
 auth_bp = Blueprint("auth", __name__)
 
 
+def _user_summary(user):
+    summary = {
+        "id": str(user["_id"]),
+        "name": user["name"],
+        "team_code": user["team_code"],
+        "role": user["role"],
+        "is_player": True if user["role"] == "captain" else user.get("is_player", False),
+    }
+    if user["role"] == "captain":
+        summary.update({
+            "team_name": user.get("team_name", ""),
+            "matches_scheduled": user.get("matches_scheduled", 0),
+            "matches_played": user.get("matches_played", 0),
+            "tournament_status": user.get("tournament_status", "not_played"),
+        })
+    return summary
+
+
 @auth_bp.route("/login", methods=["POST"])
 def login():
     data = request.get_json(silent=True) or {}
@@ -23,12 +41,7 @@ def login():
     token = create_access_token(identity=str(user["_id"]))
     return jsonify({
         "access_token": token,
-        "user": {
-            "id": str(user["_id"]),
-            "name": user["name"],
-            "team_code": user["team_code"],
-            "role": user["role"],
-        }
+        "user": _user_summary(user),
     })
 
 
@@ -38,12 +51,7 @@ def me():
     user = get_current_user()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    return jsonify({
-        "id": str(user["_id"]),
-        "name": user["name"],
-        "team_code": user["team_code"],
-        "role": user["role"],
-    })
+    return jsonify(_user_summary(user))
 
 
 @auth_bp.route("/logout", methods=["POST"])

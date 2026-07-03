@@ -94,40 +94,24 @@ jobs:
           TAG=${{ steps.tag.outputs.IMAGE_TAG }}
           REGION=${{ env.AWS_REGION }}
 
-          sed -i "s|ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-backend:IMAGE_TAG|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.BACKEND_REPO }}:${TAG}|g" \
+          # Matches the image reference regardless of its *current* tag (not just
+          # the original ACCOUNT_ID/IMAGE_TAG placeholders), so this keeps working
+          # on the 2nd, 3rd, ... deploy — not just the first one.
+          sed -i -E "s|[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.BACKEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.BACKEND_REPO }}:${TAG}|g" \
             k8s/prod/backend-deployment.yaml
 
-          sed -i "s|ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-frontend:IMAGE_TAG|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
+          sed -i -E "s|[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.FRONTEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
             k8s/prod/frontend-deployment.yaml
 
-      # ── Inject real secrets into K8s secret manifest ──────────────────────
-      - name: Fetch secrets from AWS Secrets Manager and update K8s secret
-        run: |
-          MONGODB_URI=$(aws secretsmanager get-secret-value \
-            --secret-id bcc-cvote/prod/mongodb-uri \
-            --query SecretString --output text | jq -r .MONGODB_URI)
-
-          JWT_SECRET=$(aws secretsmanager get-secret-value \
-            --secret-id bcc-cvote/prod/jwt-secret \
-            --query SecretString --output text | jq -r .JWT_SECRET_KEY)
-
-          APP_SECRET=$(aws secretsmanager get-secret-value \
-            --secret-id bcc-cvote/prod/app-secret \
-            --query SecretString --output text | jq -r .SECRET_KEY)
-
-          MONGO_B64=$(echo -n "$MONGODB_URI" | base64 -w0)
-          JWT_B64=$(echo -n "$JWT_SECRET" | base64 -w0)
-          APP_B64=$(echo -n "$APP_SECRET" | base64 -w0)
-
-          sed -i "s|MONGODB_URI: .*|MONGODB_URI: ${MONGO_B64}|g" k8s/prod/secret.yaml
-          sed -i "s|JWT_SECRET_KEY: .*|JWT_SECRET_KEY: ${JWT_B64}|g" k8s/prod/secret.yaml
-          sed -i "s|SECRET_KEY: .*|SECRET_KEY: ${APP_B64}|g" k8s/prod/secret.yaml
+      # Secrets are NOT handled here — External Secrets Operator syncs them
+      # straight from SSM Parameter Store into the cluster on its own
+      # refresh interval. CI never reads or commits secret material.
 
       # ── Commit updated manifests (ArgoCD picks up changes) ────────────────
       - name: Commit & push updated manifests
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add k8s/prod/backend-deployment.yaml k8s/prod/frontend-deployment.yaml k8s/prod/secret.yaml
+          git add k8s/prod/backend-deployment.yaml k8s/prod/frontend-deployment.yaml
           git commit -m "chore: deploy ${{ steps.tag.outputs.IMAGE_TAG }} to prod [skip ci]"
           git push

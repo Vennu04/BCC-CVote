@@ -35,3 +35,4 @@ Thumbs.db
 
 # Docker
 *.log
+terraform/*.pem

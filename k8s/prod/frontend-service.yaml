@@ -7,31 +7,16 @@ metadata:
     app: bcc-cvote
     component: frontend
 spec:
-  type: NodePort
+  # ClusterIP — reached through the Traefik Ingress (ingress.yaml), which now
+  # terminates TLS on hostPort 80/443. Direct NodePort access was removed
+  # since it bypassed HTTPS entirely and the security group no longer opens
+  # those ports.
+  type: ClusterIP
   selector:
     app: bcc-cvote
     component: frontend
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30080
-      protocol: TCP
-      name: http
----
-# Backend exposed via NodePort for CloudFront origin
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend-nodeport
-  namespace: voting-prod
-spec:
-  type: NodePort
-  selector:
-    app: bcc-cvote
-    component: backend
-  ports:
-    - port: 5000
-      targetPort: 5000
-      nodePort: 30500
       protocol: TCP
       name: http

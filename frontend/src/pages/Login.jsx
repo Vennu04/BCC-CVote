@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { homePathFor } from "../components/ProtectedRoute";
 import toast from "react-hot-toast";
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || "/dashboard";
+  const from = location.state?.from?.pathname;
 
   const [form, setForm] = useState({ team_code: "", password: "" });
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function Login() {
     try {
       const user = await login(form.team_code.trim().toUpperCase(), form.password);
       toast.success(`Welcome, ${user.name}! 🏏`);
-      navigate(user.role === "admin" ? "/admin" : from, { replace: true });
+      navigate(from || homePathFor(user), { replace: true });
     } catch (err) {
       const msg = err.response?.data?.error || "Login failed. Check your credentials.";
       setError(msg);
