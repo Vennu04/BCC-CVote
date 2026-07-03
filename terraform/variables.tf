@@ -23,6 +23,11 @@ variable "github_repo" {
   default     = "Vennu04/BCC-CVote"
 }
 
+variable "vfla_monitoring_sg_id" {
+  description = "Security group ID of the existing vfla-monitoring-grafana instance — bcc-cvote's exporters open a rule to let it scrape them instead of running a dedicated monitoring instance"
+  default     = "sg-0d7dceaea35d53553"
+}
+
 locals {
   common_tags = {
     Project     = "bcc-cvote"

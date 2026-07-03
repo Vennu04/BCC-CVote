@@ -192,9 +192,41 @@ resource "aws_security_group" "k3s" {
   tags = local.common_tags
 }
 
-resource "aws_security_group" "monitoring" {
-  name        = "bcc-cvote-monitoring-sg"
-  description = "Prometheus + Grafana node - isolated from the app node so monitoring never competes with the app for RAM"
+# No dedicated bcc-cvote monitoring instance — consolidated onto the
+# existing vfla-monitoring-grafana instance instead (one Prometheus/Grafana
+# for both projects, not two). This project's Terraform doesn't own that
+# instance, just opens the door for it to reach these exporters.
+#
+# Add this to vfla-monitoring-grafana's prometheus.yml scrape_configs
+# (see terraform output bcc_cvote_scrape_config for the exact snippet):
+resource "aws_security_group_rule" "k3s_allow_vfla_monitoring_scrape" {
+  type                     = "ingress"
+  security_group_id        = aws_security_group.k3s.id
+  source_security_group_id = var.vfla_monitoring_sg_id
+  from_port                = 30100
+  to_port                  = 30100
+  protocol                 = "tcp"
+  description              = "node-exporter NodePort - scraped by vfla-monitoring-grafana"
+}
+
+resource "aws_security_group_rule" "k3s_allow_vfla_monitoring_ksm" {
+  type                     = "ingress"
+  security_group_id        = aws_security_group.k3s.id
+  source_security_group_id = var.vfla_monitoring_sg_id
+  from_port                = 30101
+  to_port                  = 30101
+  protocol                 = "tcp"
+  description              = "kube-state-metrics NodePort - scraped by vfla-monitoring-grafana"
+}
+
+# ── Dedicated MongoDB instance ─────────────────────────────────────────────────
+# Self-hosting as a K3s pod on the app node caused real instability (NodeNotReady
+# events under combined load with K3s+Traefik+cert-manager+ESO+ArgoCD+the app) —
+# moved out to its own instance, same proven Docker Compose pattern as monitoring.
+
+resource "aws_security_group" "mongodb" {
+  name        = "bcc-cvote-mongodb-sg"
+  description = "Self-hosted MongoDB - isolated from the app node, only reachable from it"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -206,19 +238,11 @@ resource "aws_security_group" "monitoring" {
   }
 
   ingress {
-    description = "Grafana UI"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
-  }
-
-  ingress {
-    description = "Prometheus UI"
-    from_port   = 9090
-    to_port     = 9090
-    protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]
+    description     = "MongoDB - app node only, never public"
+    from_port       = 27017
+    to_port         = 27017
+    protocol        = "tcp"
+    security_groups = [aws_security_group.k3s.id]
   }
 
   egress {
@@ -229,28 +253,6 @@ resource "aws_security_group" "monitoring" {
   }
 
   tags = local.common_tags
-}
-
-# Let the monitoring node scrape exporters on the app node — scoped to just
-# those two NodePorts, from just the monitoring SG, not the whole internet.
-resource "aws_security_group_rule" "k3s_allow_monitoring_scrape" {
-  type                     = "ingress"
-  security_group_id        = aws_security_group.k3s.id
-  source_security_group_id = aws_security_group.monitoring.id
-  from_port                = 30100
-  to_port                  = 30100
-  protocol                 = "tcp"
-  description              = "node-exporter NodePort - scraped by the monitoring instance"
-}
-
-resource "aws_security_group_rule" "k3s_allow_monitoring_ksm" {
-  type                     = "ingress"
-  security_group_id        = aws_security_group.k3s.id
-  source_security_group_id = aws_security_group.monitoring.id
-  from_port                = 30101
-  to_port                  = 30101
-  protocol                 = "tcp"
-  description              = "kube-state-metrics NodePort - scraped by the monitoring instance"
 }
 
 data "aws_ami" "ubuntu" {
@@ -322,18 +324,22 @@ resource "aws_key_pair" "k3s" {
   tags       = local.common_tags
 }
 
-resource "random_password" "grafana_admin" {
-  length  = 24
-  special = false # keep it shell/env-var-safe for the docker-compose user_data
-}
-
 resource "aws_instance" "k3s" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.small" # 2GB RAM — needed for app + Traefik + full ArgoCD + Prometheus/Grafana
+  instance_type          = "t3.small" # 2GB RAM — needed for app + Traefik + cert-manager + ESO + ArgoCD
   key_name               = aws_key_pair.k3s.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.k3s.id]
   iam_instance_profile   = aws_iam_instance_profile.k3s_node.name
+
+  # t3 is burstable — standard mode throttles hard to ~20% of a vCPU once
+  # burst credits run out (observed: CPUCreditBalance hit 0 during bootstrap,
+  # API server requests started taking 30+ seconds). Unlimited lets it burst
+  # as needed; AWS only bills the surplus (~$0.05/vCPU-hour) during actual
+  # bursts, not constantly.
+  credit_specification {
+    cpu_credits = "unlimited"
+  }
 
   root_block_device {
     volume_size = 20
@@ -559,12 +565,26 @@ resource "aws_eip" "k3s" {
 # containers. Scrapes the app node over its private IP (stays inside the VPC,
 # no data-transfer cost, and never exposed to the internet).
 
-resource "aws_instance" "monitoring" {
+# Reads the password already set via `aws ssm put-parameter` (see
+# k8s/prod/secret.yaml's header comment) — not Terraform-managed as a
+# resource since it already exists and this is just a lookup for use below.
+data "aws_ssm_parameter" "mongo_root_password" {
+  name            = "/bcc-cvote/prod/mongo-root-password"
+  with_decryption = true
+}
+
+resource "aws_instance" "mongodb" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.micro" # Prometheus + Grafana alone fit comfortably in 1GB
+  instance_type          = "t3.micro" # dedicated instance, no K3s/app overhead to share with
   key_name               = aws_key_pair.k3s.key_name
   subnet_id              = var.subnet_id
-  vpc_security_group_ids = [aws_security_group.monitoring.id]
+  vpc_security_group_ids = [aws_security_group.mongodb.id]
+
+  # Cheap insurance against the same CPU-credit exhaustion seen on the app
+  # node — this is a production database, worth avoiding burst-throttling.
+  credit_specification {
+    cpu_credits = "unlimited"
+  }
 
   root_block_device {
     volume_size = 20
@@ -581,50 +601,29 @@ resource "aws_instance" "monitoring" {
     apt-get install -y docker.io docker-compose-v2
     systemctl enable --now docker
 
-    mkdir -p /opt/monitoring
-    cat > /opt/monitoring/prometheus.yml << 'PROM'
-    global:
-      scrape_interval: 30s
-    scrape_configs:
-      - job_name: 'k3s-node-exporter'
-        static_configs:
-          - targets: ['${aws_instance.k3s.private_ip}:30100']
-      - job_name: 'k3s-kube-state-metrics'
-        static_configs:
-          - targets: ['${aws_instance.k3s.private_ip}:30101']
-    PROM
-
-    cat > /opt/monitoring/docker-compose.yml << 'COMPOSE'
+    mkdir -p /opt/mongodb
+    cat > /opt/mongodb/docker-compose.yml << 'COMPOSE'
     services:
-      prometheus:
-        image: prom/prometheus:latest
+      mongo:
+        image: mongo:7.0
         restart: unless-stopped
-        volumes:
-          - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-          - prometheus-data:/prometheus
-        command:
-          - --config.file=/etc/prometheus/prometheus.yml
-          - --storage.tsdb.retention.time=15d
-        ports:
-          - "9090:9090"
-      grafana:
-        image: grafana/grafana:latest
-        restart: unless-stopped
+        command: ["mongod", "--wiredTigerCacheSizeGB=0.5", "--bind_ip_all"]
         environment:
-          - GF_SECURITY_ADMIN_PASSWORD=${random_password.grafana_admin.result}
+          - MONGO_INITDB_ROOT_USERNAME=bccadmin
+          - MONGO_INITDB_ROOT_PASSWORD=${data.aws_ssm_parameter.mongo_root_password.value}
+          - MONGO_INITDB_DATABASE=bcc_cvote
         volumes:
-          - grafana-data:/var/lib/grafana
+          - mongo-data:/data/db
         ports:
-          - "3000:3000"
+          - "27017:27017"
     volumes:
-      prometheus-data:
-      grafana-data:
+      mongo-data:
     COMPOSE
 
-    cd /opt/monitoring && docker compose up -d
+    cd /opt/mongodb && docker compose up -d
   EOF
 
-  tags = merge(local.common_tags, { Name = "bcc-cvote-monitoring" })
+  tags = merge(local.common_tags, { Name = "bcc-cvote-mongodb" })
 }
 
 # ── SSM Parameter Store secrets (free — replaces paid Secrets Manager) ────────

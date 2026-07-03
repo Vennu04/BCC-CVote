@@ -37,26 +37,23 @@ output "ssh_private_key" {
   description = "Run: terraform output -raw ssh_private_key > bcc-cvote-key.pem && chmod 400 bcc-cvote-key.pem"
 }
 
-output "monitoring_ip" {
-  value       = aws_instance.monitoring.public_ip
-  description = "Public IP of the monitoring instance (Grafana/Prometheus, admin_cidr only)"
+output "bcc_cvote_scrape_config" {
+  description = "Add this to vfla-monitoring-grafana's prometheus.yml scrape_configs (SSH there yourself — this Terraform doesn't own that instance)"
+  value       = <<-EOT
+    - job_name: 'bcc-cvote-node-exporter'
+      static_configs:
+        - targets: ['${aws_instance.k3s.private_ip}:30100']
+    - job_name: 'bcc-cvote-kube-state-metrics'
+      static_configs:
+        - targets: ['${aws_instance.k3s.private_ip}:30101']
+  EOT
 }
 
-output "grafana_url" {
-  value       = "http://${aws_instance.monitoring.public_ip}:3000"
-  description = "Grafana — login is admin / grafana_admin_password"
+output "mongodb_private_ip" {
+  value       = aws_instance.mongodb.private_ip
+  description = "Use this in the MONGODB_URI SSM parameter — only reachable from the app node's security group, never public"
 }
 
-output "prometheus_url" {
-  value = "http://${aws_instance.monitoring.public_ip}:9090"
-}
-
-output "grafana_admin_password" {
-  value       = random_password.grafana_admin.result
-  sensitive   = true
-  description = "Run: terraform output -raw grafana_admin_password"
-}
-
-output "monitoring_ssh_command" {
-  value = "ssh -i bcc-cvote-key.pem ubuntu@${aws_instance.monitoring.public_ip}"
+output "mongodb_ssh_command" {
+  value = "ssh -i bcc-cvote-key.pem ubuntu@${aws_instance.mongodb.public_ip}"
 }
