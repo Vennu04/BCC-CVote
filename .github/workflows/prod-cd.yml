@@ -94,13 +94,14 @@ jobs:
           TAG=${{ steps.tag.outputs.IMAGE_TAG }}
           REGION=${{ env.AWS_REGION }}
 
-          # Matches the image reference regardless of its *current* tag (not just
-          # the original ACCOUNT_ID/IMAGE_TAG placeholders), so this keeps working
-          # on the 2nd, 3rd, ... deploy — not just the first one.
-          sed -i -E "s|[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.BACKEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.BACKEND_REPO }}:${TAG}|g" \
+          # Matches the image reference regardless of its *current* tag — both
+          # the literal ACCOUNT_ID/IMAGE_TAG placeholders (first-ever deploy)
+          # and a real numeric account ID + real tag (every deploy after),
+          # so this keeps working on the 1st, 2nd, 3rd, ... deploy alike.
+          sed -i -E "s|[A-Za-z0-9_]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.BACKEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.BACKEND_REPO }}:${TAG}|g" \
             k8s/prod/backend-deployment.yaml
 
-          sed -i -E "s|[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.FRONTEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
+          sed -i -E "s|[A-Za-z0-9_]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.FRONTEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
             k8s/prod/frontend-deployment.yaml
 
       # Secrets are NOT handled here — External Secrets Operator syncs them
