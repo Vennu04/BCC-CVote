@@ -13,6 +13,11 @@ output "app_url" {
   description = "Public HTTPS URL for the app once ingress.yaml has been updated with app_hostname and cert-manager has issued the certificate"
 }
 
+output "cloudfront_url" {
+  value       = "https://${aws_cloudfront_distribution.app.domain_name}"
+  description = "Public URL to share with players — stable across EIP changes, unlike the raw sslip.io IP-based URL"
+}
+
 output "ecr_backend_url" {
   value = aws_ecr_repository.backend.repository_url
 }

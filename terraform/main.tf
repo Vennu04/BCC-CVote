@@ -326,7 +326,16 @@ resource "aws_key_pair" "k3s" {
 
 resource "aws_instance" "k3s" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.small" # 2GB RAM — needed for app + Traefik + cert-manager + ESO + ArgoCD
+  # t3.small, per explicit user decision. NOTE: real-world testing showed
+  # this is undersized for the full stack (K3s + Traefik + cert-manager +
+  # ESO + ArgoCD) — swap hit 100% full and the API server started timing
+  # out on TLS handshakes, even after moving MongoDB and monitoring off
+  # this node. t3.medium (4GB) resolves it but costs ~$30/mo instead of
+  # ~$15-18/mo — needs explicit user sign-off before changing, and note that
+  # this account's plan blocks resizing in place (ModifyInstanceAttribute ->
+  # FreeTierRestrictionError) — a real replacement is required:
+  #   terraform apply -replace=aws_instance.k3s
+  instance_type = "t3.small"
   key_name               = aws_key_pair.k3s.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.k3s.id]
@@ -558,6 +567,63 @@ resource "aws_eip" "k3s" {
   instance = aws_instance.k3s.id
   domain   = "vpc"
   tags     = local.common_tags
+}
+
+# ── CloudFront — stable, memorable URL to hand out to players ─────────────────
+# Fronts the K3s node's sslip.io endpoint. Caching is disabled entirely: this
+# is a live voting app (JWT-authenticated API calls + POST votes) under the
+# same host as the static frontend, not a CDN-cacheable site.
+#
+# Origin request policy is AllViewerExceptHostHeader, NOT AllViewer — Traefik's
+# ingress (k8s/prod/ingress.yaml) only matches Host: 13-206-106-36.sslip.io.
+# AllViewer would forward the viewer's real Host header (the *.cloudfront.net
+# domain), which the ingress doesn't recognize, and every request would 404.
+# Excluding Host lets CloudFront fall back to its default custom-origin
+# behavior of setting Host to the origin's own domain name, which matches.
+resource "aws_cloudfront_distribution" "app" {
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "BCC-CVote voting app"
+  price_class     = "PriceClass_All" # traffic is tiny (20 captains); optimize for reach, not cost
+
+  origin {
+    # Hardcoded literal, same convention as k8s/prod/ingress.yaml's host field —
+    # only needs updating if the EIP is ever reallocated (static in practice).
+    # Deliberately not derived from aws_eip.k3s.public_ip: that would chain this
+    # resource's dependencies through aws_instance.k3s -> aws_security_group.k3s,
+    # dragging pre-existing SG drift into any -target'd plan/apply of this resource.
+    domain_name = "13-206-106-36.sslip.io"
+    origin_id   = "bcc-cvote-k3s"
+
+    custom_origin_config {
+      http_port                = 80
+      https_port                = 443
+      origin_protocol_policy  = "https-only"
+      origin_ssl_protocols    = ["TLSv1.2"]
+    }
+  }
+
+  default_cache_behavior {
+    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods          = ["GET", "HEAD"]
+    target_origin_id        = "bcc-cvote-k3s"
+    viewer_protocol_policy  = "redirect-to-https"
+
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed: CachingDisabled
+    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # AWS managed: AllViewerExceptHostHeader
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  tags = local.common_tags
 }
 
 # ── Dedicated monitoring instance (Prometheus + Grafana) ──────────────────────
