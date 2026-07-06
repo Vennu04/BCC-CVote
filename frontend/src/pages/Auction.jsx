@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
-import { Gavel, ThumbsDown, Clock, Trophy } from "lucide-react";
+import { Gavel, ThumbsDown, Clock, Trophy, Gift } from "lucide-react";
 
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
@@ -57,7 +57,7 @@ function CaptainCard({ summary, isYou }) {
             <div key={p.user_id} className="flex items-center justify-between text-xs">
               <span className="text-gray-800">{p.name}</span>
               <span className="text-gray-400">
-                {p.assigned_via === "leftover_free" ? "free" : `${p.price} pts`}
+                {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
               </span>
             </div>
           ))}
@@ -70,13 +70,27 @@ function CaptainCard({ summary, isYou }) {
 export default function Auction() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { auction, loading, bidding, dropping, placeBid, dropCurrentPlayer } = useAuction(id);
+  const { auction, loading, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick } = useAuction(id);
   const [amount, setAmount] = useState("");
 
   const isParticipant = useMemo(() => {
     if (!auction || !user) return false;
     return [auction.captain_a?.captain_id, auction.captain_b?.captain_id].includes(user.id);
   }, [auction, user]);
+
+  // Once the OTHER captain's purse is fully drained, Power/Classic players can be
+  // claimed for free instead of going through the normal bid/drop cycle — they
+  // literally can't contest anything anymore below the 8.5 starting price.
+  const otherCaptainDrained = useMemo(() => {
+    if (!auction || !user) return false;
+    const other = auction.captain_a?.captain_id === user.id ? auction.captain_b : auction.captain_a;
+    return !!other?.is_drained;
+  }, [auction, user]);
+
+  const freePickable = useMemo(() => {
+    if (!isParticipant || !otherCaptainDrained) return [];
+    return (auction.available_players || []).filter((p) => p.category === "power" || p.category === "classic");
+  }, [auction, isParticipant, otherCaptainDrained]);
 
   useEffect(() => {
     if (auction?.current_player) {
@@ -181,6 +195,30 @@ export default function Auction() {
           </div>
         )}
 
+        {freePickable.length > 0 && (
+          <div className="card border-2 border-amber-300 bg-amber-50">
+            <div className="flex items-center gap-2 mb-2">
+              <Gift size={18} className="text-amber-700" />
+              <h3 className="font-bold text-amber-900">Free Pick Available</h3>
+            </div>
+            <p className="text-xs text-amber-700 mb-3">
+              The other captain's points are drained — claim any remaining Power/Classic player for free.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {freePickable.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => freePick(p.id)}
+                  disabled={freePicking === p.id}
+                  className="text-sm py-1.5 px-3 rounded-lg border border-amber-400 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {freePicking === p.id ? "Picking…" : p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="card">
           <h3 className="font-bold text-gray-900 mb-3 text-sm">Live Feed</h3>
           <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -193,6 +231,7 @@ export default function Auction() {
                 {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
                 {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
                 {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
+                {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
                 <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
               </div>
             ))}

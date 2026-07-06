@@ -51,6 +51,14 @@ def _group_quota(auction, group):
     return total // 2
 
 
+def _captain_points_remaining(auction, captain_id):
+    spent = sum(
+        p.get("sold_price") or 0
+        for p in mongo.db.auction_players.find({"auction_id": str(auction["_id"]), "sold_to": captain_id})
+    )
+    return auction["points_budget"] - spent
+
+
 def _check_leftover_award(auction, group):
     """The instant either captain's count in this group hits quota, every player still
     "available" in the group instantly transfers to the OTHER captain for free — no
@@ -313,14 +321,15 @@ def get_auction(auction_id):
 
     def captain_summary(captain_id):
         roster = [p for p in players if p.get("sold_to") == captain_id]
-        spent = sum(p.get("sold_price") or 0 for p in roster)
+        points_remaining = _captain_points_remaining(auction, captain_id)
         by_group = {g: 0 for g in AUCTION_GROUPS}
         for p in roster:
             by_group[p["category"]] += 1
         return {
             "captain_id": captain_id,
             "name": captain_name(captain_id),
-            "points_remaining": auction["points_budget"] - spent,
+            "points_remaining": points_remaining,
+            "is_drained": points_remaining <= 0,
             "roster_count": len(roster),
             "roster": [{
                 "user_id": p["user_id"], "name": users_map.get(p["user_id"], {}).get("name", "?"),
@@ -417,11 +426,7 @@ def place_bid(auction_id):
     elif amount < auction["starting_price"]:
         return jsonify({"error": f"Bid must be at least the starting price of {auction['starting_price']}"}), 400
 
-    spent = sum(
-        p.get("sold_price") or 0
-        for p in mongo.db.auction_players.find({"auction_id": auction_id, "sold_to": captain_id})
-    )
-    remaining_points = auction["points_budget"] - spent
+    remaining_points = _captain_points_remaining(auction, captain_id)
     if amount > remaining_points:
         return jsonify({"error": f"You only have {remaining_points} points remaining"}), 400
 
@@ -491,3 +496,52 @@ def drop_player(auction_id):
         return jsonify({"message": "Both captains passed — player returned to the pool"})
 
     return jsonify({"message": "Dropped"})
+
+
+@auction_bp.route("/auction/<auction_id>/free-pick", methods=["POST"])
+@jwt_required()
+def free_pick(auction_id):
+    """
+    Power/Classic only: once the OTHER captain's purse is fully drained (0
+    points — they literally cannot bid the 8.5 floor anymore), the solvent
+    captain can claim any remaining unsold player in these two categories for
+    free, without needing admin to release it first or going through a
+    bid/drop cycle against an opponent who can no longer contest anything.
+    Extra Power is deliberately excluded — it already has its own, earlier
+    quota-based leftover-free trigger (_check_leftover_award).
+    """
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+    if auction["status"] != "active":
+        return jsonify({"error": "Auction is not active"}), 400
+
+    user = get_current_user()
+    captain_id = str(user["_id"])
+    if captain_id not in (auction["captain_a_id"], auction["captain_b_id"]):
+        return jsonify({"error": "Only the two assigned captains can act in this auction"}), 403
+
+    other_captain = auction["captain_b_id"] if captain_id == auction["captain_a_id"] else auction["captain_a_id"]
+    if _captain_points_remaining(auction, other_captain) > 0:
+        return jsonify({"error": "Free pick is only available once the other captain's points are fully drained"}), 400
+
+    data = request.get_json(silent=True) or {}
+    player_id = data.get("player_id")
+    player = _player_doc(auction_id, player_id) if player_id else None
+    if not player or player["status"] != "available":
+        return jsonify({"error": "Player not available"}), 400
+    if player["category"] not in ("power", "classic"):
+        return jsonify({"error": "Free pick only applies to Power and Classic categories"}), 400
+
+    mongo.db.auction_players.update_one(
+        {"_id": player["_id"]},
+        {"$set": {"status": "free_assigned", "sold_to": captain_id, "sold_price": 0, "assigned_via": "free_pick"}},
+    )
+    mongo.db.auction_bids.insert_one({
+        "auction_id": auction_id, "player_id": str(player["_id"]), "captain_id": captain_id,
+        "action": "free_pick", "amount": 0, "created_at": datetime.utcnow(),
+    })
+    if auction.get("current_player_id") == str(player["_id"]):
+        mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
+
+    return jsonify({"message": "Player picked for free"})

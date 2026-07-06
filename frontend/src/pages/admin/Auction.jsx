@@ -266,7 +266,9 @@ export default function AdminAuction() {
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
                       <h3 className="font-bold text-gray-900">{c.name}</h3>
                     </div>
-                    <span className="text-sm font-semibold text-pitch-700">{c.points_remaining} pts left</span>
+                    <span className={`text-sm font-semibold ${c.is_drained ? "text-red-600" : "text-pitch-700"}`}>
+                      {c.points_remaining} pts left{c.is_drained && " (drained)"}
+                    </span>
                   </div>
                   <p className="text-xs text-gray-500 mb-2">{c.roster_count} players picked</p>
                   {c.roster?.length > 0 && (
@@ -276,7 +278,7 @@ export default function AdminAuction() {
                           <span className="text-gray-800">{p.name}</span>
                           <span className="text-gray-400">
                             {GROUP_LABELS[p.category] || p.category} —{" "}
-                            {p.assigned_via === "leftover_free" ? "free" : `${p.price} pts`}
+                            {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
                           </span>
                         </div>
                       ))}

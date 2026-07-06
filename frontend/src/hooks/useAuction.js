@@ -9,6 +9,7 @@ export function useAuction(auctionId) {
   const [loading, setLoading] = useState(true);
   const [bidding, setBidding] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const [freePicking, setFreePicking] = useState(null);
   const hasLoadedOnce = useRef(false);
 
   const fetchAuction = useCallback(async () => {
@@ -62,5 +63,18 @@ export function useAuction(auctionId) {
     }
   };
 
-  return { auction, loading, bidding, dropping, placeBid, dropCurrentPlayer, refetch: fetchAuction };
+  const freePick = async (playerId) => {
+    setFreePicking(playerId);
+    try {
+      await api.post(`/auction/${auctionId}/free-pick`, { player_id: playerId });
+      toast.success("Player picked for free!");
+      await fetchAuction();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to free-pick player");
+    } finally {
+      setFreePicking(null);
+    }
+  };
+
+  return { auction, loading, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick, refetch: fetchAuction };
 }
