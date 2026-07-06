@@ -9,15 +9,19 @@ env:
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com
   BACKEND_REPO: bcc-cvote-backend
   FRONTEND_REPO: bcc-cvote-frontend
+  CLOUDFRONT_URL: https://d2welg0wjdnhjp.cloudfront.net
 
 jobs:
-  build-and-deploy:
-    name: Build, Scan & Deploy to K3s
+  build-and-push:
+    name: Build, Scan & Push Images
     runs-on: ubuntu-latest
 
     permissions:
       id-token: write
-      contents: write
+      contents: read
+
+    outputs:
+      image_tag: ${{ steps.tag.outputs.IMAGE_TAG }}
 
     steps:
       - name: Checkout
@@ -87,32 +91,96 @@ jobs:
           docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
           docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
 
-      # ── Update K8s manifests (GitOps) ─────────────────────────────────────
+      # Secrets are NOT handled here — External Secrets Operator (or its
+      # successor) syncs them straight from SSM Parameter Store into the
+      # cluster on its own refresh interval. CI never reads or commits
+      # secret material.
+
+  deploy:
+    name: Deploy to K3s (sequential rolling cutover)
+    needs: build-and-push
+    # Runs on the self-hosted runner living on the k3s instance itself —
+    # the k3s API (6443) and SSH are firewalled to static home IPs only, so
+    # a GitHub-hosted runner has no network path to the cluster. This runner
+    # polls GitHub outbound over 443 (already open); no SG changes needed.
+    runs-on: [self-hosted, bcc-cvote-prod]
+
+    permissions:
+      contents: write
+
+    env:
+      # Scoped ServiceAccount kubeconfig (voting-prod namespace only) —
+      # deliberately NOT the cluster-admin /etc/rancher/k3s/k3s.yaml.
+      KUBECONFIG: /home/ubuntu/.kube/deployer-config
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Update image tags in manifests ───────────────────────────────────
       - name: Update image tags in manifests
         run: |
           ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
-          TAG=${{ steps.tag.outputs.IMAGE_TAG }}
+          TAG=${{ needs.build-and-push.outputs.image_tag }}
           REGION=${{ env.AWS_REGION }}
 
-          # Matches the image reference regardless of its *current* tag — both
-          # the literal ACCOUNT_ID/IMAGE_TAG placeholders (first-ever deploy)
-          # and a real numeric account ID + real tag (every deploy after),
-          # so this keeps working on the 1st, 2nd, 3rd, ... deploy alike.
           sed -i -E "s|[A-Za-z0-9_]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.BACKEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.BACKEND_REPO }}:${TAG}|g" \
             k8s/prod/backend-deployment.yaml
 
           sed -i -E "s|[A-Za-z0-9_]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.FRONTEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
             k8s/prod/frontend-deployment.yaml
 
-      # Secrets are NOT handled here — External Secrets Operator syncs them
-      # straight from SSM Parameter Store into the cluster on its own
-      # refresh interval. CI never reads or commits secret material.
+      # ── Apply directly — this replaces ArgoCD's sync role. The existing
+      #    maxSurge=1/maxUnavailable=0 strategy on both Deployments already
+      #    gives a sequential (not simultaneous) blue-green-style cutover:
+      #    the new pod must pass its readiness probe before the old one is
+      #    ever terminated. ────────────────────────────────────────────────
+      - name: Apply manifests
+        run: kubectl apply -f k8s/prod/
 
-      # ── Commit updated manifests (ArgoCD picks up changes) ────────────────
-      - name: Commit & push updated manifests
+      - name: Wait for rollout
+        id: rollout
+        run: |
+          kubectl rollout status deployment/bcc-backend -n voting-prod --timeout=120s
+          kubectl rollout status deployment/bcc-frontend -n voting-prod --timeout=120s
+
+      - name: Smoke test
+        id: smoke
+        run: |
+          for i in $(seq 1 10); do
+            CODE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 "${{ env.CLOUDFRONT_URL }}/" || echo "000")
+            if [ "$CODE" = "200" ]; then
+              echo "smoke test passed ($CODE)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "smoke test failed after retries"
+          exit 1
+
+      # ── Automatic rollback — the safety net ArgoCD's selfHeal used to
+      #    provide. Reverts both Deployments to their previous ReplicaSet.
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "::error::Rollout or smoke test failed — rolling back to the previous version"
+          kubectl rollout undo deployment/bcc-backend -n voting-prod
+          kubectl rollout undo deployment/bcc-frontend -n voting-prod
+          kubectl rollout status deployment/bcc-backend -n voting-prod --timeout=120s
+          kubectl rollout status deployment/bcc-frontend -n voting-prod --timeout=120s
+          exit 1
+
+      # ── Commit deployed manifests (audit trail only — kubectl apply above
+      #    already performed the actual deploy; this is just history) ──────
+      - name: Commit deployed manifests
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add k8s/prod/backend-deployment.yaml k8s/prod/frontend-deployment.yaml
-          git commit -m "chore: deploy ${{ steps.tag.outputs.IMAGE_TAG }} to prod [skip ci]"
-          git push
+          if git diff --cached --quiet; then
+            echo "no manifest changes to record"
+          else
+            git commit -m "chore: deploy ${{ needs.build-and-push.outputs.image_tag }} to prod [skip ci]"
+            git push
+          fi

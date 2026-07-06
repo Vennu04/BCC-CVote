@@ -473,28 +473,12 @@ resource "aws_instance" "k3s" {
     STORE
     retry_apply /tmp/cluster-secret-store.yaml
 
-    # ── ArgoCD (UI included) ────────────────────────────────────────────────
-    # server-side apply + a generous request-timeout: the full install
-    # manifest includes a couple of very large CRDs (ApplicationSet) that
-    # can time out on a small instance under first-boot load; retrying is
-    # safe since server-side apply is idempotent.
-    kubectl create namespace argocd || true
-    n=0
-    until kubectl apply -n argocd --server-side --force-conflicts --request-timeout=180s \
-      -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml; do
-      n=$((n+1))
-      [ $n -ge 5 ] && break
-      sleep 20
-    done
-
-    # We don't use ApplicationSets or the notifications feature — scale them
-    # to 0 so they stop consuming RAM/restart-churn instead of crash-looping
-    # over a CRD we're not applying.
-    kubectl -n argocd scale deployment argocd-applicationset-controller argocd-notifications-controller --replicas=0 || true
-
-    # Bootstrap the GitOps Application pointing at this repo's k8s/prod path
-    curl -sfL -o /tmp/app-prod.yaml https://raw.githubusercontent.com/${var.github_repo}/main/argocd/app-prod.yaml
-    retry_apply /tmp/app-prod.yaml
+    # ArgoCD was removed in favor of a push-based blue-green pipeline (see
+    # .github/workflows/prod-cd.yml) — its 5 always-on components were a
+    # major contributor to this node's memory exhaustion. Deploys are now
+    # driven by a self-hosted GitHub Actions runner installed directly on
+    # this instance (registered manually; see runbook/session notes — not
+    # yet captured here in user_data).
 
     # ── Metrics exporters only (node-exporter + kube-state-metrics) ────────
     # The heavy parts — Prometheus's TSDB and Grafana — live on their own
@@ -543,19 +527,78 @@ resource "aws_instance" "k3s" {
     EXPORTERS
 
     # ── ECR credential helper for K3s (auto-refresh, tokens expire in 12h) ─
+    # apply (not delete-then-create): the secret is always present, even
+    # mid-refresh — a pod scheduled at the exact moment of refresh still
+    # sees a valid (old-but-not-yet-expired) secret, never a missing one.
+    # Retries absorb transient API slowness (this node is memory-constrained
+    # and the apiserver can be slow for tens of seconds under load).
     cat > /usr/local/bin/refresh-ecr-secret.sh << 'SCRIPT'
     #!/bin/bash
-    REGION="${var.aws_region}"
-    ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-    TOKEN=$(aws ecr get-login-password --region $REGION)
-    kubectl -n voting-prod delete secret ecr-pull-secret --ignore-not-found
-    kubectl -n voting-prod create secret docker-registry ecr-pull-secret \
-      --docker-server="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com" \
-      --docker-username=AWS \
-      --docker-password="$TOKEN"
+    set -uo pipefail
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    REGION="ap-south-1"
+    NAMESPACE="voting-prod"
+    SECRET_NAME="ecr-pull-secret"
+
+    log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"; }
+
+    ACCOUNT=$(aws sts get-caller-identity --query Account --output text) || { log "ERROR: could not resolve account ID"; exit 1; }
+    TOKEN=$(aws ecr get-login-password --region "$REGION") || { log "ERROR: could not fetch ECR token"; exit 1; }
+
+    for attempt in $(seq 1 10); do
+      if kubectl create secret docker-registry "$SECRET_NAME" \
+          --docker-server="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com" \
+          --docker-username=AWS \
+          --docker-password="$TOKEN" \
+          -n "$NAMESPACE" --dry-run=client -o yaml --request-timeout=60s \
+          | kubectl apply -f - --request-timeout=60s; then
+        log "Secret $SECRET_NAME refreshed successfully (attempt $attempt)"
+        exit 0
+      fi
+      log "Attempt $attempt failed, retrying in 15s"
+      sleep 15
+    done
+
+    log "ERROR: failed to refresh $SECRET_NAME after 10 attempts"
+    exit 1
     SCRIPT
     chmod +x /usr/local/bin/refresh-ecr-secret.sh
-    echo "0 */6 * * * root KUBECONFIG=/etc/rancher/k3s/k3s.yaml /usr/local/bin/refresh-ecr-secret.sh" > /etc/cron.d/ecr-refresh
+
+    # systemd timer instead of cron.d: OnBootSec guarantees a run shortly
+    # after every reboot (cron.d only fires at its fixed clock times, so a
+    # reboot right after one could go ~6h before the next refresh);
+    # Persistent=true also catches up a missed run if the instance was
+    # stopped across a scheduled tick. Observable via `systemctl status` /
+    # `journalctl -u refresh-ecr-secret.service` instead of cron's mail-only
+    # (and usually unconfigured) failure reporting.
+    cat > /etc/systemd/system/refresh-ecr-secret.service << 'UNIT'
+    [Unit]
+    Description=Refresh ECR image-pull secret for bcc-cvote
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/bin/refresh-ecr-secret.sh
+    UNIT
+
+    cat > /etc/systemd/system/refresh-ecr-secret.timer << 'UNIT'
+    [Unit]
+    Description=Run refresh-ecr-secret shortly after boot and every 6h thereafter
+
+    [Timer]
+    OnBootSec=3min
+    OnUnitActiveSec=6h
+    Persistent=true
+    Unit=refresh-ecr-secret.service
+
+    [Install]
+    WantedBy=timers.target
+    UNIT
+
+    systemctl daemon-reload
+    systemctl enable --now refresh-ecr-secret.timer
+    systemctl start refresh-ecr-secret.service
   EOF
 
   tags = merge(local.common_tags, { Name = "bcc-cvote-k3s" })
