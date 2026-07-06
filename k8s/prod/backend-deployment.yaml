@@ -34,7 +34,7 @@ spec:
       containers:
         - name: backend
           # Image tag updated by GitHub Actions prod-cd.yml
-          image: 661474704151.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-backend:b25db62d
+          image: 661474704151.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-backend:c2101fa2
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
