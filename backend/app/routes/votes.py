@@ -47,6 +47,8 @@ def _serialize_slot(slot):
         "time_of_day": slot["time_of_day"],
         "match_time": slot.get("match_time", ""),
         "description": slot.get("description", ""),
+        "match_date": slot.get("match_date"),
+        "is_adhoc": slot.get("is_adhoc", False),
         "label": f"{slot['day']} {slot.get('match_time', slot['time_of_day'])}",
     }
 
@@ -56,7 +58,7 @@ def _serialize_slot(slot):
 @votes_bp.route("/slots", methods=["GET"])
 @jwt_required()
 def get_slots():
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     return jsonify([_serialize_slot(s) for s in slots])
 
 
@@ -65,7 +67,7 @@ def get_slots():
 @votes_bp.route("/votes/status", methods=["GET"])
 @jwt_required()
 def voting_status():
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     result = []
     for slot in slots:
         window = _get_active_window(str(slot["_id"]))
@@ -79,7 +81,7 @@ def voting_status():
 @jwt_required()
 def my_votes():
     user = get_current_user()
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
 
     result = []
     for slot in slots:
@@ -118,6 +120,8 @@ def submit_vote():
     slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
     if not slot:
         return jsonify({"error": "Slot not found"}), 404
+    if slot.get("is_active") is False:
+        return jsonify({"error": "This match has been removed"}), 400
 
     window = _get_active_window(slot_id)
     if not window:
@@ -174,7 +178,7 @@ def revoke_vote(slot_id):
 @jwt_required()
 def not_available_week():
     user = get_current_user()
-    slots = list(mongo.db.match_slots.find())
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}))
     now = datetime.utcnow()
 
     updated, skipped = 0, 0
@@ -208,7 +212,7 @@ def not_available_week():
 @votes_bp.route("/votes/summary", methods=["GET"])
 @jwt_required()
 def vote_summary():
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     total_captains = mongo.db.users.count_documents({"is_active": True, "role": {"$in": ["captain", "player"]}})
 
     summary = []

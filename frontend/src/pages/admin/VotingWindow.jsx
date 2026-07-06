@@ -2,13 +2,17 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import { Calendar, Clock, Save, XCircle } from "lucide-react";
+import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
+
+const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
 
 export default function VotingWindow() {
   const [windows, setWindows] = useState([]);
   const [forms, setForms] = useState({}); // slot_id -> { opens_at, closes_at }
   const [loading, setLoading] = useState(true);
   const [savingSlot, setSavingSlot] = useState(null);
+  const [newSlot, setNewSlot] = useState(EMPTY_NEW_SLOT);
+  const [addingSlot, setAddingSlot] = useState(false);
 
   const fetchWindows = async () => {
     try {
@@ -60,6 +64,33 @@ export default function VotingWindow() {
     }
   };
 
+  const handleAddSlot = async (e) => {
+    e.preventDefault();
+    if (!newSlot.match_date || !newSlot.day) return;
+    setAddingSlot(true);
+    try {
+      await api.post("/admin/slots", newSlot);
+      toast.success("Ad-hoc match added — set its voting window below ✅");
+      setNewSlot(EMPTY_NEW_SLOT);
+      await fetchWindows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to add match");
+    } finally {
+      setAddingSlot(false);
+    }
+  };
+
+  const handleRemoveSlot = async (slotId) => {
+    if (!confirm("Remove this ad-hoc match? Its voting history stays on record, but it will disappear from the voting list.")) return;
+    try {
+      await api.delete(`/admin/slots/${slotId}`);
+      toast.success("Match removed");
+      fetchWindows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to remove match");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-cricket-cream">
       <Navbar />
@@ -70,6 +101,65 @@ export default function VotingWindow() {
             <h1 className="text-2xl font-bold text-gray-900">Voting Windows</h1>
             <p className="text-sm text-gray-500">Each match has its own window — set when it opens and closes</p>
           </div>
+        </div>
+
+        <div className="card mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarPlus size={18} className="text-pitch-600" />
+            <h2 className="font-bold text-gray-900">Add Ad-hoc Match</h2>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            For a weather-driven date or an Indian public holiday — any day, not just the usual weekend slots.
+          </p>
+          <form onSubmit={handleAddSlot} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Match Date</label>
+              <input
+                type="date"
+                className="input-field"
+                value={newSlot.match_date}
+                onChange={(e) => setNewSlot({ ...newSlot, match_date: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Time of Day</label>
+              <select
+                className="input-field"
+                value={newSlot.time_of_day}
+                onChange={(e) => setNewSlot({ ...newSlot, time_of_day: e.target.value })}
+              >
+                <option value="Morning">Morning</option>
+                <option value="Evening">Evening</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Day Label</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. Independence Day"
+                value={newSlot.day}
+                onChange={(e) => setNewSlot({ ...newSlot, day: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Description (optional)</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. Independence Day Match"
+                value={newSlot.description}
+                onChange={(e) => setNewSlot({ ...newSlot, description: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <button type="submit" disabled={addingSlot} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
+                <CalendarPlus size={14} /> {addingSlot ? "Adding…" : "Add Match"}
+              </button>
+            </div>
+          </form>
         </div>
 
         {loading ? (
@@ -133,6 +223,15 @@ export default function VotingWindow() {
                           className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
                         >
                           <XCircle size={14} /> Close Early
+                        </button>
+                      )}
+                      {slot.is_adhoc && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSlot(slot.id)}
+                          className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                        >
+                          <Trash2 size={14} /> Remove
                         </button>
                       )}
                     </div>

@@ -36,6 +36,19 @@ def _user_to_dict(u):
     }
 
 
+def _slot_to_dict(slot):
+    return {
+        "id": str(slot["_id"]),
+        "slot_number": slot["slot_number"],
+        "day": slot["day"],
+        "time_of_day": slot["time_of_day"],
+        "match_time": slot.get("match_time", ""),
+        "match_date": slot.get("match_date"),
+        "description": slot.get("description", ""),
+        "is_adhoc": slot.get("is_adhoc", False),
+    }
+
+
 def _get_active_window(slot_id):
     return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
 
@@ -57,7 +70,7 @@ def _window_info(window):
 @admin_required
 def dashboard():
     voters = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
 
     # Resolve each slot's own active window up front
     slot_windows = {str(s["_id"]): _get_active_window(str(s["_id"])) for s in slots}
@@ -102,6 +115,8 @@ def dashboard():
             "slot_number": slot["slot_number"],
             "day": slot["day"],
             "time_of_day": slot["time_of_day"],
+            "match_date": slot.get("match_date"),
+            "is_adhoc": slot.get("is_adhoc", False),
             "label": f"Slot {slot['slot_number']} — {slot['day']} {slot['time_of_day']}",
             "available": sum(1 for v in slot_votes if v["availability"] == "available"),
             "not_available": sum(1 for v in slot_votes if v["availability"] == "not_available"),
@@ -301,25 +316,77 @@ def remove_player(player_id):
     return jsonify({"message": "Player deactivated"})
 
 
+# ── Ad-hoc match slots ───────────────────────────────────────────────────────────
+# The 4 recurring weekend slots are seeded once (backend/scripts/seed.py) and never
+# created at runtime. These two endpoints let admin add a one-off dated slot (e.g.
+# a public holiday or a weather-driven date) on top of those — everything else
+# (windows, voting, summaries, exports) already queries match_slots generically,
+# so a new slot just shows up everywhere those already iterate the collection.
+
+@admin_bp.route("/slots", methods=["POST"])
+@admin_required
+def add_slot():
+    data = request.get_json(silent=True) or {}
+    match_date = (data.get("match_date") or "").strip()
+    day = (data.get("day") or "").strip()
+    time_of_day = (data.get("time_of_day") or "").strip()
+    description = (data.get("description") or "").strip()
+
+    if not match_date or not day or not time_of_day:
+        return jsonify({"error": "match_date, day and time_of_day are required"}), 400
+
+    try:
+        datetime.fromisoformat(match_date)
+    except ValueError:
+        return jsonify({"error": "match_date must be an ISO date, e.g. 2026-08-15"}), 400
+
+    last_slot = mongo.db.match_slots.find_one(sort=[("slot_number", -1)])
+    next_number = (last_slot["slot_number"] + 1) if last_slot else 1
+
+    doc = {
+        "slot_number": next_number,
+        "day": day,
+        "time_of_day": time_of_day,
+        # SlotCard.jsx already prefers match_time over time_of_day for its bold
+        # headline — reuse that unchanged by feeding the admin's description in
+        # here, so e.g. "Independence Day Match" displays instead of just "Morning".
+        "match_time": description or time_of_day,
+        "description": description,
+        "match_date": match_date,
+        "is_adhoc": True,
+        "is_active": True,
+        "created_at": datetime.utcnow(),
+    }
+    result = mongo.db.match_slots.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return jsonify({"message": "Ad-hoc match added", "slot": _slot_to_dict(doc)}), 201
+
+
+@admin_bp.route("/slots/<slot_id>", methods=["DELETE"])
+@admin_required
+def remove_slot(slot_id):
+    result = mongo.db.match_slots.update_one(
+        {"_id": ObjectId(slot_id), "is_adhoc": True},
+        {"$set": {"is_active": False}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Ad-hoc match not found (only ad-hoc matches can be removed)"}), 404
+    return jsonify({"message": "Ad-hoc match removed"})
+
+
 # ── Voting window management (per match slot) ──────────────────────────────────
 
 @admin_bp.route("/window", methods=["GET"])
 @admin_required
 def get_window():
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     windows = []
     for slot in slots:
         sid = str(slot["_id"])
         window = _get_active_window(sid)
         suggested = suggested_window_for_slot(slot)
         windows.append({
-            "slot": {
-                "id": sid,
-                "slot_number": slot["slot_number"],
-                "day": slot["day"],
-                "time_of_day": slot["time_of_day"],
-                "match_time": slot.get("match_time", ""),
-            },
+            "slot": _slot_to_dict(slot),
             "window": _window_info(window) if window else None,
             "suggested": {
                 "opens_at": suggested["opens_at_display"],
@@ -410,7 +477,7 @@ def _votes_for_current_windows(slots):
 @admin_required
 def export_csv():
     captains = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     votes = _votes_for_current_windows(slots)
 
     csv_data = build_csv_report(captains, slots, votes)
@@ -430,7 +497,7 @@ def export_excel():
     from openpyxl.utils import get_column_letter
 
     captains = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     votes = _votes_for_current_windows(slots)
     vote_map = {(v["captain_id"], v["slot_id"]): v["availability"] for v in votes}
 
@@ -546,7 +613,7 @@ def export_available_players():
     voters = {str(u["_id"]): u for u in mongo.db.users.find(
         {"role": {"$in": ["captain", "player"]}, "is_active": True}
     )}
-    slots = list(mongo.db.match_slots.find().sort("slot_number", 1))
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     votes = _votes_for_current_windows(slots)
 
     navy = PatternFill("solid", fgColor="1E3A5F")
