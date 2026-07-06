@@ -156,7 +156,11 @@ def create_auction():
         if not captain_user:
             return jsonify({"error": f"{cid} is not an active captain"}), 400
 
-    voter_ids = [v["captain_id"] for v in available_votes]
+    # Captains never auction themselves — they run the draft, they're not in the
+    # pool being drafted, even if they happened to vote available for this slot.
+    voter_ids = [v["captain_id"] for v in available_votes if v["captain_id"] not in (captain_a_id, captain_b_id)]
+    if not voter_ids:
+        return jsonify({"error": "No one (other than the two captains) has voted available for this slot"}), 400
     voters = list(mongo.db.users.find({"_id": {"$in": [ObjectId(i) for i in voter_ids]}}))
     missing_category = [v["name"] for v in voters if not v.get("auction_category")]
     if missing_category:
