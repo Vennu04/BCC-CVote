@@ -27,6 +27,23 @@ export default function AdminAuction() {
 
   const [auctionId, setAuctionId] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
   const { auction, loading, refetch } = useAuction(auctionId);
+  const [selectedByGroup, setSelectedByGroup] = useState({});
+
+  // Keep each category's dropdown selection valid as players get sold/released —
+  // default to the first still-available player in that group.
+  useEffect(() => {
+    if (!auction?.available_players) return;
+    setSelectedByGroup((prev) => {
+      const next = { ...prev };
+      for (const group of Object.keys(GROUP_LABELS)) {
+        const players = auction.available_players.filter((p) => p.category === group);
+        if (!players.some((p) => p.id === next[group])) {
+          next[group] = players[0]?.id || "";
+        }
+      }
+      return next;
+    });
+  }, [auction?.available_players]);
 
   useEffect(() => {
     api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => toast.error("Failed to load slots"));
@@ -205,20 +222,28 @@ export default function AdminAuction() {
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
                   const players = (auction.available_players || []).filter((p) => p.category === group);
                   if (players.length === 0) return null;
+                  const selectedId = selectedByGroup[group] || "";
                   return (
                     <div key={group} className="mb-4">
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {players.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => handleRelease(p.id)}
-                            disabled={releasing === p.id || !!auction.current_player}
-                            className="text-sm py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50"
-                          >
-                            {p.name}
-                          </button>
-                        ))}
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="input-field flex-1"
+                          value={selectedId}
+                          onChange={(e) => setSelectedByGroup({ ...selectedByGroup, [group]: e.target.value })}
+                          disabled={!!auction.current_player}
+                        >
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => handleRelease(selectedId)}
+                          disabled={!selectedId || releasing === selectedId || !!auction.current_player}
+                          className="text-sm py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {releasing === selectedId ? "Releasing…" : "Release"}
+                        </button>
                       </div>
                     </div>
                   );
