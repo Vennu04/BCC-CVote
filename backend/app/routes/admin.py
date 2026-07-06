@@ -32,8 +32,12 @@ def _user_to_dict(u):
         "matches_scheduled": u.get("matches_scheduled", 0),
         "matches_played": u.get("matches_played", 0),
         "tournament_status": u.get("tournament_status", "not_played"),
+        "auction_category": u.get("auction_category"),
         "created_at": format_ist(u.get("created_at")),
     }
+
+
+AUCTION_CATEGORIES = {"extra_power_allrounder", "extra_power_batsman", "power", "classic"}
 
 
 def _slot_to_dict(slot):
@@ -205,6 +209,10 @@ def update_captain(captain_id):
         if data["tournament_status"] not in valid:
             return jsonify({"error": "Invalid tournament_status"}), 400
         updates["tournament_status"] = data["tournament_status"]
+    if "auction_category" in data:
+        if data["auction_category"] not in AUCTION_CATEGORIES:
+            return jsonify({"error": f"auction_category must be one of {sorted(AUCTION_CATEGORIES)}"}), 400
+        updates["auction_category"] = data["auction_category"]
 
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
@@ -292,6 +300,10 @@ def update_player(player_id):
         if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(player_id)}}):
             return jsonify({"error": "Player code already taken"}), 409
         updates["team_code"] = new_code
+    if "auction_category" in data:
+        if data["auction_category"] not in AUCTION_CATEGORIES:
+            return jsonify({"error": f"auction_category must be one of {sorted(AUCTION_CATEGORIES)}"}), 400
+        updates["auction_category"] = data["auction_category"]
 
     if not updates:
         return jsonify({"error": "No fields to update"}), 400

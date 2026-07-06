@@ -10,6 +10,8 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import ManageCaptains from "./pages/admin/ManageCaptains";
 import ManagePlayers from "./pages/admin/ManagePlayers";
 import VotingWindow from "./pages/admin/VotingWindow";
+import AdminAuction from "./pages/admin/Auction";
+import Auction from "./pages/Auction";
 
 function NotFound() {
   return (
@@ -37,11 +39,13 @@ export default function App() {
         <Route path="/captain/dashboard" element={<CaptainRoute><CaptainDashboard /></CaptainRoute>} />
         <Route path="/player/dashboard"  element={<PlayerRoute><PlayerDashboard /></PlayerRoute>} />
         <Route path="/results"           element={<ProtectedRoute><Results /></ProtectedRoute>} />
+        <Route path="/auction/:id"       element={<ProtectedRoute><Auction /></ProtectedRoute>} />
 
         <Route path="/admin"           element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         <Route path="/admin/captains"  element={<AdminRoute><ManageCaptains /></AdminRoute>} />
         <Route path="/admin/players"   element={<AdminRoute><ManagePlayers /></AdminRoute>} />
         <Route path="/admin/window"    element={<AdminRoute><VotingWindow /></AdminRoute>} />
+        <Route path="/admin/auction"   element={<AdminRoute><AdminAuction /></AdminRoute>} />
 
         <Route path="/"   element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
         <Route path="*"   element={<NotFound />} />

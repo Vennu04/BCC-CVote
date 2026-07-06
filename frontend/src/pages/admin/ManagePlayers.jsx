@@ -4,6 +4,14 @@ import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import { UserPlus, Edit2, Check, X, Shield } from "lucide-react";
 
+const AUCTION_CATEGORY_OPTIONS = [
+  { value: "",                       label: "Not set" },
+  { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
+  { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
+  { value: "power",                  label: "Power" },
+  { value: "classic",                label: "Classic" },
+];
+
 export default function ManagePlayers() {
   const [players, setPlayers]     = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -72,6 +80,18 @@ export default function ManagePlayers() {
     setEditRow({ name: p.name, team_code: p.team_code, password: "" });
   };
 
+  const handleAuctionCategoryChange = async (person, newCategory) => {
+    if (!newCategory) return;
+    const endpoint = person.role === "captain" ? "captains" : "players";
+    try {
+      await api.put(`/admin/${endpoint}/${person.id}`, { auction_category: newCategory });
+      setPlayers(prev => prev.map(p => p.id === person.id ? { ...p, auction_category: newCategory } : p));
+      toast.success(`${person.name}'s auction category updated`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update auction category");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-cricket-cream">
       <Navbar />
@@ -135,6 +155,7 @@ export default function ManagePlayers() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Name</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Role</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -182,6 +203,19 @@ export default function ManagePlayers() {
                             Player
                           </span>
                         )}
+                      </td>
+
+                      {/* Auction Category */}
+                      <td className="px-4 py-3">
+                        <select
+                          value={p.auction_category || ""}
+                          onChange={e => handleAuctionCategoryChange(p, e.target.value)}
+                          className="text-xs font-medium rounded px-2 py-1 border border-gray-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 bg-white text-gray-700"
+                        >
+                          {AUCTION_CATEGORY_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
                       </td>
 
                       <td className="px-4 py-3">

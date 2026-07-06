@@ -40,10 +40,12 @@ def create_app(config_name: str = None) -> Flask:
     from .routes.auth import auth_bp
     from .routes.votes import votes_bp
     from .routes.admin import admin_bp
+    from .routes.auction import auction_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(votes_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    app.register_blueprint(auction_bp, url_prefix="/api")
 
     @app.route("/health")
     def health():

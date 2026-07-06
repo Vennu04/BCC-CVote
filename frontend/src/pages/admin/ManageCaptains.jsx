@@ -15,6 +15,14 @@ function statusMeta(value) {
   return STATUS_OPTIONS.find(s => s.value === value) || STATUS_OPTIONS[0];
 }
 
+const AUCTION_CATEGORY_OPTIONS = [
+  { value: "",                       label: "Not set" },
+  { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
+  { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
+  { value: "power",                  label: "Power" },
+  { value: "classic",                label: "Classic" },
+];
+
 export default function ManageCaptains() {
   const [captains, setCaptains]   = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -74,6 +82,17 @@ export default function ManageCaptains() {
       toast.success(`${captain.name} → ${statusMeta(newStatus).label}`);
     } catch {
       toast.error("Failed to update status");
+    }
+  };
+
+  const handleAuctionCategoryChange = async (captain, newCategory) => {
+    if (!newCategory) return;
+    try {
+      await api.put(`/admin/captains/${captain.id}`, { auction_category: newCategory });
+      setCaptains(prev => prev.map(c => c.id === captain.id ? { ...c, auction_category: newCategory } : c));
+      toast.success(`${captain.name}'s auction category updated`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update auction category");
     }
   };
 
@@ -153,6 +172,7 @@ export default function ManageCaptains() {
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Matches Scheduled</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Matches Played</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Status</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -249,6 +269,19 @@ export default function ManageCaptains() {
                           className={`text-xs font-semibold rounded px-2 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${meta.color}`}
                         >
                           {STATUS_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </td>
+
+                      {/* Auction Category */}
+                      <td className="px-4 py-3">
+                        <select
+                          value={c.auction_category || ""}
+                          onChange={e => handleAuctionCategoryChange(c, e.target.value)}
+                          className="text-xs font-medium rounded px-2 py-1 border border-gray-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 bg-white text-gray-700"
+                        >
+                          {AUCTION_CATEGORY_OPTIONS.map(opt => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                           ))}
                         </select>

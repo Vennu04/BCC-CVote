@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
 import toast from "react-hot-toast";
-import { LogOut, LayoutDashboard, Users, UserCircle, Settings } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel } from "lucide-react";
 
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth();
@@ -39,8 +39,14 @@ export default function Navbar() {
               <Link to="/admin/window" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 <Settings size={15} /> Window
               </Link>
+              <Link to="/admin/auction" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+                <Gavel size={15} /> Auction
+              </Link>
             </>
           )}
+          {/* No permanent captain/player nav link — the auction lives at a dynamic
+              /auction/:id URL with no fixed target; admin shares that link directly
+              with the two assigned captains once their auction starts. */}
           {!isAdmin && (
             <Link to="/results" className="hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
               Results
