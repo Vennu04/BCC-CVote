@@ -17,6 +17,7 @@ const GROUP_LABELS = {
 export default function AdminAuction() {
   const [slots, setSlots] = useState([]);
   const [voteMatrix, setVoteMatrix] = useState([]);
+  const [captains, setCaptains] = useState([]);
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [captainAId, setCaptainAId] = useState("");
   const [captainBId, setCaptainBId] = useState("");
@@ -30,13 +31,14 @@ export default function AdminAuction() {
   useEffect(() => {
     api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => toast.error("Failed to load slots"));
     api.get("/admin/dashboard").then((res) => setVoteMatrix(res.data.vote_matrix || [])).catch(() => toast.error("Failed to load votes"));
+    api.get("/admin/captains").then((res) => setCaptains(res.data || [])).catch(() => toast.error("Failed to load captains"));
   }, []);
 
-  const availableVoters = useMemo(() => {
-    if (!selectedSlotId) return [];
-    return voteMatrix
-      .filter((row) => row.votes.some((v) => v.slot_id === selectedSlotId && v.availability === "available"))
-      .map((row) => row.captain);
+  // Informational only — Captain A/B can be any active captain (they're
+  // running the draft, not required to be in the player pool themselves).
+  const availableVoterCount = useMemo(() => {
+    if (!selectedSlotId) return 0;
+    return voteMatrix.filter((row) => row.votes.some((v) => v.slot_id === selectedSlotId && v.availability === "available")).length;
   }, [voteMatrix, selectedSlotId]);
 
   const handleCreate = async (e) => {
@@ -136,26 +138,32 @@ export default function AdminAuction() {
 
               {selectedSlotId && (
                 <p className="text-xs text-gray-500">
-                  {availableVoters.length} player(s) voted available for this slot.
+                  {availableVoterCount} player(s) voted available for this slot — that's the pool that gets
+                  auctioned. Captain A/B below can be any captain (they run the draft; they don't need to
+                  have voted themselves).
                 </p>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Captain A</label>
-                  <select className="input-field" value={captainAId} onChange={(e) => setCaptainAId(e.target.value)} required disabled={!selectedSlotId}>
-                    <option value="">Select…</option>
-                    {availableVoters.map((v) => (
-                      <option key={v.id} value={v.id} disabled={v.id === captainBId}>{v.name}</option>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Captain A (Team)</label>
+                  <select className="input-field" value={captainAId} onChange={(e) => setCaptainAId(e.target.value)} required>
+                    <option value="">Select a team…</option>
+                    {captains.map((c) => (
+                      <option key={c.id} value={c.id} disabled={c.id === captainBId}>
+                        {c.name}{c.team_name ? ` — ${c.team_name}` : ""}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Captain B</label>
-                  <select className="input-field" value={captainBId} onChange={(e) => setCaptainBId(e.target.value)} required disabled={!selectedSlotId}>
-                    <option value="">Select…</option>
-                    {availableVoters.map((v) => (
-                      <option key={v.id} value={v.id} disabled={v.id === captainAId}>{v.name}</option>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Captain B (Team)</label>
+                  <select className="input-field" value={captainBId} onChange={(e) => setCaptainBId(e.target.value)} required>
+                    <option value="">Select a team…</option>
+                    {captains.map((c) => (
+                      <option key={c.id} value={c.id} disabled={c.id === captainAId}>
+                        {c.name}{c.team_name ? ` — ${c.team_name}` : ""}
+                      </option>
                     ))}
                   </select>
                 </div>
