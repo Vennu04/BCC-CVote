@@ -265,6 +265,24 @@ def close_auction(auction_id):
     return jsonify({"message": "Auction closed"})
 
 
+# ── Discovery: "is there an auction I'm part of right now?" ─────────────────────
+# Lets a captain find their auction without needing a manually-shared link/ID —
+# the frontend polls this from the navbar for any logged-in captain.
+
+@auction_bp.route("/auction/my-active", methods=["GET"])
+@jwt_required()
+def my_active_auction():
+    user = get_current_user()
+    uid = str(user["_id"])
+    auction = mongo.db.auctions.find_one({
+        "status": {"$in": ["pending", "active"]},
+        "$or": [{"captain_a_id": uid}, {"captain_b_id": uid}],
+    }, sort=[("created_at", -1)])
+    if not auction:
+        return jsonify({"auction_id": None})
+    return jsonify({"auction_id": str(auction["_id"]), "status": auction["status"]})
+
+
 # ── Shared live state (admin + the two assigned captains) ───────────────────────
 
 @auction_bp.route("/auction/<auction_id>", methods=["GET"])

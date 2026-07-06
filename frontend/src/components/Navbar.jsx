@@ -1,12 +1,32 @@
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
+import api from "../utils/api";
 import toast from "react-hot-toast";
 import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel } from "lucide-react";
+
+const MY_AUCTION_POLL_MS = 10000;
 
 export default function Navbar() {
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [myAuctionId, setMyAuctionId] = useState(null);
+
+  // Lets a captain discover "I'm in a live auction right now" without needing a
+  // manually-shared link — polled from here so it surfaces on every page.
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    let cancelled = false;
+    const check = () => {
+      api.get("/auction/my-active")
+        .then((res) => { if (!cancelled) setMyAuctionId(res.data?.auction_id || null); })
+        .catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, MY_AUCTION_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [user, isAdmin]);
 
   const handleLogout = async () => {
     await logout();
@@ -44,13 +64,20 @@ export default function Navbar() {
               </Link>
             </>
           )}
-          {/* No permanent captain/player nav link — the auction lives at a dynamic
-              /auction/:id URL with no fixed target; admin shares that link directly
-              with the two assigned captains once their auction starts. */}
           {!isAdmin && (
-            <Link to="/results" className="hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
-              Results
-            </Link>
+            <>
+              <Link to="/results" className="hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+                Results
+              </Link>
+              {myAuctionId && (
+                <Link
+                  to={`/auction/${myAuctionId}`}
+                  className="flex items-center gap-1 text-xs font-semibold bg-cricket-gold text-cricket-navy rounded-full px-3 py-1 whitespace-nowrap animate-pulse"
+                >
+                  <Gavel size={13} /> Join Auction
+                </Link>
+              )}
+            </>
           )}
         </div>
 
