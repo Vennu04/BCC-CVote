@@ -130,13 +130,19 @@ jobs:
           sed -i -E "s|[A-Za-z0-9_]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/${{ env.FRONTEND_REPO }}:[A-Za-z0-9._-]+|${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${{ env.FRONTEND_REPO }}:${TAG}|g" \
             k8s/prod/frontend-deployment.yaml
 
-      # ── Apply directly — this replaces ArgoCD's sync role. The existing
-      #    maxSurge=1/maxUnavailable=0 strategy on both Deployments already
-      #    gives a sequential (not simultaneous) blue-green-style cutover:
-      #    the new pod must pass its readiness probe before the old one is
-      #    ever terminated. ────────────────────────────────────────────────
+      # ── Apply directly — this replaces ArgoCD's sync role. Deliberately
+      #    scoped to just the two Deployment manifests, not the whole
+      #    k8s/prod/ directory: a routine image-tag bump has no business
+      #    touching the namespace/configmap/ingress/secret/middleware
+      #    resources, and the deployer ServiceAccount's Role is scoped to
+      #    match (deployments/services/pods only in voting-prod) — those
+      #    structural resources are applied deliberately/manually, not as
+      #    part of every deploy. The existing maxSurge=1/maxUnavailable=0
+      #    strategy on both Deployments already gives a sequential (not
+      #    simultaneous) blue-green-style cutover: the new pod must pass
+      #    its readiness probe before the old one is ever terminated. ─────
       - name: Apply manifests
-        run: kubectl apply -f k8s/prod/
+        run: kubectl apply -f k8s/prod/backend-deployment.yaml -f k8s/prod/frontend-deployment.yaml
 
       - name: Wait for rollout
         id: rollout
