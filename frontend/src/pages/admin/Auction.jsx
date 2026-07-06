@@ -259,13 +259,29 @@ export default function AdminAuction() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[auction.captain_a, auction.captain_b].map((c) => (
+              {[["Team A", auction.captain_a], ["Team B", auction.captain_b]].map(([label, c]) => (
                 <div key={c.captain_id} className="card">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold text-gray-900">{c.name}</h3>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+                      <h3 className="font-bold text-gray-900">{c.name}</h3>
+                    </div>
                     <span className="text-sm font-semibold text-pitch-700">{c.points_remaining} pts left</span>
                   </div>
-                  <p className="text-xs text-gray-500">{c.roster_count} players</p>
+                  <p className="text-xs text-gray-500 mb-2">{c.roster_count} players picked</p>
+                  {c.roster?.length > 0 && (
+                    <div className="border-t pt-2 space-y-1">
+                      {c.roster.map((p) => (
+                        <div key={p.user_id} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-800">{p.name}</span>
+                          <span className="text-gray-400">
+                            {GROUP_LABELS[p.category] || p.category} —{" "}
+                            {p.assigned_via === "leftover_free" ? "free" : `${p.price} pts`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

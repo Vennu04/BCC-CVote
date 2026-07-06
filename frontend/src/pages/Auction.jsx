@@ -43,7 +43,7 @@ function CaptainCard({ summary, isYou }) {
         <span className="text-sm font-semibold text-pitch-700">{summary.points_remaining} pts left</span>
       </div>
       <p className="text-xs text-gray-500 mb-2">{summary.roster_count} players picked</p>
-      <div className="space-y-1">
+      <div className="space-y-1 mb-3">
         {Object.entries(summary.group_counts || {}).map(([group, count]) => (
           <div key={group} className="flex items-center justify-between text-xs text-gray-600">
             <span>{GROUP_LABELS[group] || group}</span>
@@ -51,6 +51,18 @@ function CaptainCard({ summary, isYou }) {
           </div>
         ))}
       </div>
+      {summary.roster?.length > 0 && (
+        <div className="border-t pt-2 space-y-1">
+          {summary.roster.map((p) => (
+            <div key={p.user_id} className="flex items-center justify-between text-xs">
+              <span className="text-gray-800">{p.name}</span>
+              <span className="text-gray-400">
+                {p.assigned_via === "leftover_free" ? "free" : `${p.price} pts`}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

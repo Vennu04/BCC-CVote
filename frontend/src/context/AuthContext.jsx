@@ -3,10 +3,15 @@ import api from "../utils/api";
 
 const AuthContext = createContext(null);
 
+// sessionStorage (not localStorage) is deliberate — localStorage is shared across
+// every tab of the same origin, so logging into a second account in another tab
+// would silently overwrite the first tab's identity too (both tabs' requests would
+// then authenticate as whoever logged in last). sessionStorage is per-tab, so
+// admin + two captains can each be logged in in their own tab simultaneously.
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("bcc_user"));
+      return JSON.parse(sessionStorage.getItem("bcc_user"));
     } catch {
       return null;
     }
@@ -15,27 +20,27 @@ export function AuthProvider({ children }) {
 
   // Verify token on mount
   useEffect(() => {
-    const token = localStorage.getItem("bcc_token");
+    const token = sessionStorage.getItem("bcc_token");
     if (!token) { setLoading(false); return; }
     api.get("/auth/me")
       .then((res) => setUser(res.data))
-      .catch(() => { localStorage.removeItem("bcc_token"); localStorage.removeItem("bcc_user"); })
+      .catch(() => { sessionStorage.removeItem("bcc_token"); sessionStorage.removeItem("bcc_user"); })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (team_code, password) => {
     const res = await api.post("/auth/login", { team_code, password });
     const { access_token, user: userData } = res.data;
-    localStorage.setItem("bcc_token", access_token);
-    localStorage.setItem("bcc_user", JSON.stringify(userData));
+    sessionStorage.setItem("bcc_token", access_token);
+    sessionStorage.setItem("bcc_user", JSON.stringify(userData));
     setUser(userData);
     return userData;
   }, []);
 
   const logout = useCallback(async () => {
     try { await api.post("/auth/logout"); } catch {}
-    localStorage.removeItem("bcc_token");
-    localStorage.removeItem("bcc_user");
+    sessionStorage.removeItem("bcc_token");
+    sessionStorage.removeItem("bcc_user");
     setUser(null);
   }, []);
 
