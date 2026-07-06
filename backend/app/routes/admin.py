@@ -213,6 +213,10 @@ def update_captain(captain_id):
         if data["auction_category"] not in AUCTION_CATEGORIES:
             return jsonify({"error": f"auction_category must be one of {sorted(AUCTION_CATEGORIES)}"}), 400
         updates["auction_category"] = data["auction_category"]
+    if "role" in data:
+        if data["role"] not in ("captain", "player"):
+            return jsonify({"error": "role must be 'captain' or 'player'"}), 400
+        updates["role"] = data["role"]
 
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
@@ -304,6 +308,15 @@ def update_player(player_id):
         if data["auction_category"] not in AUCTION_CATEGORIES:
             return jsonify({"error": f"auction_category must be one of {sorted(AUCTION_CATEGORIES)}"}), 400
         updates["auction_category"] = data["auction_category"]
+    if "team_name" in data:
+        updates["team_name"] = data["team_name"].strip()
+    if "role" in data:
+        # Promotes an existing player to captain (or the reverse) in place —
+        # keeps their real login (team_code/password) untouched, unlike creating
+        # a brand-new captain record under a different code.
+        if data["role"] not in ("captain", "player"):
+            return jsonify({"error": "role must be 'captain' or 'player'"}), 400
+        updates["role"] = data["role"]
 
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
