@@ -52,9 +52,14 @@ def _group_quota(auction, group):
 
 
 def _captain_points_remaining(auction, captain_id):
+    """The 17-point purse only ever pays for the EXTRA bid amount above each
+    player's 8.5 base price — the base itself is never drawn from it. A player
+    won at 15 (8.5 base + 6.5 extra) costs the winning captain 6.5 points, not
+    15. Leftover-free/free-pick wins (sold_price=0) never touch the purse."""
     spent = sum(
-        p.get("sold_price") or 0
+        (p.get("sold_price") or 0) - auction["starting_price"]
         for p in mongo.db.auction_players.find({"auction_id": str(auction["_id"]), "sold_to": captain_id})
+        if p.get("assigned_via") == "bid"
     )
     return auction["points_budget"] - spent
 
@@ -431,16 +436,19 @@ def place_bid(auction_id):
         if amount <= last_bid["amount"]:
             return jsonify({"error": f"Bid must be higher than the current bid of {last_bid['amount']}"}), 400
     else:
-        # A captain low on points isn't locked out once they can't afford the
-        # full 8.5 starting price — they can still bid whatever they have left
-        # (down to the 0.5 minimum) to stay in contention for an uncontested
-        # player, rather than being forced to rely purely on free mechanisms.
-        floor = min(auction["starting_price"], remaining_points)
-        if amount < floor:
-            return jsonify({"error": f"Bid must be at least {floor}"}), 400
+        # Every bid = 8.5 base + extra (0.5-17). The base is never drawn from
+        # the purse, so the opening bid on a fresh player must be at least
+        # base + 0.5 — not just the base itself.
+        min_total = auction["starting_price"] + 0.5
+        if amount < min_total:
+            return jsonify({"error": f"Bid must be at least {min_total} (base {auction['starting_price']} + minimum 0.5 extra)"}), 400
 
-    if amount > remaining_points:
-        return jsonify({"error": f"You only have {remaining_points} points remaining"}), 400
+    extra = round(amount - auction["starting_price"], 1)
+    if extra > remaining_points:
+        return jsonify({
+            "error": f"That bid needs {extra} extra points on top of the {auction['starting_price']} base, "
+                     f"but you only have {remaining_points} remaining"
+        }), 400
 
     quota = _group_quota(auction, player["category"])
     count, _ = _captain_counts(auction, captain_id, player["category"])

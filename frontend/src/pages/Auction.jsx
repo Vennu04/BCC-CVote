@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
@@ -98,16 +99,49 @@ export default function Auction() {
     return mine?.points_remaining ?? null;
   }, [auction, user]);
 
+  // The 17-point purse only ever pays for the extra amount above the 8.5
+  // base — the base itself is never drawn from it — so the highest TOTAL
+  // bid a captain can actually afford is base + however much extra they
+  // have left, not just their remaining extra-points figure on its own.
+  const myMaxBid = useMemo(() => {
+    if (!auction || myRemaining == null) return null;
+    return auction.starting_price + myRemaining;
+  }, [auction, myRemaining]);
+
   useEffect(() => {
     if (auction?.current_player) {
       const floor = auction.current_player.current_high_bid;
-      // Don't default to something the captain can't actually afford — a
-      // low-on-points captain can still bid whatever they have left (down to
-      // 0.5), so the suggested amount should reflect that, not just floor+0.5.
-      const suggested = myRemaining != null ? Math.min(floor + 0.5, myRemaining) : floor + 0.5;
+      const suggested = myMaxBid != null ? Math.min(floor + 0.5, myMaxBid) : floor + 0.5;
       setAmount(String(suggested));
     }
-  }, [auction?.current_player?.id, auction?.current_player?.current_high_bid, myRemaining]);
+  }, [auction?.current_player?.id, auction?.current_player?.current_high_bid, myMaxBid]);
+
+  // Notify both captains of the updated points balance after every new bid/
+  // drop/free-pick — not just the silently-refreshing numbers on the cards
+  // above, so nobody has to go looking for it mid-auction.
+  const feedBaselineRef = useRef(null);
+  useEffect(() => {
+    const feed = auction?.bid_feed;
+    if (!feed || !isParticipant) return;
+    if (feedBaselineRef.current === null) {
+      feedBaselineRef.current = feed.length;
+      return;
+    }
+    if (feed.length > feedBaselineRef.current) {
+      feed.slice(feedBaselineRef.current).forEach((b) => {
+        const verb = b.action === "bid" ? `bid ${b.amount} on`
+          : b.action === "drop" ? "dropped"
+          : b.action === "free_pick" ? "free-picked"
+          : "got free (quota leftover) —";
+        toast(`${b.captain_name} ${verb} ${b.player_name}`, { duration: 3000 });
+      });
+      toast(
+        `Points left — ${auction.captain_a?.name}: ${auction.captain_a?.points_remaining} · ${auction.captain_b?.name}: ${auction.captain_b?.points_remaining}`,
+        { icon: "💰", duration: 4000 }
+      );
+      feedBaselineRef.current = feed.length;
+    }
+  }, [auction?.bid_feed, isParticipant]);
 
   if (loading) {
     return (
@@ -175,13 +209,13 @@ export default function Auction() {
                       type="number"
                       step="0.5"
                       min="0.5"
-                      max={myRemaining ?? undefined}
+                      max={myMaxBid ?? undefined}
                       className="input-field w-32"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                     />
-                    {myRemaining != null && (
-                      <span className="text-xs text-gray-400">(max {myRemaining})</span>
+                    {myMaxBid != null && (
+                      <span className="text-xs text-gray-400">(max {myMaxBid}, {myRemaining} extra left)</span>
                     )}
                     <button
                       className="btn-primary text-sm py-2 px-4"
