@@ -410,9 +410,16 @@ def place_bid(auction_id):
     except (TypeError, ValueError):
         return jsonify({"error": "A numeric amount is required"}), 400
 
+    if round(amount * 2) != amount * 2:
+        return jsonify({"error": "Bids must be in increments of 0.5"}), 400
+
     player = _player_doc(auction_id, auction["current_player_id"])
     if not player or player["status"] != "available":
         return jsonify({"error": "This player is no longer available"}), 400
+
+    remaining_points = _captain_points_remaining(auction, captain_id)
+    if remaining_points < 0.5:
+        return jsonify({"error": "You have no points left to bid with"}), 400
 
     last_bid = mongo.db.auction_bids.find_one(
         {"auction_id": auction_id, "player_id": auction["current_player_id"], "action": "bid"},
@@ -423,10 +430,15 @@ def place_bid(auction_id):
             return jsonify({"error": "You already have the highest bid"}), 400
         if amount <= last_bid["amount"]:
             return jsonify({"error": f"Bid must be higher than the current bid of {last_bid['amount']}"}), 400
-    elif amount < auction["starting_price"]:
-        return jsonify({"error": f"Bid must be at least the starting price of {auction['starting_price']}"}), 400
+    else:
+        # A captain low on points isn't locked out once they can't afford the
+        # full 8.5 starting price — they can still bid whatever they have left
+        # (down to the 0.5 minimum) to stay in contention for an uncontested
+        # player, rather than being forced to rely purely on free mechanisms.
+        floor = min(auction["starting_price"], remaining_points)
+        if amount < floor:
+            return jsonify({"error": f"Bid must be at least {floor}"}), 400
 
-    remaining_points = _captain_points_remaining(auction, captain_id)
     if amount > remaining_points:
         return jsonify({"error": f"You only have {remaining_points} points remaining"}), 400
 

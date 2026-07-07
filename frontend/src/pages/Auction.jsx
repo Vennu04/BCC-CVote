@@ -92,12 +92,22 @@ export default function Auction() {
     return (auction.available_players || []).filter((p) => p.category === "power" || p.category === "classic");
   }, [auction, isParticipant, otherCaptainDrained]);
 
+  const myRemaining = useMemo(() => {
+    if (!auction || !user) return null;
+    const mine = auction.captain_a?.captain_id === user.id ? auction.captain_a : auction.captain_b;
+    return mine?.points_remaining ?? null;
+  }, [auction, user]);
+
   useEffect(() => {
     if (auction?.current_player) {
       const floor = auction.current_player.current_high_bid;
-      setAmount(String(floor + 0.5));
+      // Don't default to something the captain can't actually afford — a
+      // low-on-points captain can still bid whatever they have left (down to
+      // 0.5), so the suggested amount should reflect that, not just floor+0.5.
+      const suggested = myRemaining != null ? Math.min(floor + 0.5, myRemaining) : floor + 0.5;
+      setAmount(String(suggested));
     }
-  }, [auction?.current_player?.id, auction?.current_player?.current_high_bid]);
+  }, [auction?.current_player?.id, auction?.current_player?.current_high_bid, myRemaining]);
 
   if (loading) {
     return (
@@ -164,10 +174,15 @@ export default function Auction() {
                     <input
                       type="number"
                       step="0.5"
+                      min="0.5"
+                      max={myRemaining ?? undefined}
                       className="input-field w-32"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                     />
+                    {myRemaining != null && (
+                      <span className="text-xs text-gray-400">(max {myRemaining})</span>
+                    )}
                     <button
                       className="btn-primary text-sm py-2 px-4"
                       disabled={bidding || !amount}
