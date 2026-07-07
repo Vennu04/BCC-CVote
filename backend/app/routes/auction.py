@@ -317,8 +317,12 @@ def get_auction(auction_id):
 
     players = list(mongo.db.auction_players.find({"auction_id": auction_id}))
     players_by_id = {str(p["_id"]): p for p in players}
+    # Captains are deliberately excluded from the auctioned pool itself (see
+    # create_auction), so their own user records must be fetched separately —
+    # otherwise captain_name() falls back to "Unknown" for both of them.
+    user_ids = {p["user_id"] for p in players} | {auction["captain_a_id"], auction["captain_b_id"]}
     users_map = {str(u["_id"]): u for u in mongo.db.users.find(
-        {"_id": {"$in": [ObjectId(p["user_id"]) for p in players]}}
+        {"_id": {"$in": [ObjectId(uid) for uid in user_ids]}}
     )}
 
     def captain_name(captain_id):
