@@ -50,11 +50,13 @@ export function useAuction(auctionId) {
   };
 
   const dropCurrentPlayer = async () => {
-    if (!confirm("Drop out of bidding for this player?")) return;
+    // Deliberately no confirm() prompt and no success toast — a live auction
+    // moves fast, and "not interested" should be a single instant click, not
+    // a two-step action. Failures still surface (e.g. "you have the highest
+    // bid"), since that's a real correction the captain needs to see.
     setDropping(true);
     try {
-      const res = await api.post(`/auction/${auctionId}/drop`);
-      toast(res.data?.message || "Dropped");
+      await api.post(`/auction/${auctionId}/drop`);
       await fetchAuction();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to drop");

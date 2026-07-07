@@ -116,9 +116,12 @@ export default function Auction() {
     }
   }, [auction?.current_player?.id, auction?.current_player?.current_high_bid, myMaxBid]);
 
-  // Notify both captains of the updated points balance after every new bid/
-  // drop/free-pick — not just the silently-refreshing numbers on the cards
-  // above, so nobody has to go looking for it mid-auction.
+  // Notify both captains of the updated points balance after every bid/
+  // free-pick/leftover-award — not just the silently-refreshing numbers on
+  // the cards above, so nobody has to go looking for it mid-auction. A mere
+  // "drop" (declining a player) doesn't change anyone's points or roster, so
+  // it's deliberately silent — no confirmation, no notification, just an
+  // instant no-friction click.
   const feedBaselineRef = useRef(null);
   useEffect(() => {
     const feed = auction?.bid_feed;
@@ -128,17 +131,19 @@ export default function Auction() {
       return;
     }
     if (feed.length > feedBaselineRef.current) {
-      feed.slice(feedBaselineRef.current).forEach((b) => {
+      const newEntries = feed.slice(feedBaselineRef.current).filter((b) => b.action !== "drop");
+      newEntries.forEach((b) => {
         const verb = b.action === "bid" ? `bid ${b.amount} on`
-          : b.action === "drop" ? "dropped"
           : b.action === "free_pick" ? "free-picked"
           : "got free (quota leftover) —";
         toast(`${b.captain_name} ${verb} ${b.player_name}`, { duration: 3000 });
       });
-      toast(
-        `Points left — ${auction.captain_a?.name}: ${auction.captain_a?.points_remaining} · ${auction.captain_b?.name}: ${auction.captain_b?.points_remaining}`,
-        { icon: "💰", duration: 4000 }
-      );
+      if (newEntries.length > 0) {
+        toast(
+          `Points left — ${auction.captain_a?.name}: ${auction.captain_a?.points_remaining} · ${auction.captain_b?.name}: ${auction.captain_b?.points_remaining}`,
+          { icon: "💰", duration: 4000 }
+        );
+      }
       feedBaselineRef.current = feed.length;
     }
   }, [auction?.bid_feed, isParticipant]);
