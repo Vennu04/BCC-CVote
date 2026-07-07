@@ -564,4 +564,10 @@ def free_pick(auction_id):
     if auction.get("current_player_id") == str(player["_id"]):
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
 
+    # A free-pick counts toward quota same as a bid win — if it just pushed the
+    # picking captain to their group quota, the rest of that group should
+    # transfer to the other captain immediately too, not sit unresolved.
+    auction = _auction_or_404(auction_id)
+    _check_leftover_award(auction, player["category"])
+
     return jsonify({"message": "Player picked for free"})
