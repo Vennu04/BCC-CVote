@@ -39,6 +39,20 @@ def _user_to_dict(u):
 
 AUCTION_CATEGORIES = {"extra_power_allrounder", "extra_power_batsman", "power", "classic"}
 
+# Normally captain/player role IS the voter roster. A handful of accounts
+# (role=="admin") are also flagged is_player=True so the same admin login can
+# vote too, without becoming a captain or player account — this OR-arm is what
+# lets those accounts show up everywhere a voter roster is built (dashboard,
+# summary, exports, auction pool).
+VOTER_FILTER = {"$or": [{"role": {"$in": ["captain", "player"]}}, {"is_player": True}]}
+
+# Narrower than VOTER_FILTER — used only by the player-management mutation
+# routes below, so they additionally match admin+is_player accounts without
+# also picking up captains who happen to have is_player=True (those already
+# have their own update_captain/remove_captain routes; letting update_player
+# match them too would just create two overlapping edit paths for the same row).
+ADMIN_VOTER_FILTER = {"role": "admin", "is_player": True}
+
 
 def _slot_to_dict(slot):
     return {
@@ -73,7 +87,7 @@ def _window_info(window):
 @admin_bp.route("/dashboard", methods=["GET"])
 @admin_required
 def dashboard():
-    voters = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
+    voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}).sort("name", 1))
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
 
     # Resolve each slot's own active window up front
@@ -251,7 +265,7 @@ def list_players():
     # everyone who can cast an availability vote, not just the dedicated
     # player-only accounts.
     players = list(mongo.db.users.find(
-        {"role": {"$in": ["player", "captain"]}, "is_active": True}
+        {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
     return jsonify([_user_to_dict(p) for p in players])
 
@@ -321,7 +335,10 @@ def update_player(player_id):
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
 
-    result = mongo.db.users.update_one({"_id": ObjectId(player_id), "role": "player"}, {"$set": updates})
+    result = mongo.db.users.update_one(
+        {"_id": ObjectId(player_id), "$or": [{"role": "player"}, ADMIN_VOTER_FILTER]},
+        {"$set": updates},
+    )
     if result.matched_count == 0:
         return jsonify({"error": "Player not found"}), 404
 
@@ -501,7 +518,7 @@ def _votes_for_current_windows(slots):
 @admin_bp.route("/export/csv", methods=["GET"])
 @admin_required
 def export_csv():
-    captains = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
+    captains = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}).sort("name", 1))
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     votes = _votes_for_current_windows(slots)
 
@@ -521,7 +538,7 @@ def export_excel():
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
-    captains = list(mongo.db.users.find({"role": {"$in": ["captain", "player"]}, "is_active": True}).sort("name", 1))
+    captains = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}).sort("name", 1))
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     votes = _votes_for_current_windows(slots)
     vote_map = {(v["captain_id"], v["slot_id"]): v["availability"] for v in votes}
@@ -636,7 +653,7 @@ def export_available_players():
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
     voters = {str(u["_id"]): u for u in mongo.db.users.find(
-        {"role": {"$in": ["captain", "player"]}, "is_active": True}
+        {"is_active": True, **VOTER_FILTER}
     )}
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
     votes = _votes_for_current_windows(slots)

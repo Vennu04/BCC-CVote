@@ -14,6 +14,11 @@ from ..utils.time_utils import (
 
 votes_bp = Blueprint("votes", __name__)
 
+# Kept in sync with admin.py's VOTER_FILTER — a handful of role=="admin"
+# accounts are flagged is_player=True so the same login can also vote; this
+# is what counts them into the voter total here too.
+VOTER_FILTER = {"$or": [{"role": {"$in": ["captain", "player"]}}, {"is_player": True}]}
+
 
 def _get_active_window(slot_id):
     return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
@@ -213,7 +218,7 @@ def not_available_week():
 @jwt_required()
 def vote_summary():
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
-    total_captains = mongo.db.users.count_documents({"is_active": True, "role": {"$in": ["captain", "player"]}})
+    total_captains = mongo.db.users.count_documents({"is_active": True, **VOTER_FILTER})
 
     summary = []
     for slot in slots:

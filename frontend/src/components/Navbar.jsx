@@ -9,14 +9,15 @@ import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel } from "luc
 const MY_AUCTION_POLL_MS = 10000;
 
 export default function Navbar() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isVoter } = useAuth();
   const navigate = useNavigate();
   const [myAuctionId, setMyAuctionId] = useState(null);
 
-  // Lets a captain discover "I'm in a live auction right now" without needing a
-  // manually-shared link — polled from here so it surfaces on every page.
+  // Lets a captain (or an admin who's also flagged as a voter) discover "I'm
+  // in a live auction right now" without needing a manually-shared link —
+  // polled from here so it surfaces on every page.
   useEffect(() => {
-    if (!user || isAdmin) return;
+    if (!user || !isVoter) return;
     let cancelled = false;
     const check = () => {
       api.get("/auction/my-active")
@@ -26,7 +27,7 @@ export default function Navbar() {
     check();
     const interval = setInterval(check, MY_AUCTION_POLL_MS);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [user, isAdmin]);
+  }, [user, isVoter]);
 
   const handleLogout = async () => {
     await logout();
@@ -64,7 +65,15 @@ export default function Navbar() {
               </Link>
             </>
           )}
-          {!isAdmin && (
+          {isAdmin && isVoter && (
+            // Plain captains/players already land here via the logo link
+            // (homePathFor); an admin's logo always goes to /admin instead,
+            // so they need an explicit way in.
+            <Link to="/player/dashboard" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <UserCircle size={15} /> My Votes
+            </Link>
+          )}
+          {isVoter && (
             <>
               <Link to="/results" className="hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 Results
