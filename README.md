@@ -1,203 +1,178 @@
 # BCC-CVote 🏏
 
-Cricket Captain Availability Voting App — captains vote their weekend slot availability during a Thu 6PM → Fri 8PM IST window.
+Cricket club app for weekend match-availability voting and a live points-based player
+auction to split available players into two balanced teams.
 
-## Environments
-
-| Environment | Stack | URL |
-|-------------|-------|-----|
-| Dev | Docker Compose (local) | http://localhost:5173 |
-| Prod | K3s on AWS EC2 t3.micro | http://\<ec2-ip\>:30080 |
+**Live:** https://d2welg0wjdnhjp.cloudfront.net
 
 ---
 
-## Dev Setup (Local)
+## What it does
 
-### Prerequisites
-- Docker Desktop running
-- Node 20 (optional, for local frontend dev without Docker)
+1. **Weekend availability voting** — 4 fixed recurring slots (Sat/Sun Morning/Evening).
+   Admin opens/closes a voting window per slot; captains and players mark themselves
+   available/not-available/maybe.
+2. **Ad-hoc dated matches** — admin can add a one-off match for any date (a weather-driven
+   Saturday, a public holiday, etc.) on top of the 4 fixed slots. Same voting mechanism,
+   soft-removable, doesn't touch the original 4.
+3. **Live player auction** — once a match's availability is known, admin runs a live
+   points-based auction between two designated captains to split everyone who voted
+   available into two balanced XIs. See [Auction rules](#auction-rules) below.
 
-### Start
+---
+
+## Tech stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | React 18 + Vite + Tailwind CSS + React Router v6 + Axios, PWA (vite-plugin-pwa) |
+| Backend | Flask 3 + PyMongo + flask-jwt-extended + gunicorn (sync workers), pytz (IST) |
+| Database | MongoDB, self-hosted on its own dedicated EC2 instance (not Atlas) |
+| Prod infra | K3s (single-node) on AWS EC2 (ap-south-1), Traefik ingress, CloudFront in front |
+| CI/CD | GitHub Actions — build/scan on GitHub-hosted runners, deploy via a **self-hosted runner** on the k3s instance itself (see [Deployment](#deployment--cicd)) |
+| IaC | Terraform — EC2 (k3s + mongodb), ECR, SSM Parameter Store, CloudFront |
+| Container registry | AWS ECR, OIDC deploy role (no static AWS keys in CI) |
+
+---
+
+## Dev setup (local)
 
 ```bash
 git clone https://github.com/Vennu04/BCC-CVote
 cd BCC-CVote
-cp .env.example .env
-# Edit .env: set MONGODB_URI to your Atlas M0 URI
-docker compose up -d
+docker-compose up -d
+docker-compose run --rm seed   # first time only — seeds 4 slots + admin + sample captains
 ```
 
-Seed initial data (first time only):
+- Frontend: http://localhost:3000
+- Backend: http://localhost:5000
+- MongoDB: localhost:27017 (mongo:7.0 container)
+- Admin login: `ADMIN` / `admin@bcc2024` (seed default)
+- Captain/player default password: their team code, lowercase (e.g. `MI` → `mi`)
 
-```bash
-docker compose --profile seed up seed
-```
-
-App: http://localhost:5173  
-Default admin: `ADMIN` / `admin@bcc2024`  
-Default captain password: team code in lowercase (e.g. `MI` → `mi`)
-
-### Stop
-
-```bash
-docker compose down
-```
+Stop: `docker-compose down`
 
 ---
 
-## Prod Setup (K3s on AWS)
+## Deployment / CI/CD
 
-### 1. Bootstrap Terraform state bucket
+**No ArgoCD, no GitOps polling.** `prod-cd.yml` pushes directly to the cluster:
 
-```bash
-aws s3 mb s3://bcc-cvote-tfstate --region ap-south-1
-aws dynamodb create-table \
-  --table-name bcc-cvote-tfstate-lock \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  --region ap-south-1
-```
+1. **`build-and-push`** job (GitHub-hosted `ubuntu-latest`): checkout → AWS OIDC auth →
+   ECR login → build backend+frontend images → Trivy scan → push to ECR.
+2. **`deploy`** job (**self-hosted runner living on the k3s EC2 instance**): updates the
+   image tag in `k8s/prod/{backend,frontend}-deployment.yaml` → `kubectl apply` (scoped to
+   just those two files, via a least-privilege `github-actions-deployer` ServiceAccount, not
+   the cluster-admin kubeconfig) → `kubectl rollout status` → smoke-tests the live URL →
+   **auto rollback** (`kubectl rollout undo`) if the rollout or smoke test fails.
 
-### 2. Create terraform.tfvars
+The self-hosted runner exists because the k3s API (6443) and SSH are both firewalled to a
+static home IP in the security group — a GitHub-hosted runner has no network path in, but a
+runner living on the box itself just polls GitHub outbound over 443 (already open).
 
-```hcl
-vpc_id        = "vpc-xxxxxxxx"
-subnet_id     = "subnet-xxxxxxxx"
-key_pair_name = "your-keypair"
-admin_cidr    = "YOUR.IP.ADDRESS/32"
-```
+The existing `maxSurge: 1, maxUnavailable: 0` rolling-update strategy on both Deployments
+already gives a sequential (not simultaneous) cutover — the new pod must pass its readiness
+probe before the old one is killed. No parallel blue/green Deployment pair needed.
 
-### 3. Provision infra
-
-```bash
-cd terraform
-terraform init
-terraform apply
-```
-
-### 4. Populate Secrets Manager
-
-```bash
-# After terraform apply creates the secret placeholders
-aws secretsmanager put-secret-value \
-  --secret-id bcc-cvote/prod/mongodb-uri \
-  --secret-string '{"MONGODB_URI":"mongodb+srv://..."}'
-
-aws secretsmanager put-secret-value \
-  --secret-id bcc-cvote/prod/jwt-secret \
-  --secret-string '{"JWT_SECRET_KEY":"<32-byte-hex>"}'
-
-aws secretsmanager put-secret-value \
-  --secret-id bcc-cvote/prod/app-secret \
-  --secret-string '{"SECRET_KEY":"<32-byte-hex>"}'
-```
-
-### 5. Configure GitHub Secrets
-
-| Secret | Value |
-|--------|-------|
-| `AWS_ACCOUNT_ID` | Your AWS account ID |
-| `AWS_DEPLOY_ROLE_ARN` | IAM role ARN with ECR+Secrets push access |
-| `SONAR_TOKEN` | SonarCloud project token |
-
-### 6. Deploy ArgoCD Application
-
-```bash
-# SSH into K3s node
-ssh ubuntu@<k3s-public-ip>
-export KUBECONFIG=/home/ubuntu/.kube/config
-
-# Apply ArgoCD app (points to k8s/prod/)
-kubectl apply -f - << 'EOF'
-# paste contents of argocd/app-prod.yaml
-EOF
-
-# Initial ECR pull secret
-/usr/local/bin/refresh-ecr-secret.sh
-```
-
-### 7. Push to main → auto-deploy
-
-```bash
-git checkout main
-git merge develop
-git push origin main
-# GitHub Actions builds → scans → pushes to ECR → updates k8s/prod/ manifests
-# ArgoCD detects manifest change → auto-syncs to K3s
-```
+Push to `main` → pipeline runs automatically. No path filter — any push rebuilds and
+redeploys both images.
 
 ---
 
-## Monitoring
+## Infrastructure
 
-```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
-helm install monitoring prometheus-community/kube-prometheus-stack \
-  -n monitoring --create-namespace \
-  -f monitoring/kube-prometheus-values.yaml
-```
-
-Grafana: http://\<k3s-ip\>:30300 (admin / changeme-in-prod)
+- **k3s node**: single EC2 instance (t3.small, 2GB RAM — intentionally kept small; see
+  `terraform/main.tf` comments for the memory-budget tradeoffs of what runs on it).
+  Runs: k3s control plane, Traefik (ingress), CoreDNS, local-path-provisioner, the app
+  (`bcc-backend`/`bcc-frontend` in the `voting-prod` namespace), and the self-hosted
+  Actions runner.
+- **MongoDB**: separate dedicated EC2 instance, not co-located with the app node.
+- **CloudFront**: sits in front of the k3s node's Elastic IP (origin is a hardcoded
+  `*.sslip.io` hostname matching the EIP — Traefik's ingress only matches that Host header).
+  Caching fully disabled (dynamic app, not cacheable).
+- **ECR pull-secret auto-refresh**: a systemd timer (`refresh-ecr-secret.timer`) on the k3s
+  instance refreshes the image-pull secret every 6h + shortly after every boot — ECR tokens
+  expire after 12h, and this replaces an earlier cron-based attempt that was written into
+  Terraform's `user_data` but never actually took effect on the running instance.
+- **cert-manager / external-secrets / monitoring exporters**: currently scaled to 0 on the
+  live instance (not removed from Terraform) — a capacity tradeoff made during an incident
+  where the full stack together exhausted the 2GB node's memory. Pending decision: leave off
+  permanently, move to a separate node, or upsize the instance.
 
 ---
 
-## Project Structure
+## Auction rules
+
+- Players are split into 4 groups: **Extra Power → All-Rounders**, **Extra Power → Batsmen**,
+  **Power**, **Classic**. Each group is split exactly in half between the two captains.
+- Every player has a base price of **8.5 points**. Each captain has a **17-point purse**.
+- **The purse only ever pays for the bid amount *above* the 8.5 base** — winning a player at
+  15 (8.5 base + 6.5 extra) costs the winner 6.5 points, not 15. The base itself is never
+  drawn from the purse.
+- Bids are in 0.5 increments; a captain can keep bidding for as little as 0.5 extra even
+  once low on points — they're never locked out below the 8.5 floor.
+- **Extra Power quota rule**: the instant a captain wins half of a group's players (e.g. 3
+  of 6), the rest of that same group transfers to the other captain for free — no more
+  bidding on them.
+- **Purse-drained rule (Power/Classic only)**: once a captain's 17-point purse hits 0, the
+  other captain can freely claim any remaining Power/Classic player without bidding — Extra
+  Power is excluded from this since it already has its own quota-based rule above.
+- Captains are never part of their own auctioned pool, even if they voted available for
+  that match.
+- Session cap: 25 minutes from admin clicking Start; any players still unresolved at that
+  point are distributed evenly between both captains.
+
+---
+
+## Project structure
 
 ```
 BCC-CVote/
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py          # Flask app factory
-│   │   ├── config.py            # Dev/Prod config classes
+│   │   ├── __init__.py            # Flask app factory, blueprint registration
+│   │   ├── config.py
 │   │   ├── routes/
-│   │   │   ├── auth.py          # /api/auth/*
-│   │   │   ├── votes.py         # /api/votes/*, /api/slots
-│   │   │   └── admin.py         # /api/admin/*
+│   │   │   ├── auth.py            # /api/auth/*
+│   │   │   ├── votes.py           # /api/slots, /api/votes/*
+│   │   │   ├── admin.py           # /api/admin/* — captains, players, windows, ad-hoc slots, exports
+│   │   │   └── auction.py         # /api/admin/auction/*, /api/auction/* — the live auction
 │   │   └── utils/
-│   │       ├── auth.py          # JWT decorators
-│   │       ├── time_utils.py    # IST timezone helpers
-│   │       └── export.py        # CSV report builder
-│   ├── scripts/seed.py          # Seed slots + admin + sample captains
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   ├── gunicorn.conf.py
-│   └── run.py
+│   │       ├── auth.py            # JWT decorators (admin_required, captain_required, get_current_user)
+│   │       ├── time_utils.py      # IST timezone helpers, voting-window logic
+│   │       └── export.py          # CSV/Excel report builders
+│   ├── scripts/seed.py
+│   ├── Dockerfile, gunicorn.conf.py, run.py
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/               # Login, Dashboard, Results, Admin/*
-│   │   ├── components/          # Navbar, SlotCard, VoteButton, etc.
-│   │   ├── context/AuthContext.jsx
-│   │   ├── hooks/useCountdown.js
-│   │   ├── utils/api.js
+│   │   ├── pages/
+│   │   │   ├── CaptainDashboard.jsx, PlayerDashboard.jsx, Results.jsx, Auction.jsx
+│   │   │   └── admin/
+│   │   │       ├── AdminDashboard.jsx, ManageCaptains.jsx, ManagePlayers.jsx
+│   │   │       ├── VotingWindow.jsx    # includes the "Add Ad-hoc Match" form
+│   │   │       └── Auction.jsx         # auction setup + live control screen
+│   │   ├── components/       # Navbar (auto-detects an active auction), SlotCard, VotingSlots
+│   │   ├── hooks/             # useVoting.js, useAuction.js (2.5s polling)
+│   │   ├── context/AuthContext.jsx   # sessionStorage-based — per-tab login isolation
 │   │   └── App.jsx
-│   ├── Dockerfile
-│   └── nginx.conf
-├── k8s/prod/                    # K3s manifests (ArgoCD watches this dir)
-│   ├── namespace.yaml
-│   ├── secret.yaml
-│   ├── configmap.yaml
-│   ├── backend-deployment.yaml
-│   ├── backend-service.yaml
-│   ├── frontend-deployment.yaml
-│   ├── frontend-service.yaml
-│   └── ingress.yaml
-├── argocd/app-prod.yaml         # ArgoCD Application resource
-├── terraform/                   # EC2 + ECR + Secrets Manager
-├── monitoring/                  # Prometheus + Grafana Helm values
-├── docker-compose.yml           # DEV ONLY
+│   ├── Dockerfile, nginx.conf
+├── k8s/prod/                  # applied directly by the deploy job (no GitOps controller)
+├── terraform/                 # EC2 (k3s + mongodb), ECR, SSM, CloudFront, IAM
 └── .github/workflows/
-    ├── dev-ci.yml               # develop branch: audit + scan + build check
-    └── prod-cd.yml              # main branch: build → scan → push → deploy
+    ├── dev-ci.yml
+    └── prod-cd.yml             # build-and-push (hosted) + deploy (self-hosted runner)
 ```
 
 ---
 
-## Voting Window Logic
+## Known limitations / pending decisions
 
-- Admin sets opening (Thu 18:00 IST) and closing (Fri 20:00 IST) datetimes
-- All times stored as UTC in MongoDB, displayed in IST
-- POST /api/votes returns 403 outside the window
-- Dashboard shows live countdown timer
-- Admin can close the window early via dashboard
+- cert-manager, external-secrets, and monitoring exporters are scaled to 0 (see
+  [Infrastructure](#infrastructure)) — not a permanent decision yet.
+- The k3s node's control-plane process alone uses ~770MB of the node's 2GB RAM at idle —
+  there's limited headroom regardless of what add-ons run alongside the app.
+- A handful of duplicate captain accounts created during early auction testing (team codes
+  `CHT`, `MLS`, `NDU`, `PDU`, `PHK`, `RMP`, `SDA`, `SKS`, `SRN`) are soft-deactivated but not
+  hard-deleted — those codes remain reserved.
+- No browser-automation testing in this environment — UI changes are verified via direct API
+  calls and clean production builds, not an actual browser click-through.
