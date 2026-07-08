@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
+import PageBackgroundIcon from "../../components/PageBackgroundIcon";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
+import adminIcon from "../../assets/dashboard-icons/bcc-icon-admin.png";
 import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -59,7 +61,8 @@ export default function AdminDashboard() {
   const slots = matrix[0]?.votes?.map((v) => ({ slot_number: parseInt(v.slot_label.replace("Slot ", "")), day: v.day, time_of_day: v.time_of_day })) || [];
 
   return (
-    <div className="min-h-screen bg-cricket-cream">
+    <div className="min-h-screen bg-cricket-cream isolate">
+      <PageBackgroundIcon src={adminIcon} alt="" />
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8">
 

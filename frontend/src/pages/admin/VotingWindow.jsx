@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
+import PageBackgroundIcon from "../../components/PageBackgroundIcon";
+import windowIcon from "../../assets/dashboard-icons/bcc-icon-window.png";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
@@ -92,7 +94,8 @@ export default function VotingWindow() {
   };
 
   return (
-    <div className="min-h-screen bg-cricket-cream">
+    <div className="min-h-screen bg-cricket-cream isolate">
+      <PageBackgroundIcon src={windowIcon} alt="" />
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex items-center gap-2 mb-6">
