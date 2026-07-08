@@ -35,7 +35,7 @@ function CountdownBadge({ endsAtIso }) {
   );
 }
 
-function CaptainCard({ summary, isYou }) {
+function CaptainCard({ summary, isYou, startingPrice }) {
   if (!summary) return null;
   return (
     <div className={`card ${isYou ? "border-2 border-pitch-400" : ""}`}>
@@ -58,7 +58,12 @@ function CaptainCard({ summary, isYou }) {
             <div key={p.user_id} className="flex items-center justify-between text-xs">
               <span className="text-gray-800">{p.name}</span>
               <span className="text-gray-400">
-                {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
+                {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick"
+                  ? "free"
+                  // p.price is the full sold price (base + extra) — only the extra
+                  // actually comes out of the 17-pt budget, so showing just "X pts"
+                  // here reads as a budget overspend when it isn't one.
+                  : `${p.price} (${(p.price - startingPrice).toFixed(1)} pts used)`}
               </span>
             </div>
           ))}
@@ -191,8 +196,8 @@ export default function Auction() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <CaptainCard summary={auction.captain_a} isYou={auction.captain_a?.captain_id === user?.id} />
-          <CaptainCard summary={auction.captain_b} isYou={auction.captain_b?.captain_id === user?.id} />
+          <CaptainCard summary={auction.captain_a} isYou={auction.captain_a?.captain_id === user?.id} startingPrice={auction.starting_price} />
+          <CaptainCard summary={auction.captain_b} isYou={auction.captain_b?.captain_id === user?.id} startingPrice={auction.starting_price} />
         </div>
 
         {auction.status === "active" && (
@@ -204,7 +209,10 @@ export default function Auction() {
                 </p>
                 <h2 className="text-xl font-bold text-gray-900 mb-2">{auction.current_player.name}</h2>
                 <p className="text-sm text-gray-600 mb-4">
-                  Current bid: <strong>{auction.current_player.current_high_bid}</strong> pts
+                  {/* current_high_bid is the full price (base + extra) — only the extra
+                      counts against anyone's 17-pt budget, so it's spelled out here too. */}
+                  Current bid: <strong>{auction.current_player.current_high_bid}</strong>
+                  {" "}({(auction.current_player.current_high_bid - auction.starting_price).toFixed(1)} extra)
                   {auction.current_player.current_high_bidder && ` — ${auction.current_player.current_high_bidder}`}
                 </p>
 

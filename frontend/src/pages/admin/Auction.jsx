@@ -278,7 +278,12 @@ export default function AdminAuction() {
                           <span className="text-gray-800">{p.name}</span>
                           <span className="text-gray-400">
                             {GROUP_LABELS[p.category] || p.category} —{" "}
-                            {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
+                            {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick"
+                              ? "free"
+                              // p.price is the full sold price (base + extra) — only the extra
+                              // actually comes out of the 17-pt budget, so showing just "X pts"
+                              // here reads as a budget overspend when it isn't one.
+                              : `${p.price} (${(p.price - auction.starting_price).toFixed(1)} pts used)`}
                           </span>
                         </div>
                       ))}
