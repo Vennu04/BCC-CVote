@@ -216,6 +216,7 @@ def create_auction():
             "sold_to": None,
             "sold_price": None,
             "assigned_via": None,
+            "deprioritized": False,
         })
 
     return jsonify({
@@ -375,10 +376,19 @@ def get_auction(auction_id):
         "created_at": format_ist(b["created_at"]),
     } for b in bids]
 
-    available_players = [{
-        "id": str(p["_id"]), "user_id": p["user_id"],
-        "name": users_map.get(p["user_id"], {}).get("name", "?"), "category": p["category"],
-    } for p in players if p["status"] == "available"]
+    # Deprioritized (both captains passed at base price) sort to the end so
+    # admin's release dropdown naturally offers everyone else in the category
+    # first — they're still releasable any time, just not the default pick.
+    available_players = sorted(
+        (
+            {
+                "id": str(p["_id"]), "user_id": p["user_id"],
+                "name": users_map.get(p["user_id"], {}).get("name", "?"), "category": p["category"],
+                "deprioritized": p.get("deprioritized", False),
+            } for p in players if p["status"] == "available"
+        ),
+        key=lambda p: p["deprioritized"],
+    )
 
     return jsonify({
         "id": auction_id,
@@ -515,9 +525,13 @@ def drop_player(auction_id):
         "auction_id": auction_id, "player_id": player_id, "captain_id": other_captain, "action": "drop",
     })
     if not last_bid and already_dropped:
-        # Both captains passed with no bids at all — leave it "available" for admin to re-release later.
+        # Both captains passed at the base price with no bids at all — stays
+        # "available", but deprioritized so admin's release dropdown surfaces
+        # everyone else in the category first; this is the last option once
+        # nothing else is left to release.
+        mongo.db.auction_players.update_one({"_id": ObjectId(player_id)}, {"$set": {"deprioritized": True}})
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
-        return jsonify({"message": "Both captains passed — player returned to the pool"})
+        return jsonify({"message": "Both captains passed — this player becomes the last option in their category"})
 
     return jsonify({"message": "Dropped"})
 
@@ -526,13 +540,15 @@ def drop_player(auction_id):
 @jwt_required()
 def free_pick(auction_id):
     """
-    Power/Classic only: once the OTHER captain's purse is fully drained (0
-    points — they literally cannot bid the 8.5 floor anymore), the solvent
-    captain can claim any remaining unsold player in these two categories for
-    free, without needing admin to release it first or going through a
-    bid/drop cycle against an opponent who can no longer contest anything.
-    Extra Power is deliberately excluded — it already has its own, earlier
-    quota-based leftover-free trigger (_check_leftover_award).
+    Once the OTHER captain's purse is fully drained (0 points — they
+    literally cannot bid the 8.5 floor anymore, in any category), the solvent
+    captain can claim any remaining unsold player, in any category, for free
+    — without needing admin to release it first or going through a bid/drop
+    cycle against an opponent who can no longer contest anything. Still capped
+    by the solvent captain's own per-category quota (see the check below), so
+    this can never let them exceed their own fair share — whatever's left
+    over after that goes to the drained captain via _check_leftover_award,
+    same as it would after any other quota-filling pick.
     """
     auction = _auction_or_404(auction_id)
     if not auction:
@@ -554,8 +570,15 @@ def free_pick(auction_id):
     player = _player_doc(auction_id, player_id) if player_id else None
     if not player or player["status"] != "available":
         return jsonify({"error": "Player not available"}), 400
-    if player["category"] not in ("power", "classic"):
-        return jsonify({"error": "Free pick only applies to Power and Classic categories"}), 400
+
+    # Same quota cap normal bidding enforces — without this, the solvent
+    # captain could free-pick every remaining player in a category once the
+    # opponent is drained, taking far more than their fair half instead of
+    # just what's left within their own quota.
+    quota = _group_quota(auction, player["category"])
+    count, _ = _captain_counts(auction, captain_id, player["category"])
+    if count >= quota:
+        return jsonify({"error": "You've already filled your quota for this category"}), 400
 
     mongo.db.auction_players.update_one(
         {"_id": player["_id"]},

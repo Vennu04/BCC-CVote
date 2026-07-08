@@ -84,9 +84,10 @@ export default function Auction() {
     return [auction.captain_a?.captain_id, auction.captain_b?.captain_id].includes(user.id);
   }, [auction, user]);
 
-  // Once the OTHER captain's purse is fully drained, Power/Classic players can be
-  // claimed for free instead of going through the normal bid/drop cycle — they
-  // literally can't contest anything anymore below the 8.5 starting price.
+  // Once the OTHER captain's purse is fully drained, every remaining player in
+  // any category can be claimed for free instead of going through the normal
+  // bid/drop cycle — a drained captain can't contest anything anymore, in any
+  // category, since they can't even afford the 8.5 starting bid.
   const otherCaptainDrained = useMemo(() => {
     if (!auction || !user) return false;
     const other = auction.captain_a?.captain_id === user.id ? auction.captain_b : auction.captain_a;
@@ -94,9 +95,16 @@ export default function Auction() {
   }, [auction, user]);
 
   const freePickable = useMemo(() => {
-    if (!isParticipant || !otherCaptainDrained) return [];
-    return (auction.available_players || []).filter((p) => p.category === "power" || p.category === "classic");
-  }, [auction, isParticipant, otherCaptainDrained]);
+    if (!isParticipant || !otherCaptainDrained || !user) return [];
+    const mine = auction.captain_a?.captain_id === user.id ? auction.captain_a : auction.captain_b;
+    const myGroupCounts = mine?.group_counts || {};
+    const quotas = auction.group_quotas || {};
+    // Still bounded by the picking captain's own quota per category — free
+    // pick lets you claim anything left over, not exceed your own fair share.
+    return (auction.available_players || []).filter(
+      (p) => (myGroupCounts[p.category] ?? 0) < (quotas[p.category] ?? Infinity)
+    );
+  }, [auction, isParticipant, otherCaptainDrained, user]);
 
   const myRemaining = useMemo(() => {
     if (!auction || !user) return null;
@@ -112,6 +120,16 @@ export default function Auction() {
     if (!auction || myRemaining == null) return null;
     return auction.starting_price + myRemaining;
   }, [auction, myRemaining]);
+
+  const stepAmount = (delta) => {
+    setAmount((prev) => {
+      const current = parseFloat(prev) || 0;
+      let next = Math.round((current + delta) * 2) / 2; // snap to 0.5 increments
+      next = Math.max(next, 0.5);
+      if (myMaxBid != null) next = Math.min(next, myMaxBid);
+      return String(next);
+    });
+  };
 
   useEffect(() => {
     if (auction?.current_player) {
@@ -218,15 +236,38 @@ export default function Auction() {
 
                 {canBid ? (
                   <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      max={myMaxBid ?? undefined}
-                      className="input-field w-32"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                    />
+                    {/* Native <input type="number"> spinner arrows don't render on most
+                        mobile browsers (iOS/Android Safari & Chrome) — only desktop — so
+                        typing was the only way to adjust the bid on mobile. These buttons
+                        step by 0.5 regardless of platform. */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => stepAmount(-0.5)}
+                        className="w-9 h-9 flex items-center justify-center text-lg font-bold rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 active:bg-gray-100"
+                        aria-label="Decrease bid by 0.5"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.5"
+                        min="0.5"
+                        max={myMaxBid ?? undefined}
+                        className="input-field w-24 text-center"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => stepAmount(0.5)}
+                        className="w-9 h-9 flex items-center justify-center text-lg font-bold rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 active:bg-gray-100"
+                        aria-label="Increase bid by 0.5"
+                      >
+                        +
+                      </button>
+                    </div>
                     {myMaxBid != null && (
                       <span className="text-xs text-gray-400">(max {myMaxBid}, {myRemaining} extra left)</span>
                     )}
@@ -264,7 +305,7 @@ export default function Auction() {
               <h3 className="font-bold text-amber-900">Free Pick Available</h3>
             </div>
             <p className="text-xs text-amber-700 mb-3">
-              The other captain's points are drained — claim any remaining Power/Classic player for free.
+              The other captain's points are drained — claim any remaining player, in any category, for free (still capped at your own quota per category).
             </p>
             <div className="flex flex-wrap gap-2">
               {freePickable.map((p) => (
@@ -274,7 +315,7 @@ export default function Auction() {
                   disabled={freePicking === p.id}
                   className="text-sm py-1.5 px-3 rounded-lg border border-amber-400 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50"
                 >
-                  {freePicking === p.id ? "Picking…" : p.name}
+                  {freePicking === p.id ? "Picking…" : `${p.name} — ${GROUP_LABELS[p.category] || p.category}`}
                 </button>
               ))}
             </div>

@@ -234,7 +234,9 @@ export default function AdminAuction() {
                           disabled={!!auction.current_player}
                         >
                           {players.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
+                            <option key={p.id} value={p.id}>
+                              {p.name}{p.deprioritized && " (Last Chance — both captains passed already)"}
+                            </option>
                           ))}
                         </select>
                         <button
