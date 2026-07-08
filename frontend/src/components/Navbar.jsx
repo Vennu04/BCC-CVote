@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
 import api from "../utils/api";
 import toast from "react-hot-toast";
-import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck } from "lucide-react";
 
 const MY_AUCTION_POLL_MS = 10000;
 
@@ -62,6 +62,9 @@ export default function Navbar() {
               </Link>
               <Link to="/admin/auction" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 <Gavel size={15} /> Auction
+              </Link>
+              <Link to="/admin/attendance" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+                <ClipboardCheck size={15} /> Attendance
               </Link>
             </>
           )}

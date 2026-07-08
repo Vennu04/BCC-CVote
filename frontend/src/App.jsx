@@ -9,6 +9,7 @@ import Results from "./pages/Results";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ManageCaptains from "./pages/admin/ManageCaptains";
 import ManagePlayers from "./pages/admin/ManagePlayers";
+import Attendance from "./pages/admin/Attendance";
 import VotingWindow from "./pages/admin/VotingWindow";
 import AdminAuction from "./pages/admin/Auction";
 import Auction from "./pages/Auction";
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/admin"           element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         <Route path="/admin/captains"  element={<AdminRoute><ManageCaptains /></AdminRoute>} />
         <Route path="/admin/players"   element={<AdminRoute><ManagePlayers /></AdminRoute>} />
+        <Route path="/admin/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
         <Route path="/admin/window"    element={<AdminRoute><VotingWindow /></AdminRoute>} />
         <Route path="/admin/auction"   element={<AdminRoute><AdminAuction /></AdminRoute>} />
 

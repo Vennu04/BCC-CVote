@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, make_response, send_file
 import io
 from flask_jwt_extended import jwt_required
 from bson import ObjectId
+from pymongo import UpdateOne
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 import pytz
@@ -33,6 +34,8 @@ def _user_to_dict(u):
         "matches_played": u.get("matches_played", 0),
         "tournament_status": u.get("tournament_status", "not_played"),
         "auction_category": u.get("auction_category"),
+        "attendance_count": u.get("attendance_count", 0),
+        "knockout_eligible": u.get("knockout_eligible", False),
         "created_at": format_ist(u.get("created_at")),
     }
 
@@ -268,6 +271,54 @@ def list_players():
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
     return jsonify([_user_to_dict(p) for p in players])
+
+
+# ── Knockout attendance (reference-only — nothing else in the app reads or
+# enforces these fields; admin tracks them manually to pick knockout lineups
+# once league matches are done) ─────────────────────────────────────────────
+
+@admin_bp.route("/attendance", methods=["GET"])
+@admin_required
+def list_attendance():
+    voters = list(mongo.db.users.find(
+        {"is_active": True, **VOTER_FILTER}
+    ).sort("name", 1))
+    return jsonify([_user_to_dict(v) for v in voters])
+
+
+@admin_bp.route("/attendance", methods=["PUT"])
+@admin_required
+def update_attendance():
+    data = request.get_json(silent=True) or {}
+    updates = data.get("updates")
+    if not isinstance(updates, list) or not updates:
+        return jsonify({"error": "updates must be a non-empty list"}), 400
+
+    ops = []
+    for entry in updates:
+        user_id = entry.get("id")
+        if not user_id or not ObjectId.is_valid(user_id):
+            return jsonify({"error": f"Invalid id: {user_id!r}"}), 400
+
+        voter = mongo.db.users.find_one({"_id": ObjectId(user_id), "is_active": True, **VOTER_FILTER})
+        if not voter:
+            return jsonify({"error": f"{user_id} is not part of the voter roster"}), 400
+
+        attendance_count = entry.get("attendance_count")
+        if not isinstance(attendance_count, int) or isinstance(attendance_count, bool) or attendance_count < 0:
+            return jsonify({"error": f"{voter['name']}: attendance_count must be a non-negative integer"}), 400
+
+        knockout_eligible = entry.get("knockout_eligible")
+        if not isinstance(knockout_eligible, bool):
+            return jsonify({"error": f"{voter['name']}: knockout_eligible must be true or false"}), 400
+
+        ops.append(UpdateOne(
+            {"_id": voter["_id"]},
+            {"$set": {"attendance_count": attendance_count, "knockout_eligible": knockout_eligible}},
+        ))
+
+    result = mongo.db.users.bulk_write(ops)
+    return jsonify({"message": "Attendance updated", "modified_count": result.modified_count})
 
 
 @admin_bp.route("/players", methods=["POST"])
