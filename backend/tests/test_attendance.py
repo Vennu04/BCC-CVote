@@ -1,7 +1,7 @@
-"""Reference-only knockout attendance tracking: a GET/PUT pair scoped to the
-same voter roster (VOTER_FILTER) used everywhere else, with bulk update, plus
-a shared settings pair (total matches organized + knockout cutoff) the
-frontend uses to rank voters by % attended."""
+"""Reference-only knockout attendance tracking: attendance_count and
+total_matches_organized are both derived from league_matches (see
+test_league_matches.py) — this file covers the voter-roster GET, the
+knockout_eligible bulk PUT, and the knockout_cutoff setting."""
 
 
 def test_list_attendance_returns_voter_roster_with_defaults(client, make_user, admin_headers):
@@ -22,72 +22,56 @@ def test_list_attendance_returns_voter_roster_with_defaults(client, make_user, a
     assert body["settings"] == {"total_matches_organized": 0, "knockout_cutoff": 28}
 
 
-def test_update_attendance_bulk_updates_multiple_rows(client, make_user, admin_headers):
+def test_update_attendance_bulk_updates_eligibility_only(client, make_user, admin_headers):
     p1 = make_user("player", "PLR1", "plr1")
     p2 = make_user("player", "PLR2", "plr2")
 
     res = client.put("/api/admin/attendance", json={"updates": [
-        {"id": str(p1["_id"]), "attendance_count": 6, "knockout_eligible": True},
-        {"id": str(p2["_id"]), "attendance_count": 3, "knockout_eligible": False},
+        {"id": str(p1["_id"]), "knockout_eligible": True},
+        {"id": str(p2["_id"]), "knockout_eligible": False},
     ]}, headers=admin_headers)
     assert res.status_code == 200
-    assert res.get_json()["modified_count"] == 2
 
     listing = {r["team_code"]: r for r in client.get("/api/admin/attendance", headers=admin_headers).get_json()["voters"]}
-    assert listing["PLR1"]["attendance_count"] == 6
     assert listing["PLR1"]["knockout_eligible"] is True
-    assert listing["PLR2"]["attendance_count"] == 3
     assert listing["PLR2"]["knockout_eligible"] is False
 
 
-def test_update_attendance_settings_persists(client, admin_headers):
-    res = client.put("/api/admin/attendance/settings", json={
-        "total_matches_organized": 10, "knockout_cutoff": 30,
-    }, headers=admin_headers)
+def test_update_attendance_settings_persists_cutoff_only(client, admin_headers):
+    res = client.put("/api/admin/attendance/settings", json={"knockout_cutoff": 30}, headers=admin_headers)
     assert res.status_code == 200
-    assert res.get_json()["settings"] == {"total_matches_organized": 10, "knockout_cutoff": 30}
+    assert res.get_json()["settings"] == {"total_matches_organized": 0, "knockout_cutoff": 30}
 
     listing = client.get("/api/admin/attendance", headers=admin_headers).get_json()
-    assert listing["settings"] == {"total_matches_organized": 10, "knockout_cutoff": 30}
+    assert listing["settings"] == {"total_matches_organized": 0, "knockout_cutoff": 30}
 
 
 def test_update_attendance_settings_is_idempotent_upsert(client, admin_headers):
-    client.put("/api/admin/attendance/settings", json={
-        "total_matches_organized": 5, "knockout_cutoff": 28,
-    }, headers=admin_headers)
-    res = client.put("/api/admin/attendance/settings", json={
-        "total_matches_organized": 8, "knockout_cutoff": 30,
-    }, headers=admin_headers)
+    client.put("/api/admin/attendance/settings", json={"knockout_cutoff": 28}, headers=admin_headers)
+    res = client.put("/api/admin/attendance/settings", json={"knockout_cutoff": 30}, headers=admin_headers)
     assert res.status_code == 200
-    assert res.get_json()["settings"] == {"total_matches_organized": 8, "knockout_cutoff": 30}
-
-
-def test_update_attendance_settings_rejects_negative_total_matches(client, admin_headers):
-    res = client.put("/api/admin/attendance/settings", json={
-        "total_matches_organized": -1, "knockout_cutoff": 28,
-    }, headers=admin_headers)
-    assert res.status_code == 400
+    assert res.get_json()["settings"]["knockout_cutoff"] == 30
 
 
 def test_update_attendance_settings_rejects_negative_cutoff(client, admin_headers):
+    res = client.put("/api/admin/attendance/settings", json={"knockout_cutoff": -5}, headers=admin_headers)
+    assert res.status_code == 400
+
+
+def test_update_attendance_settings_ignores_total_matches_organized(client, admin_headers):
+    # It's derived now — even if a client sends it, it has no effect and isn't
+    # required for the request to succeed.
     res = client.put("/api/admin/attendance/settings", json={
-        "total_matches_organized": 5, "knockout_cutoff": -5,
+        "knockout_cutoff": 28, "total_matches_organized": 999,
     }, headers=admin_headers)
-    assert res.status_code == 400
-
-
-def test_update_attendance_rejects_negative_count(client, make_user, admin_headers):
-    p1 = make_user("player", "PLR1", "plr1")
-    res = client.put("/api/admin/attendance", json={"updates": [
-        {"id": str(p1["_id"]), "attendance_count": -1, "knockout_eligible": False},
-    ]}, headers=admin_headers)
-    assert res.status_code == 400
+    assert res.status_code == 200
+    assert res.get_json()["settings"]["total_matches_organized"] == 0
 
 
 def test_update_attendance_rejects_non_bool_eligible(client, make_user, admin_headers):
     p1 = make_user("player", "PLR1", "plr1")
     res = client.put("/api/admin/attendance", json={"updates": [
-        {"id": str(p1["_id"]), "attendance_count": 1, "knockout_eligible": "yes"},
+        {"id": str(p1["_id"]), "knockout_eligible": "yes"},
     ]}, headers=admin_headers)
     assert res.status_code == 400
 
@@ -95,7 +79,7 @@ def test_update_attendance_rejects_non_bool_eligible(client, make_user, admin_he
 def test_update_attendance_rejects_account_outside_voter_roster(client, make_user, admin_headers):
     plain_admin = make_user("admin", "PLAINADMIN", "pw")  # no is_player
     res = client.put("/api/admin/attendance", json={"updates": [
-        {"id": str(plain_admin["_id"]), "attendance_count": 1, "knockout_eligible": True},
+        {"id": str(plain_admin["_id"]), "knockout_eligible": True},
     ]}, headers=admin_headers)
     assert res.status_code == 400
 

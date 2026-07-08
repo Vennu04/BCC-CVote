@@ -2,19 +2,37 @@ import { useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import { ClipboardCheck, Shield, Trophy } from "lucide-react";
+import { ClipboardCheck, Shield, Trophy, Plus, Trash2, Users } from "lucide-react";
 
 export default function Attendance() {
   const [rows, setRows] = useState([]);
   const [settings, setSettings] = useState({ total_matches_organized: 0, knockout_cutoff: 28 });
+  const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const fetchData = async () => {
+  const [newMatchLabel, setNewMatchLabel] = useState("");
+  const [newMatchDate, setNewMatchDate] = useState("");
+  const [addingMatch, setAddingMatch] = useState(false);
+
+  const [expandedMatchId, setExpandedMatchId] = useState(null);
+  const [expandedAttendeeIds, setExpandedAttendeeIds] = useState(new Set());
+  const [savingMatch, setSavingMatch] = useState(false);
+
+  const fetchAttendance = async () => {
+    const res = await api.get("/admin/attendance");
+    setRows(res.data.voters);
+    setSettings(res.data.settings);
+  };
+
+  const fetchMatches = async () => {
+    const res = await api.get("/admin/attendance/matches");
+    setMatches(res.data);
+  };
+
+  const fetchAll = async () => {
     try {
-      const res = await api.get("/admin/attendance");
-      setRows(res.data.voters);
-      setSettings(res.data.settings);
+      await Promise.all([fetchAttendance(), fetchMatches()]);
     } catch {
       toast.error("Failed to load attendance");
     } finally {
@@ -22,12 +40,7 @@ export default function Attendance() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
-
-  const setCount = (id, value) => {
-    const n = Math.max(0, parseInt(value, 10) || 0);
-    setRows(prev => prev.map(r => r.id === id ? { ...r, attendance_count: n } : r));
-  };
+  useEffect(() => { fetchAll(); }, []);
 
   const toggleEligible = (id) => {
     setRows(prev => prev.map(r => r.id === id ? { ...r, knockout_eligible: !r.knockout_eligible } : r));
@@ -58,19 +71,76 @@ export default function Attendance() {
     setSaving(true);
     try {
       await Promise.all([
-        api.put("/admin/attendance/settings", settings),
+        api.put("/admin/attendance/settings", { knockout_cutoff: settings.knockout_cutoff }),
         api.put("/admin/attendance", {
-          updates: rows.map(r => ({
-            id: r.id, attendance_count: r.attendance_count, knockout_eligible: r.knockout_eligible,
-          })),
+          updates: rows.map(r => ({ id: r.id, knockout_eligible: r.knockout_eligible })),
         }),
       ]);
-      toast.success("Attendance saved for everyone");
-      fetchData();
+      toast.success("Eligibility saved for everyone");
+      fetchAttendance();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to save attendance");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddMatch = async (e) => {
+    e.preventDefault();
+    setAddingMatch(true);
+    try {
+      await api.post("/admin/attendance/matches", {
+        label: newMatchLabel.trim(), match_date: newMatchDate || null,
+      });
+      setNewMatchLabel("");
+      setNewMatchDate("");
+      await fetchMatches();
+      toast.success("Match added");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to add match");
+    } finally {
+      setAddingMatch(false);
+    }
+  };
+
+  const handleRemoveMatch = async (match) => {
+    if (!confirm(`Remove "${match.label}"? This also removes it from everyone's attendance count.`)) return;
+    try {
+      await api.delete(`/admin/attendance/matches/${match.id}`);
+      if (expandedMatchId === match.id) setExpandedMatchId(null);
+      await Promise.all([fetchMatches(), fetchAttendance()]);
+      toast.success("Match removed");
+    } catch {
+      toast.error("Failed to remove match");
+    }
+  };
+
+  const openChecklist = (match) => {
+    setExpandedMatchId(match.id);
+    setExpandedAttendeeIds(new Set(match.attendee_ids));
+  };
+
+  const toggleAttendee = (voterId) => {
+    setExpandedAttendeeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(voterId)) next.delete(voterId); else next.add(voterId);
+      return next;
+    });
+  };
+
+  const handleSaveMatchAttendance = async (matchId) => {
+    setSavingMatch(true);
+    try {
+      await api.put(`/admin/attendance/matches/${matchId}`, {
+        attendee_ids: Array.from(expandedAttendeeIds),
+      });
+      setExpandedMatchId(null);
+      await Promise.all([fetchMatches(), fetchAttendance()]);
+      toast.success("Match attendance saved");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to save match attendance");
+    } finally {
+      setSavingMatch(false);
     }
   };
 
@@ -93,17 +163,88 @@ export default function Attendance() {
           </button>
         </div>
 
-        {/* Settings */}
+        {/* Matches */}
+        <div className="card mb-6">
+          <h2 className="font-semibold text-gray-800 mb-1">League Matches</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            {settings.total_matches_organized} match{settings.total_matches_organized === 1 ? "" : "es"} recorded so far — attendance counts and % below are derived from these.
+          </p>
+
+          <form onSubmit={handleAddMatch} className="flex flex-wrap items-end gap-3 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Label (optional)</label>
+              <input className="input-field py-1.5 text-sm w-40" placeholder={`Match ${matches.length + 1}`}
+                value={newMatchLabel} onChange={e => setNewMatchLabel(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date (optional)</label>
+              <input type="date" className="input-field py-1.5 text-sm" value={newMatchDate}
+                onChange={e => setNewMatchDate(e.target.value)} />
+            </div>
+            <button type="submit" disabled={addingMatch} className="btn-secondary flex items-center gap-2">
+              <Plus size={15} /> Add Match
+            </button>
+          </form>
+
+          {matches.length === 0 ? (
+            <p className="text-gray-400 text-sm">No matches recorded yet — add one above, then mark who attended it.</p>
+          ) : (
+            <div className="space-y-2">
+              {matches.map(m => (
+                <div key={m.id} className="border rounded-lg">
+                  <div className="flex items-center justify-between px-3 py-2 flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-gray-900">{m.label}</span>
+                      {m.match_date && <span className="text-xs text-gray-400">{m.match_date}</span>}
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Users size={12} /> {m.attendee_count} attended
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => expandedMatchId === m.id ? setExpandedMatchId(null) : openChecklist(m)}
+                        className="btn-secondary text-xs py-1.5 px-3"
+                      >
+                        {expandedMatchId === m.id ? "Close" : "Edit Attendance"}
+                      </button>
+                      <button onClick={() => handleRemoveMatch(m)} className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200" title="Remove match">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {expandedMatchId === m.id && (
+                    <div className="border-t px-3 py-3">
+                      <div className="max-h-64 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 mb-3">
+                        {rows.map(r => (
+                          <label key={r.id} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 cursor-pointer"
+                              checked={expandedAttendeeIds.has(r.id)}
+                              onChange={() => toggleAttendee(r.id)}
+                            />
+                            {r.name}
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleSaveMatchAttendance(m.id)}
+                        disabled={savingMatch}
+                        className="btn-primary text-sm py-1.5 px-4"
+                      >
+                        {savingMatch ? "Saving…" : "Save This Match's Attendance"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Knockout cutoff */}
         <div className="card mb-6 flex flex-wrap items-end gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Total League Matches Organized</label>
-            <input
-              type="number" min={0}
-              className="input-field py-1.5 text-sm w-40"
-              value={settings.total_matches_organized}
-              onChange={e => setSettings(s => ({ ...s, total_matches_organized: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
-            />
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Knockout Cutoff (Top N)</label>
             <input
@@ -157,14 +298,7 @@ export default function Attendance() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number" min={0}
-                          className="input-field py-1.5 text-sm w-20"
-                          value={r.attendance_count}
-                          onChange={e => setCount(r.id, e.target.value)}
-                        />
-                      </td>
+                      <td className="px-4 py-3 text-gray-700">{r.attendance_count}</td>
                       <td className="px-4 py-3 font-medium text-gray-700">{r.percentage}%</td>
                       <td className="px-4 py-3">
                         <input

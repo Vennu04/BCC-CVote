@@ -274,12 +274,14 @@ def list_players():
 
 
 # ── Knockout attendance (reference-only — nothing else in the app reads or
-# enforces these fields; admin tracks them manually to pick knockout lineups
-# once league matches are done). Two per-player fields (attendance_count,
-# knockout_eligible) plus one shared setting (how many league matches have
-# been organized so far, so the frontend can turn each count into a %) —
-# there's no historical match log anywhere else in the app to derive that
-# number from, so admin enters it directly. ────────────────────────────────
+# enforces these fields; admin tracks them to pick knockout lineups once
+# league matches are done). attendance_count and total_matches_organized are
+# both *derived* from league_matches (below) — admin records each match and
+# checks off who actually showed up, rather than retyping running totals by
+# hand for 57 people after every match. knockout_eligible is the one field
+# that stays a manual, admin-editable override (see "Auto-Mark Top N" on the
+# frontend, which pre-fills it from the computed ranking but never silently
+# re-overwrites a hand-adjusted value on a later load). ─────────────────────
 
 ATTENDANCE_SETTINGS_ID = "attendance"
 
@@ -287,9 +289,18 @@ ATTENDANCE_SETTINGS_ID = "attendance"
 def _attendance_settings():
     doc = mongo.db.settings.find_one({"_id": ATTENDANCE_SETTINGS_ID})
     return {
-        "total_matches_organized": doc.get("total_matches_organized", 0) if doc else 0,
+        "total_matches_organized": mongo.db.league_matches.count_documents({}),
         "knockout_cutoff": doc.get("knockout_cutoff", 28) if doc else 28,
     }
+
+
+def _attendance_counts():
+    """{voter_id_str: number of recorded matches they attended}."""
+    counts = {}
+    for match in mongo.db.league_matches.find({}, {"attendee_ids": 1}):
+        for voter_id in match.get("attendee_ids", []):
+            counts[voter_id] = counts.get(voter_id, 0) + 1
+    return counts
 
 
 @admin_bp.route("/attendance", methods=["GET"])
@@ -298,8 +309,16 @@ def list_attendance():
     voters = list(mongo.db.users.find(
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
+    counts = _attendance_counts()
+
+    voter_dicts = []
+    for v in voters:
+        d = _user_to_dict(v)
+        d["attendance_count"] = counts.get(str(v["_id"]), 0)
+        voter_dicts.append(d)
+
     return jsonify({
-        "voters": [_user_to_dict(v) for v in voters],
+        "voters": voter_dicts,
         "settings": _attendance_settings(),
     })
 
@@ -309,17 +328,13 @@ def list_attendance():
 def update_attendance_settings():
     data = request.get_json(silent=True) or {}
 
-    total_matches = data.get("total_matches_organized")
-    if not isinstance(total_matches, int) or isinstance(total_matches, bool) or total_matches < 0:
-        return jsonify({"error": "total_matches_organized must be a non-negative integer"}), 400
-
     cutoff = data.get("knockout_cutoff")
     if not isinstance(cutoff, int) or isinstance(cutoff, bool) or cutoff < 0:
         return jsonify({"error": "knockout_cutoff must be a non-negative integer"}), 400
 
     mongo.db.settings.update_one(
         {"_id": ATTENDANCE_SETTINGS_ID},
-        {"$set": {"total_matches_organized": total_matches, "knockout_cutoff": cutoff}},
+        {"$set": {"knockout_cutoff": cutoff}},
         upsert=True,
     )
     return jsonify({"message": "Settings updated", "settings": _attendance_settings()})
@@ -343,21 +358,99 @@ def update_attendance():
         if not voter:
             return jsonify({"error": f"{user_id} is not part of the voter roster"}), 400
 
-        attendance_count = entry.get("attendance_count")
-        if not isinstance(attendance_count, int) or isinstance(attendance_count, bool) or attendance_count < 0:
-            return jsonify({"error": f"{voter['name']}: attendance_count must be a non-negative integer"}), 400
-
         knockout_eligible = entry.get("knockout_eligible")
         if not isinstance(knockout_eligible, bool):
             return jsonify({"error": f"{voter['name']}: knockout_eligible must be true or false"}), 400
 
         ops.append(UpdateOne(
             {"_id": voter["_id"]},
-            {"$set": {"attendance_count": attendance_count, "knockout_eligible": knockout_eligible}},
+            {"$set": {"knockout_eligible": knockout_eligible}},
         ))
 
     result = mongo.db.users.bulk_write(ops)
     return jsonify({"message": "Attendance updated", "modified_count": result.modified_count})
+
+
+# ── League matches — one document per completed match, admin checks off who
+# actually attended; attendance_count/total_matches_organized above are both
+# derived from these. ───────────────────────────────────────────────────────
+
+def _match_to_dict(m):
+    return {
+        "id": str(m["_id"]),
+        "label": m.get("label", ""),
+        "match_date": m.get("match_date"),
+        "attendee_ids": m.get("attendee_ids", []),
+        "attendee_count": len(m.get("attendee_ids", [])),
+        "created_at": format_ist(m.get("created_at")),
+    }
+
+
+@admin_bp.route("/attendance/matches", methods=["GET"])
+@admin_required
+def list_league_matches():
+    matches = list(mongo.db.league_matches.find({}).sort("created_at", 1))
+    return jsonify([_match_to_dict(m) for m in matches])
+
+
+@admin_bp.route("/attendance/matches", methods=["POST"])
+@admin_required
+def add_league_match():
+    data = request.get_json(silent=True) or {}
+    match_date = (data.get("match_date") or "").strip() or None
+
+    label = (data.get("label") or "").strip()
+    if not label:
+        existing = mongo.db.league_matches.count_documents({})
+        label = f"Match {existing + 1}"
+
+    doc = {
+        "label": label,
+        "match_date": match_date,
+        "attendee_ids": [],
+        "created_at": datetime.utcnow(),
+    }
+    result = mongo.db.league_matches.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return jsonify({"message": "Match added", "match": _match_to_dict(doc)}), 201
+
+
+@admin_bp.route("/attendance/matches/<match_id>", methods=["PUT"])
+@admin_required
+def update_league_match(match_id):
+    if not ObjectId.is_valid(match_id):
+        return jsonify({"error": "Invalid match id"}), 400
+    match = mongo.db.league_matches.find_one({"_id": ObjectId(match_id)})
+    if not match:
+        return jsonify({"error": "Match not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    attendee_ids = data.get("attendee_ids")
+    if not isinstance(attendee_ids, list):
+        return jsonify({"error": "attendee_ids must be a list"}), 400
+
+    for voter_id in attendee_ids:
+        if not ObjectId.is_valid(voter_id):
+            return jsonify({"error": f"Invalid id: {voter_id!r}"}), 400
+        if not mongo.db.users.find_one({"_id": ObjectId(voter_id), "is_active": True, **VOTER_FILTER}):
+            return jsonify({"error": f"{voter_id} is not part of the voter roster"}), 400
+
+    mongo.db.league_matches.update_one(
+        {"_id": match["_id"]}, {"$set": {"attendee_ids": attendee_ids}}
+    )
+    updated = mongo.db.league_matches.find_one({"_id": match["_id"]})
+    return jsonify({"message": "Match attendance updated", "match": _match_to_dict(updated)})
+
+
+@admin_bp.route("/attendance/matches/<match_id>", methods=["DELETE"])
+@admin_required
+def remove_league_match(match_id):
+    if not ObjectId.is_valid(match_id):
+        return jsonify({"error": "Invalid match id"}), 400
+    result = mongo.db.league_matches.delete_one({"_id": ObjectId(match_id)})
+    if result.deleted_count == 0:
+        return jsonify({"error": "Match not found"}), 404
+    return jsonify({"message": "Match removed"})
 
 
 @admin_bp.route("/players", methods=["POST"])
