@@ -275,7 +275,22 @@ def list_players():
 
 # ── Knockout attendance (reference-only — nothing else in the app reads or
 # enforces these fields; admin tracks them manually to pick knockout lineups
-# once league matches are done) ─────────────────────────────────────────────
+# once league matches are done). Two per-player fields (attendance_count,
+# knockout_eligible) plus one shared setting (how many league matches have
+# been organized so far, so the frontend can turn each count into a %) —
+# there's no historical match log anywhere else in the app to derive that
+# number from, so admin enters it directly. ────────────────────────────────
+
+ATTENDANCE_SETTINGS_ID = "attendance"
+
+
+def _attendance_settings():
+    doc = mongo.db.settings.find_one({"_id": ATTENDANCE_SETTINGS_ID})
+    return {
+        "total_matches_organized": doc.get("total_matches_organized", 0) if doc else 0,
+        "knockout_cutoff": doc.get("knockout_cutoff", 28) if doc else 28,
+    }
+
 
 @admin_bp.route("/attendance", methods=["GET"])
 @admin_required
@@ -283,7 +298,31 @@ def list_attendance():
     voters = list(mongo.db.users.find(
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
-    return jsonify([_user_to_dict(v) for v in voters])
+    return jsonify({
+        "voters": [_user_to_dict(v) for v in voters],
+        "settings": _attendance_settings(),
+    })
+
+
+@admin_bp.route("/attendance/settings", methods=["PUT"])
+@admin_required
+def update_attendance_settings():
+    data = request.get_json(silent=True) or {}
+
+    total_matches = data.get("total_matches_organized")
+    if not isinstance(total_matches, int) or isinstance(total_matches, bool) or total_matches < 0:
+        return jsonify({"error": "total_matches_organized must be a non-negative integer"}), 400
+
+    cutoff = data.get("knockout_cutoff")
+    if not isinstance(cutoff, int) or isinstance(cutoff, bool) or cutoff < 0:
+        return jsonify({"error": "knockout_cutoff must be a non-negative integer"}), 400
+
+    mongo.db.settings.update_one(
+        {"_id": ATTENDANCE_SETTINGS_ID},
+        {"$set": {"total_matches_organized": total_matches, "knockout_cutoff": cutoff}},
+        upsert=True,
+    )
+    return jsonify({"message": "Settings updated", "settings": _attendance_settings()})
 
 
 @admin_bp.route("/attendance", methods=["PUT"])
