@@ -160,7 +160,7 @@ export default function AdminAuction() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={auctionIcon} alt="" />
+      <PageBackgroundIcon src={auctionIcon} />
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-2">

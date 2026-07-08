@@ -62,7 +62,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={adminIcon} alt="" />
+      <PageBackgroundIcon src={adminIcon} />
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8">
 

@@ -148,7 +148,7 @@ export default function Attendance() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={attendanceIcon} alt="" />
+      <PageBackgroundIcon src={attendanceIcon} />
       <Navbar />
       <div className="max-w-5xl mx-auto px-4 py-8">
 

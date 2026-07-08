@@ -95,7 +95,7 @@ export default function VotingWindow() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={windowIcon} alt="" />
+      <PageBackgroundIcon src={windowIcon} />
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex items-center gap-2 mb-6">

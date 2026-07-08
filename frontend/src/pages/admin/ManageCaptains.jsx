@@ -112,7 +112,7 @@ export default function ManageCaptains() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={captainsIcon} alt="" />
+      <PageBackgroundIcon src={captainsIcon} />
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8">
 
