@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundIcon from "../../components/PageBackgroundIcon";
-import captainsIcon from "../../assets/dashboard-icons/bcc-icon-captains.png";
+import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import captainsPhoto from "../../assets/dashboard-backgrounds/captains.jpg";
 import { UserPlus, Edit2, Check, X } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -112,7 +112,7 @@ export default function ManageCaptains() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={captainsIcon} />
+      <PageBackgroundPhoto src={captainsPhoto} />
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8">
 

@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundIcon from "../../components/PageBackgroundIcon";
-import playersIcon from "../../assets/dashboard-icons/bcc-icon-players.png";
+import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import playersPhoto from "../../assets/dashboard-backgrounds/players.jpg";
 import { UserPlus, Edit2, Check, X, Shield } from "lucide-react";
 
 const AUCTION_CATEGORY_OPTIONS = [
@@ -96,7 +96,7 @@ export default function ManagePlayers() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={playersIcon} />
+      <PageBackgroundPhoto src={playersPhoto} />
       <Navbar />
       <div className="max-w-4xl mx-auto px-4 py-8">
 

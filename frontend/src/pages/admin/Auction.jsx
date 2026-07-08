@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundIcon from "../../components/PageBackgroundIcon";
-import auctionIcon from "../../assets/dashboard-icons/bcc-icon-auction.png";
+import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import auctionPhoto from "../../assets/dashboard-backgrounds/auction.jpg";
 import { useAuction } from "../../hooks/useAuction";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy } from "lucide-react";
 
@@ -160,7 +160,7 @@ export default function AdminAuction() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={auctionIcon} />
+      <PageBackgroundPhoto src={auctionPhoto} />
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-2">

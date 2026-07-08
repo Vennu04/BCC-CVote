@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundIcon from "../../components/PageBackgroundIcon";
+import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
-import adminIcon from "../../assets/dashboard-icons/bcc-icon-admin.png";
+import adminPhoto from "../../assets/dashboard-backgrounds/admin.jpg";
 import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "lucide-react";
 
 export default function AdminDashboard() {
@@ -62,7 +62,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundIcon src={adminIcon} />
+      <PageBackgroundPhoto src={adminPhoto} />
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8">
 
