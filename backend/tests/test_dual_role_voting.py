@@ -99,9 +99,14 @@ def test_admin_voter_pulled_into_auction_pool(client, make_user, admin_headers, 
     captain_b = make_user("captain", "CAPB", "capb")
     admin_voter = make_user("admin", "ADMINVOTER", "pw", is_player=True, auction_category="classic")
     other_voter = make_user("player", "PLR1", "plr1", auction_category="classic")
-
     make_vote(admin_voter["_id"], slot_id, window_id, "available")
     make_vote(other_voter["_id"], slot_id, window_id, "available")
+
+    # Pad with 20 more "power" voters (separate category, doesn't affect the
+    # classic count below) to clear the auction's 22-voter minimum.
+    for i in range(20):
+        padding = make_user("player", f"PAD{i}", f"pad{i}", auction_category="power")
+        make_vote(padding["_id"], slot_id, window_id, "available")
 
     res = client.post("/api/admin/auction", json={
         "slot_id": slot_id,

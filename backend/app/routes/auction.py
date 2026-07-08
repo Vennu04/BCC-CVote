@@ -17,6 +17,8 @@ POINTS_BUDGET = 17
 STARTING_PRICE = 8.5
 TARGET_ROSTER_SIZE = 11
 SESSION_MINUTES = 25
+MIN_AUCTION_POOL_SIZE = 22  # a full cricket match needs 11 a side
+MAX_ROSTER_SIZE_PER_SIDE = 15
 
 
 def _get_active_window(slot_id):
@@ -148,6 +150,19 @@ def create_auction():
     if captain_a_id == captain_b_id:
         return jsonify({"error": "captain_a_id and captain_b_id must be different"}), 400
 
+    # Conflict of interest: an admin who is also (in real life) one of the two
+    # captains shouldn't be the one running their own auction — someone else
+    # from the admin team should conduct it instead. linked_captain_id is set
+    # once, by hand, on the small number of dual-role admin accounts that
+    # need it (see scripts/link_dual_role_captains.py) — most admins have no
+    # such link and this check is simply a no-op for them.
+    acting_admin = get_current_user()
+    linked_captain_id = acting_admin.get("linked_captain_id") if acting_admin else None
+    if linked_captain_id and linked_captain_id in (captain_a_id, captain_b_id):
+        return jsonify({
+            "error": "You're linked to one of the chosen captains — someone else from the admin team must run this auction"
+        }), 403
+
     slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
     if not slot:
         return jsonify({"error": "Slot not found"}), 404
@@ -188,6 +203,23 @@ def create_auction():
     if unbalanced:
         return jsonify({
             "error": f"These groups have an odd number of available players and can't be split evenly: {', '.join(unbalanced)}"
+        }), 400
+
+    # It's a cricket match — each side needs at least a playing XI, and (per
+    # admin's rule) no more than 15 to keep squads a sane size. Both are
+    # driven by the pool size itself, not the 17-point budget, which is
+    # unrelated and unchanged either way.
+    if len(voters) < MIN_AUCTION_POOL_SIZE:
+        return jsonify({
+            "error": f"At least {MIN_AUCTION_POOL_SIZE} players are needed for an auction "
+                     f"({MIN_AUCTION_POOL_SIZE // 2} per side) — only {len(voters)} voted available"
+        }), 400
+
+    per_side_roster_size = sum(count // 2 for count in counts_by_group.values())
+    if per_side_roster_size > MAX_ROSTER_SIZE_PER_SIDE:
+        return jsonify({
+            "error": f"This pool would give each side {per_side_roster_size} players — "
+                     f"the max is {MAX_ROSTER_SIZE_PER_SIDE} per side"
         }), 400
 
     auction_doc = {
@@ -338,6 +370,7 @@ def get_auction(auction_id):
         return {
             "captain_id": captain_id,
             "name": captain_name(captain_id),
+            "team_name": users_map.get(captain_id, {}).get("team_name", ""),
             "points_remaining": points_remaining,
             "is_drained": points_remaining <= 0,
             "roster_count": len(roster),

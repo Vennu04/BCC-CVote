@@ -20,9 +20,9 @@ def _create(client, headers, setup):
 def test_captain_total_spend_never_exceeds_budget_across_multiple_players(
     client, admin_headers, auth_header, make_auction_setup
 ):
-    # 6-player "power" category, quota = 3 per captain — plenty of headroom
-    # so neither captain hits quota mid-test.
-    setup = make_auction_setup([("power", None, None)] * 6)
+    # 22-player "power" category (the auction minimum), quota = 11 per
+    # captain — plenty of headroom so neither captain hits quota mid-test.
+    setup = make_auction_setup([("power", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
@@ -71,7 +71,7 @@ def test_captain_total_spend_never_exceeds_budget_across_multiple_players(
 def test_bid_rejected_the_instant_it_would_exceed_remaining_budget(
     client, admin_headers, auth_header, make_auction_setup
 ):
-    setup = make_auction_setup([("classic", None, None)] * 4)
+    setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]

@@ -22,7 +22,7 @@ def _create(client, headers, setup):
 
 
 def test_both_captains_passing_marks_player_deprioritized(client, admin_headers, auth_header, make_auction_setup):
-    setup = make_auction_setup([("classic", None, None)] * 4)
+    setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
@@ -42,7 +42,7 @@ def test_both_captains_passing_marks_player_deprioritized(client, admin_headers,
 
 
 def test_deprioritized_player_sorts_last_in_available_players(client, admin_headers, auth_header, make_auction_setup):
-    setup = make_auction_setup([("classic", None, None)] * 4)
+    setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
@@ -72,7 +72,7 @@ def test_free_pick_rejects_a_direct_over_quota_attempt(client, admin_headers, au
     # depth (e.g. two near-simultaneous free-pick requests racing each other),
     # so this constructs that boundary state directly rather than relying on
     # the sequential API flow to reach it organically.
-    setup = make_auction_setup([("power", None, None)] * 8)
+    setup = make_auction_setup([("power", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
@@ -80,24 +80,26 @@ def test_free_pick_rejects_a_direct_over_quota_attempt(client, admin_headers, au
 
     players = list(mongo.db.auction_players.find({"auction_id": auction_id, "category": "power"}))
     captain_a_id = str(setup["captain_a"]["_id"])
+    quota = len(players) // 2
 
-    # Directly put captain A at quota (4) without going through the sweep.
-    for p in players[:4]:
+    # Directly put captain A at quota without going through the sweep.
+    for p in players[:quota]:
         mongo.db.auction_players.update_one(
             {"_id": p["_id"]},
             {"$set": {"status": "free_assigned", "sold_to": captain_a_id, "sold_price": 0, "assigned_via": "free_pick"}},
         )
 
-    # A 5th free-pick attempt, now over quota, must be rejected outright —
+    # One more free-pick attempt, now over quota, must be rejected outright —
     # this is the exact case that had no cap before the fix.
-    fifth = client.post(f"/api/auction/{auction_id}/free-pick",
-                         json={"player_id": str(players[4]["_id"])}, headers=a_headers)
-    assert fifth.status_code == 400
-    assert "quota" in fifth.get_json()["error"]
+    over_quota_player = players[quota]
+    res = client.post(f"/api/auction/{auction_id}/free-pick",
+                       json={"player_id": str(over_quota_player["_id"])}, headers=a_headers)
+    assert res.status_code == 400
+    assert "quota" in res.get_json()["error"]
 
-    # And that 5th player must still be untouched — the rejected attempt
-    # must not have gone through.
-    untouched = mongo.db.auction_players.find_one({"_id": players[4]["_id"]})
+    # And that player must still be untouched — the rejected attempt must
+    # not have gone through.
+    untouched = mongo.db.auction_players.find_one({"_id": over_quota_player["_id"]})
     assert untouched["status"] == "available"
     assert untouched["sold_to"] is None
 
@@ -105,17 +107,18 @@ def test_free_pick_rejects_a_direct_over_quota_attempt(client, admin_headers, au
 def test_free_pick_leftover_award_still_works_when_quota_hit_via_free_pick(
     client, admin_headers, auth_header, make_auction_setup
 ):
-    # 4 players, quota = 2 — confirms the pre-existing leftover-award sweep
-    # (unrelated to this fix) still correctly transfers the rest to the other
-    # captain once quota is hit exactly via free-picks, not just via bids.
-    setup = make_auction_setup([("power", None, None)] * 4)
+    # 22-player pool, quota = 11 — confirms the pre-existing leftover-award
+    # sweep (unrelated to this fix) still correctly transfers the rest to the
+    # other captain once quota is hit exactly via free-picks, not just bids.
+    setup = make_auction_setup([("power", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
     mongo.db.auctions.update_one({"_id": ObjectId(auction_id)}, {"$set": {"points_budget": 0}})
 
     players = list(mongo.db.auction_players.find({"auction_id": auction_id, "category": "power"}))
-    for p in players[:2]:
+    quota = len(players) // 2
+    for p in players[:quota]:
         res = client.post(f"/api/auction/{auction_id}/free-pick",
                            json={"player_id": str(p["_id"])}, headers=a_headers)
         assert res.status_code == 200
@@ -128,11 +131,11 @@ def test_free_pick_leftover_award_still_works_when_quota_hit_via_free_pick(
     a_count = mongo.db.auction_players.count_documents(
         {"auction_id": auction_id, "category": "power", "sold_to": str(setup["captain_a"]["_id"])}
     )
-    assert a_count == 2
+    assert a_count == quota
 
 
 def test_free_pick_now_works_for_extra_power_categories_too(client, admin_headers, auth_header, make_auction_setup):
-    setup = make_auction_setup([("extra_power_allrounder", None, None)] * 4)
+    setup = make_auction_setup([("extra_power_allrounder", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)

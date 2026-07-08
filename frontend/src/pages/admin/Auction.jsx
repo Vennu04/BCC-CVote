@@ -3,7 +3,7 @@ import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import { useAuction } from "../../hooks/useAuction";
-import { Gavel, PlayCircle, StopCircle, RefreshCw } from "lucide-react";
+import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy } from "lucide-react";
 
 const STORAGE_KEY = "bcc_active_auction_id";
 
@@ -13,6 +13,32 @@ const GROUP_LABELS = {
   power: "Power",
   classic: "Classic",
 };
+
+// Plain-text summary for pasting into WhatsApp once an auction is done —
+// prices are deliberately left out (they're confidential post-completion,
+// same as the on-screen rosters), just team/captain/player names.
+function buildWhatsAppSummary(auction) {
+  const teamBlock = (label, captain) => {
+    const heading = captain.team_name ? `${label} — ${captain.team_name}` : label;
+    const lines = [`*${heading}*`, `Captain: ${captain.name}`, ""];
+    for (const group of Object.keys(GROUP_LABELS)) {
+      const players = (captain.roster || []).filter((p) => p.category === group);
+      if (players.length === 0) continue;
+      lines.push(`${GROUP_LABELS[group]}:`);
+      players.forEach((p, i) => lines.push(`${i + 1}. ${p.name}`));
+      lines.push("");
+    }
+    return lines.join("\n").trim();
+  };
+
+  return [
+    "🏏 *BCC-CVote Auction Results*",
+    "",
+    teamBlock("Team A", auction.captain_a),
+    "",
+    teamBlock("Team B", auction.captain_b),
+  ].join("\n");
+}
 
 export default function AdminAuction() {
   const [slots, setSlots] = useState([]);
@@ -110,6 +136,15 @@ export default function AdminAuction() {
       refetch();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to close auction");
+    }
+  };
+
+  const handleCopyTeams = async () => {
+    try {
+      await navigator.clipboard.writeText(buildWhatsAppSummary(auction));
+      toast.success("Copied — paste it into WhatsApp");
+    } catch {
+      toast.error("Couldn't copy — your browser may be blocking clipboard access");
     }
   };
 
@@ -257,7 +292,15 @@ export default function AdminAuction() {
             )}
 
             {auction.status === "completed" && (
-              <div className="card text-center py-6 text-green-700 font-medium">Auction completed.</div>
+              <div className="card text-center py-6 text-green-700 font-medium space-y-3">
+                <p>Auction completed.</p>
+                <button
+                  onClick={handleCopyTeams}
+                  className="btn-secondary inline-flex items-center gap-2 text-sm py-2 px-4"
+                >
+                  <Copy size={15} /> Copy Teams for WhatsApp
+                </button>
+              </div>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
