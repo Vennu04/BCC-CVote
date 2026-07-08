@@ -24,7 +24,7 @@ db = client.get_default_database()
 # admin accounts share names with unrelated real captain/player accounts
 # under different team_codes — never link by name).
 ADMIN_TO_CAPTAIN_TEAM_CODES = {
-    "SHASHI": "SHI",
+    "SHASHI": "SHA",
     "SURESH": "SUR",
     "SRIKANTH": "SRK",
 }
