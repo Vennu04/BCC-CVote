@@ -3,7 +3,10 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import App from "./App";
+import { setupAutoReloadOnUpdate } from "./utils/pwaUpdate";
 import "./index.css";
+
+setupAutoReloadOnUpdate();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
