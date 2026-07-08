@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundIcon from "../../components/PageBackgroundIcon";
 import attendanceIcon from "../../assets/dashboard-icons/bcc-icon-attendance.png";
-import { ClipboardCheck, Shield, Trophy, Plus, Trash2, Users } from "lucide-react";
+import { ClipboardCheck, Shield, Trophy, Plus, Trash2, Users, CalendarCheck } from "lucide-react";
 
 export default function Attendance() {
   const [rows, setRows] = useState([]);
@@ -20,6 +20,12 @@ export default function Attendance() {
   const [expandedMatchId, setExpandedMatchId] = useState(null);
   const [expandedAttendeeIds, setExpandedAttendeeIds] = useState(new Set());
   const [savingMatch, setSavingMatch] = useState(false);
+
+  // Per-player quick-add — a faster entry point than opening a match's full
+  // checklist to find one name: pick straight from the player's own row
+  // which match(es) they attended, or start a brand new one on the spot.
+  const [expandedPlayerId, setExpandedPlayerId] = useState(null);
+  const [togglingMatchId, setTogglingMatchId] = useState(null);
 
   const fetchAttendance = async () => {
     const res = await api.get("/admin/attendance");
@@ -143,6 +149,36 @@ export default function Attendance() {
       toast.error(err.response?.data?.error || "Failed to save match attendance");
     } finally {
       setSavingMatch(false);
+    }
+  };
+
+  const handleTogglePlayerInMatch = async (match, playerId) => {
+    setTogglingMatchId(match.id);
+    const attending = match.attendee_ids.includes(playerId);
+    const nextAttendeeIds = attending
+      ? match.attendee_ids.filter(id => id !== playerId)
+      : [...match.attendee_ids, playerId];
+    try {
+      await api.put(`/admin/attendance/matches/${match.id}`, { attendee_ids: nextAttendeeIds });
+      await Promise.all([fetchMatches(), fetchAttendance()]);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update attendance");
+    } finally {
+      setTogglingMatchId(null);
+    }
+  };
+
+  const handleQuickAddNewMatch = async (playerId) => {
+    setTogglingMatchId("new");
+    try {
+      const created = await api.post("/admin/attendance/matches", {});
+      await api.put(`/admin/attendance/matches/${created.data.match.id}`, { attendee_ids: [playerId] });
+      await Promise.all([fetchMatches(), fetchAttendance()]);
+      toast.success(`Added to ${created.data.match.label}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to add match");
+    } finally {
+      setTogglingMatchId(null);
     }
   };
 
@@ -276,42 +312,94 @@ export default function Attendance() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Attendance Count</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">% Attended</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Knockout Eligible</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap"></th>
                 </tr>
               </thead>
               <tbody>
                 {ranked.map((r, i) => {
                   const withinCutoff = i < settings.knockout_cutoff;
+                  const isExpanded = expandedPlayerId === r.id;
                   return (
-                    <tr key={r.id} className={`border-b last:border-0 ${withinCutoff ? "bg-green-50/60" : i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
-                      <td className="px-4 py-3 text-gray-400 font-mono">{i + 1}</td>
-                      <td className="px-4 py-3">
-                        <span className="bg-cricket-navy text-white text-xs font-bold px-2.5 py-1 rounded">
-                          {r.team_code}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
-                      <td className="px-4 py-3">
-                        {r.role === "captain" ? (
-                          <span className="flex items-center gap-1 text-xs font-medium text-cricket-navy bg-blue-50 rounded-full px-2.5 py-1 w-fit">
-                            <Shield size={11} /> Captain
+                    <Fragment key={r.id}>
+                      <tr className={`border-b last:border-0 ${withinCutoff ? "bg-green-50/60" : i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
+                        <td className="px-4 py-3 text-gray-400 font-mono">{i + 1}</td>
+                        <td className="px-4 py-3">
+                          <span className="bg-cricket-navy text-white text-xs font-bold px-2.5 py-1 rounded">
+                            {r.team_code}
                           </span>
-                        ) : (
-                          <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1 w-fit">
-                            {r.role === "admin" ? "Admin" : "Player"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{r.attendance_count}</td>
-                      <td className="px-4 py-3 font-medium text-gray-700">{r.percentage}%</td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 cursor-pointer"
-                          checked={r.knockout_eligible}
-                          onChange={() => toggleEligible(r.id)}
-                        />
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
+                        <td className="px-4 py-3">
+                          {r.role === "captain" ? (
+                            <span className="flex items-center gap-1 text-xs font-medium text-cricket-navy bg-blue-50 rounded-full px-2.5 py-1 w-fit">
+                              <Shield size={11} /> Captain
+                            </span>
+                          ) : (
+                            <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1 w-fit">
+                              {r.role === "admin" ? "Admin" : "Player"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{r.attendance_count}</td>
+                        <td className="px-4 py-3 font-medium text-gray-700">{r.percentage}%</td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer"
+                            checked={r.knockout_eligible}
+                            onChange={() => toggleEligible(r.id)}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setExpandedPlayerId(isExpanded ? null : r.id)}
+                            className="flex items-center gap-1 text-xs py-1 px-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+                            title="Add attendance for this player"
+                          >
+                            <CalendarCheck size={13} /> {isExpanded ? "Close" : "Add Attendance"}
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b bg-blue-50/40">
+                          <td colSpan={8} className="px-4 py-3">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                              Matches {r.name} attended
+                            </p>
+                            {matches.length === 0 ? (
+                              <p className="text-sm text-gray-400 mb-2">No matches recorded yet.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-2 mb-2">
+                                {matches.map(m => {
+                                  const attending = m.attendee_ids.includes(r.id);
+                                  return (
+                                    <button
+                                      key={m.id}
+                                      onClick={() => handleTogglePlayerInMatch(m, r.id)}
+                                      disabled={togglingMatchId === m.id}
+                                      className={`text-sm py-1.5 px-3 rounded-lg border ${
+                                        attending
+                                          ? "border-pitch-500 bg-pitch-600 text-white"
+                                          : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                                      } disabled:opacity-50`}
+                                    >
+                                      {attending ? "✓ " : ""}{m.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => handleQuickAddNewMatch(r.id)}
+                              disabled={togglingMatchId === "new"}
+                              className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1"
+                            >
+                              <Plus size={13} /> New Match (marks {r.name} as attended)
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
