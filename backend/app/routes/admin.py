@@ -8,12 +8,13 @@ from datetime import datetime
 import pytz
 
 from .. import mongo
-from ..utils.auth import admin_required
+from ..utils.auth import admin_required, get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot
 )
 from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
+from ..utils.passwords import validate_password, generate_temp_password
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -60,6 +61,34 @@ VOTER_FILTER = {"$or": [{"role": {"$in": ["captain", "player"]}}, {"is_player": 
 # have their own update_captain/remove_captain routes; letting update_player
 # match them too would just create two overlapping edit paths for the same row).
 ADMIN_VOTER_FILTER = {"role": "admin", "is_player": True}
+
+
+def _reset_password(user_id, role):
+    """Shared by the captain/player reset-password routes below. Generates a
+    fresh temp password (never needs the old one), forces a change on next
+    login, revokes any session already in that account's hands (same
+    token_version mechanism as self-service change-password), and logs who
+    did it to whom — the accountability trail requirement #3.4 asked for."""
+    acting_admin = get_current_user()
+    target = mongo.db.users.find_one({"_id": ObjectId(user_id), "role": role})
+    if not target:
+        return jsonify({"error": f"{role.title()} not found"}), 404
+
+    temp_password = generate_temp_password()
+    mongo.db.users.update_one(
+        {"_id": target["_id"]},
+        {"$set": {"password_hash": generate_password_hash(temp_password), "must_change_password": True},
+         "$inc": {"token_version": 1}},
+    )
+    mongo.db.password_resets.insert_one({
+        "admin_id": str(acting_admin["_id"]),
+        "admin_name": acting_admin["name"],
+        "target_user_id": str(target["_id"]),
+        "target_user_name": target["name"],
+        "target_role": role,
+        "reset_at": datetime.utcnow(),
+    })
+    return jsonify({"message": "Password reset", "temp_password": temp_password})
 
 
 def _parse_average(value):
@@ -226,6 +255,7 @@ def add_captain():
 def update_captain(captain_id):
     data = request.get_json(silent=True) or {}
     updates = {}
+    password_changed = False
     if "name" in data:
         updates["name"] = data["name"].strip()
     if "team_name" in data:
@@ -233,8 +263,12 @@ def update_captain(captain_id):
     if "is_active" in data:
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
+        password_error = validate_password(data["password"])
+        if password_error:
+            return jsonify({"error": password_error}), 400
         updates["password_hash"] = generate_password_hash(data["password"])
         updates["must_change_password"] = True
+        password_changed = True
     if "team_code" in data:
         new_code = data["team_code"].strip().upper()
         if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(captain_id)}}):
@@ -271,7 +305,13 @@ def update_captain(captain_id):
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
 
-    result = mongo.db.users.update_one({"_id": ObjectId(captain_id)}, {"$set": updates})
+    mongo_update = {"$set": updates}
+    if password_changed:
+        # Same session-revocation mechanism as self-service change-password —
+        # an admin-set password must kick out whatever session this captain
+        # was already using just as thoroughly as changing it themselves would.
+        mongo_update["$inc"] = {"token_version": 1}
+    result = mongo.db.users.update_one({"_id": ObjectId(captain_id)}, mongo_update)
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
 
@@ -304,6 +344,12 @@ def reset_captain_device(captain_id):
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
     return jsonify({"message": "Device reset — next login will register a new device"})
+
+
+@admin_bp.route("/captains/<captain_id>/reset-password", methods=["POST"])
+@admin_required
+def reset_captain_password(captain_id):
+    return _reset_password(captain_id, "captain")
 
 
 # ── Players management ──────────────────────────────────────────────────────────
@@ -539,13 +585,18 @@ def add_player():
 def update_player(player_id):
     data = request.get_json(silent=True) or {}
     updates = {}
+    password_changed = False
     if "name" in data:
         updates["name"] = data["name"].strip()
     if "is_active" in data:
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
+        password_error = validate_password(data["password"])
+        if password_error:
+            return jsonify({"error": password_error}), 400
         updates["password_hash"] = generate_password_hash(data["password"])
         updates["must_change_password"] = True
+        password_changed = True
     if "team_code" in data:
         new_code = data["team_code"].strip().upper()
         if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(player_id)}}):
@@ -578,9 +629,12 @@ def update_player(player_id):
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
 
+    mongo_update = {"$set": updates}
+    if password_changed:
+        mongo_update["$inc"] = {"token_version": 1}
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "$or": [{"role": "player"}, ADMIN_VOTER_FILTER]},
-        {"$set": updates},
+        mongo_update,
     )
     if result.matched_count == 0:
         return jsonify({"error": "Player not found"}), 404
@@ -611,6 +665,12 @@ def reset_player_device(player_id):
     if result.matched_count == 0:
         return jsonify({"error": "Player not found"}), 404
     return jsonify({"message": "Device reset — next login will register a new device"})
+
+
+@admin_bp.route("/players/<player_id>/reset-password", methods=["POST"])
+@admin_required
+def reset_player_password(player_id):
+    return _reset_password(player_id, "player")
 
 
 # ── Ad-hoc match slots ───────────────────────────────────────────────────────────

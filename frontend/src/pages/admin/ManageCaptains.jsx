@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import captainsPhoto from "../../assets/dashboard-backgrounds/captains.jpg";
-import { UserPlus, Edit2, Check, X, Smartphone, SmartphoneNfc } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Smartphone, SmartphoneNfc, KeyRound } from "lucide-react";
 
 const STATUS_OPTIONS = [
   { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-gray-600" },
@@ -34,6 +34,7 @@ export default function ManageCaptains() {
   const [editRow, setEditRow]     = useState({ name: "", team_code: "", team_name: "", password: "", matches_scheduled: 0, matches_played: 0, batting_average: "", bowling_average: "" });
   const [submitting, setSubmitting] = useState(false);
   const [resettingDevice, setResettingDevice] = useState(null);
+  const [resettingPassword, setResettingPassword] = useState(null);
 
   const fetchCaptains = async () => {
     try {
@@ -124,6 +125,25 @@ export default function ManageCaptains() {
       toast.error(err.response?.data?.error || "Failed to reset device");
     } finally {
       setResettingDevice(null);
+    }
+  };
+
+  // For a forgotten password (no self-service recovery — captain calls admin
+  // directly). A random temp password is generated server-side (never needs
+  // the old one), the captain is forced to change it on next login, and the
+  // reset is logged for accountability — see backend/app/routes/admin.py's
+  // _reset_password.
+  const handleResetPassword = async (c) => {
+    if (!confirm(`Reset ${c.name}'s password? A new temporary password will be generated — relay it to them directly (e.g. by phone).`)) return;
+    setResettingPassword(c.id);
+    try {
+      const res = await api.post(`/admin/captains/${c.id}/reset-password`);
+      toast.success(`${c.name}'s temporary password: ${res.data.temp_password}`, { duration: 15000 });
+      setCaptains(prev => prev.map(x => x.id === c.id ? { ...x, must_change_password: true } : x));
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to reset password");
+    } finally {
+      setResettingPassword(null);
     }
   };
 
@@ -359,6 +379,14 @@ export default function ManageCaptains() {
                       {/* Actions */}
                       <td className="px-4 py-3">
                         <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => handleResetPassword(c)}
+                            disabled={resettingPassword === c.id}
+                            className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                            title="Reset password (forgotten password — generates a new temporary one)"
+                          >
+                            <KeyRound size={14} />
+                          </button>
                           {isEditing ? (
                             <>
                               <button

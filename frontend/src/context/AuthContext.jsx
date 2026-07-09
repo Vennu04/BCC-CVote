@@ -55,8 +55,19 @@ export function AuthProvider({ children }) {
     return res.data;
   }, []);
 
+  // Changing your own password bumps token_version server-side, which
+  // invalidates every token issued before that moment — including the one
+  // that just authenticated the change-password request itself. The backend
+  // returns a fresh token in that response; this swaps it in so the current
+  // tab stays logged in seamlessly instead of getting logged out by its own
+  // password change (other tabs/devices holding the old token do get logged
+  // out, which is the point).
+  const updateToken = useCallback((token) => {
+    sessionStorage.setItem("bcc_token", token);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, refreshMe, loading, isAdmin: user?.role === "admin", isVoter: isVoter(user) }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshMe, updateToken, loading, isAdmin: user?.role === "admin", isVoter: isVoter(user) }}>
       {children}
     </AuthContext.Provider>
   );

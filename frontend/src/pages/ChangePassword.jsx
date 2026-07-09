@@ -8,7 +8,7 @@ import api from "../utils/api";
 import { KeyRound } from "lucide-react";
 
 export default function ChangePassword() {
-  const { user, refreshMe } = useAuth();
+  const { user, refreshMe, updateToken } = useAuth();
   const navigate = useNavigate();
   const forced = !!user?.must_change_password;
 
@@ -25,10 +25,14 @@ export default function ChangePassword() {
     }
     setSubmitting(true);
     try {
-      await api.post("/auth/change-password", {
+      const res = await api.post("/auth/change-password", {
         current_password: form.current_password,
         new_password: form.new_password,
       });
+      // Changing the password bumps token_version server-side, which would
+      // otherwise log this very tab out too — swap in the fresh token the
+      // response carries before the next authenticated call (refreshMe).
+      updateToken(res.data.access_token);
       toast.success("Password updated");
       const updated = await refreshMe();
       navigate(homePathFor(updated), { replace: true });
@@ -72,15 +76,16 @@ export default function ChangePassword() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
               <input
-                type="password" className="input-field" required minLength={4}
+                type="password" className="input-field" required minLength={6}
                 value={form.new_password}
                 onChange={(e) => setForm({ ...form, new_password: e.target.value })}
               />
+              <p className="text-xs text-gray-400 mt-1">At least 6 characters, and not all numbers.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
               <input
-                type="password" className="input-field" required minLength={4}
+                type="password" className="input-field" required minLength={6}
                 value={form.confirm_password}
                 onChange={(e) => setForm({ ...form, confirm_password: e.target.value })}
               />

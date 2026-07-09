@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import playersPhoto from "../../assets/dashboard-backgrounds/players.jpg";
-import { UserPlus, Edit2, Check, X, Shield, Smartphone, SmartphoneNfc } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Shield, Smartphone, SmartphoneNfc, KeyRound } from "lucide-react";
 
 const AUCTION_CATEGORY_OPTIONS = [
   { value: "",                       label: "Not set" },
@@ -23,6 +23,7 @@ export default function ManagePlayers() {
   const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", batting_average: "", bowling_average: "" });
   const [submitting, setSubmitting] = useState(false);
   const [resettingDevice, setResettingDevice] = useState(null);
+  const [resettingPassword, setResettingPassword] = useState(null);
 
   const fetchPlayers = async () => {
     try {
@@ -97,6 +98,24 @@ export default function ManagePlayers() {
       toast.error(err.response?.data?.error || "Failed to reset device");
     } finally {
       setResettingDevice(null);
+    }
+  };
+
+  // For a forgotten password (no self-service recovery — player calls admin
+  // directly). A random temp password is generated server-side (never needs
+  // the old one), the player is forced to change it on next login, and the
+  // reset is logged for accountability.
+  const handleResetPassword = async (p) => {
+    if (!confirm(`Reset ${p.name}'s password? A new temporary password will be generated — relay it to them directly (e.g. by phone).`)) return;
+    setResettingPassword(p.id);
+    try {
+      const res = await api.post(`/admin/players/${p.id}/reset-password`);
+      toast.success(`${p.name}'s temporary password: ${res.data.temp_password}`, { duration: 15000 });
+      setPlayers(prev => prev.map(x => x.id === p.id ? { ...x, must_change_password: true } : x));
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to reset password");
+    } finally {
+      setResettingPassword(null);
     }
   };
 
@@ -297,6 +316,14 @@ export default function ManagePlayers() {
                           </span>
                         ) : (
                           <div className="flex gap-2 items-center">
+                            <button
+                              onClick={() => handleResetPassword(p)}
+                              disabled={resettingPassword === p.id}
+                              className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                              title="Reset password (forgotten password — generates a new temporary one)"
+                            >
+                              <KeyRound size={14} />
+                            </button>
                             {isEditing ? (
                               <>
                                 <button

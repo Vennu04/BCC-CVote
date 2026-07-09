@@ -43,8 +43,19 @@ def test_change_password_success_clears_forced_flag_and_allows_new_login(client,
     )
     assert res.status_code == 200
 
-    me = client.get("/api/auth/me", headers=auth_header(user))
+    # Changing the password bumps token_version — the request's own (now-stale)
+    # token no longer passes _token_version_matches, same as any other session
+    # that was already open elsewhere. The response carries a fresh token for
+    # exactly this reason (see auth.py's change_password); use that one, the
+    # same way the frontend's AuthContext.updateToken does.
+    new_token = res.get_json()["access_token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {new_token}"})
     assert me.get_json()["must_change_password"] is False
+
+    # And the *old* token (what auth_header(user) still produces here, since
+    # it has no way to know the DB's token_version moved) must now be rejected.
+    stale = client.get("/api/auth/me", headers=auth_header(user))
+    assert stale.status_code == 404
 
     relogin = client.post("/api/auth/login", json={"team_code": "CAP1", "password": "newpw123"})
     assert relogin.status_code == 200

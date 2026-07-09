@@ -93,6 +93,7 @@ def seed():
     db.votes.create_index([("captain_id", 1), ("slot_id", 1), ("window_id", 1)])
     db.voting_windows.create_index([("slot_id", 1), ("is_active", 1)])
     db.weather_cache.create_index([("slot_id", 1), ("target_date", 1)], unique=True)
+    db.password_resets.create_index([("target_user_id", 1), ("reset_at", -1)])
     print("  ✅ Indexes ensured")
     print("🏏 Seed complete!")
 

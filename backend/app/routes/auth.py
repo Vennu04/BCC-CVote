@@ -3,6 +3,7 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from werkzeug.security import check_password_hash, generate_password_hash
 from .. import mongo
 from ..utils.auth import get_current_user
+from ..utils.passwords import validate_password
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -55,7 +56,10 @@ def login():
         if not bound_device:
             mongo.db.users.update_one({"_id": user["_id"]}, {"$set": {"device_id": device_id}})
 
-    token = create_access_token(identity=str(user["_id"]))
+    token = create_access_token(
+        identity=str(user["_id"]),
+        additional_claims={"token_version": user.get("token_version", 0)},
+    )
     return jsonify({
         "access_token": token,
         "user": _user_summary(user),
@@ -75,16 +79,27 @@ def change_password():
 
     if not check_password_hash(user["password_hash"], current_password):
         return jsonify({"error": "Current password is incorrect"}), 401
-    if len(new_password) < 4:
-        return jsonify({"error": "New password must be at least 4 characters"}), 400
+    password_error = validate_password(new_password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
     if check_password_hash(user["password_hash"], new_password):
         return jsonify({"error": "New password must be different from your current password"}), 400
 
+    new_version = user.get("token_version", 0) + 1
     mongo.db.users.update_one(
         {"_id": user["_id"]},
-        {"$set": {"password_hash": generate_password_hash(new_password), "must_change_password": False}},
+        {"$set": {"password_hash": generate_password_hash(new_password), "must_change_password": False},
+         "$inc": {"token_version": 1}},
     )
-    return jsonify({"message": "Password updated"})
+    # Bumping token_version invalidates every token issued before this moment —
+    # including the one that authenticated *this* request. Issue a fresh one
+    # so the user who just proved they know the new password stays logged in
+    # seamlessly; only other lingering sessions/devices get logged out.
+    new_token = create_access_token(
+        identity=str(user["_id"]),
+        additional_claims={"token_version": new_version},
+    )
+    return jsonify({"message": "Password updated", "access_token": new_token})
 
 
 @auth_bp.route("/me", methods=["GET"])
