@@ -67,6 +67,50 @@ def get_upcoming_weekend_dates() -> dict:
     return {"saturday": dates["saturday"].isoformat(), "sunday": dates["sunday"].isoformat()}
 
 
+# Fallback kickoff hour (IST) when a slot's match_time isn't a parseable clock
+# time -- true for every ad-hoc slot, whose match_time is admin's free-text
+# description (see admin.py's create_slot), not an actual time.
+_TIME_OF_DAY_DEFAULT_HOUR = {"Morning": 7, "Evening": 15}
+
+
+def match_datetime_for_slot(slot: dict):
+    """
+    Best-effort calendar date + kickoff time for a slot, as a naive UTC
+    datetime -- used to key weather forecasts to the right day/time. Returns
+    None if no date can be determined at all.
+
+    Recurring Saturday/Sunday slots carry no explicit match_date (they're a
+    standing weekly label, not tied to one calendar date) -- their date is
+    whichever upcoming Sat/Sun the slot's `day` names, via
+    get_match_weekend_dates(). Ad-hoc slots always carry an explicit
+    match_date instead, which takes priority when present.
+    """
+    if slot.get("match_date"):
+        try:
+            match_date = datetime.strptime(slot["match_date"], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+    else:
+        dates = get_match_weekend_dates()
+        match_date = dates.get(slot.get("day", "").lower())
+        if not match_date:
+            return None
+
+    hour, minute = _TIME_OF_DAY_DEFAULT_HOUR.get(slot.get("time_of_day"), 9), 0
+    raw_time = slot.get("match_time")
+    if raw_time:
+        for fmt in ("%I:%M %p", "%H:%M"):
+            try:
+                parsed = datetime.strptime(raw_time.strip(), fmt)
+                hour, minute = parsed.hour, parsed.minute
+                break
+            except (ValueError, AttributeError):
+                continue
+
+    naive_ist = datetime.combine(match_date, datetime.min.time()).replace(hour=hour, minute=minute)
+    return IST.localize(naive_ist).astimezone(pytz.utc).replace(tzinfo=None)
+
+
 # (day, time_of_day) -> which weekend date the window falls on, and the IST open/close time
 _WINDOW_RULES = {
     ("Saturday", "Morning"): {"date_key": "friday",   "open": (6, 0),  "close": (18, 30)},

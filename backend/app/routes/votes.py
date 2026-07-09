@@ -11,6 +11,7 @@ from ..utils.time_utils import (
     format_ist, now_ist, suggested_window_for_slot,
     can_revoke_vote, revoke_deadline_for_window
 )
+from ..services.weather import get_forecast_for_slot
 
 votes_bp = Blueprint("votes", __name__)
 
@@ -99,8 +100,10 @@ def my_votes():
                 "slot_id": sid,
                 "window_id": str(window["_id"]),
             })
+        serialized_slot = _serialize_slot(slot)
+        serialized_slot["weather"] = get_forecast_for_slot(slot)
         result.append({
-            "slot": _serialize_slot(slot),
+            "slot": serialized_slot,
             "availability": vote["availability"] if vote else None,
             "voted_at": format_ist(vote["voted_at"]) if vote else None,
             "window": _window_info(window, slot),
