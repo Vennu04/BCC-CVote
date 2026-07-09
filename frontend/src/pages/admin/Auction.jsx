@@ -136,6 +136,17 @@ export default function AdminAuction() {
     }
   };
 
+  const handleCancelPending = async () => {
+    if (!confirm("Cancel this auction? It hasn't started — the two captains won't see \"Join Auction\" for it anymore.")) return;
+    try {
+      await api.post(`/admin/auction/${auctionId}/close`);
+      toast.success("Auction cancelled");
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to cancel auction");
+    }
+  };
+
   const handleCopyTeams = async () => {
     try {
       await navigator.clipboard.writeText(buildWhatsAppSummary(auction));
@@ -233,9 +244,14 @@ export default function AdminAuction() {
             {auction.status === "pending" && (
               <div className="card text-center py-6">
                 <p className="text-gray-600 mb-3">Auction created — not started yet.</p>
-                <button onClick={handleStart} disabled={starting} className="btn-primary flex items-center gap-2 text-sm py-2 px-4 mx-auto">
-                  <PlayCircle size={16} /> {starting ? "Starting…" : "Start Auction (25 min clock)"}
-                </button>
+                <div className="flex items-center justify-center gap-3">
+                  <button onClick={handleStart} disabled={starting} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
+                    <PlayCircle size={16} /> {starting ? "Starting…" : "Start Auction (25 min clock)"}
+                  </button>
+                  <button onClick={handleCancelPending} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800">
+                    <StopCircle size={13} /> Cancel
+                  </button>
+                </div>
               </div>
             )}
 
