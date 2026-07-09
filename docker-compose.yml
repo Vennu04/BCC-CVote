@@ -18,6 +18,7 @@ services:
       JWT_SECRET_KEY: dev-jwt-secret-local
       SECRET_KEY: dev-secret-local
       FRONTEND_URL: "http://localhost:5173"
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
     ports:
       - "5000:5000"
     volumes:

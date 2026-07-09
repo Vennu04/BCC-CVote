@@ -1,4 +1,5 @@
 import VoteButton from "./VoteButton";
+import WeatherForecast from "./WeatherForecast";
 import { useCountdown } from "../hooks/useCountdown";
 import { Sun, Sunset, Clock, Lock, AlertTriangle } from "lucide-react";
 
@@ -72,6 +73,9 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           <WindowStatus windowInfo={windowInfo} />
         </div>
       )}
+
+      {/* Forecast for the fixed venue, at this slot's date/time */}
+      <WeatherForecast weather={slot.weather} />
 
       {/* Vote buttons */}
       <div className="flex gap-2 flex-wrap">
