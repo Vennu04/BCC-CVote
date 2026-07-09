@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
@@ -64,6 +65,27 @@ export default function AdminAuction() {
     if (!selectedSlotId) return 0;
     return voteMatrix.filter((row) => row.votes.some((v) => v.slot_id === selectedSlotId && v.availability === "available")).length;
   }, [voteMatrix, selectedSlotId]);
+
+  // Live preview of what create_auction will actually see — per-category
+  // quotas are derived fresh from this count every time (see _group_quota in
+  // auction.py), so an odd category here means creation will be rejected.
+  // Recomputes as captains are picked, since they're excluded from the pool
+  // the same way the backend excludes them.
+  const categoryBreakdown = useMemo(() => {
+    if (!selectedSlotId) return null;
+    const excludedIds = new Set([captainAId, captainBId].filter(Boolean));
+    const counts = { extra_power_allrounder: 0, extra_power_batsman: 0, power: 0, classic: 0 };
+    let missingCategory = 0;
+    voteMatrix.forEach((row) => {
+      if (excludedIds.has(row.captain.id)) return;
+      const voted = row.votes.some((v) => v.slot_id === selectedSlotId && v.availability === "available");
+      if (!voted) return;
+      const cat = row.captain.auction_category;
+      if (cat && cat in counts) counts[cat] += 1;
+      else missingCategory += 1;
+    });
+    return { counts, missingCategory };
+  }, [voteMatrix, selectedSlotId, captainAId, captainBId]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -190,6 +212,38 @@ export default function AdminAuction() {
                   auctioned. Captain A/B below can be any captain (they run the draft; they don't need to
                   have voted themselves).
                 </p>
+              )}
+
+              {/* Live per-category preview — this is exactly what create_auction will
+                  see once captains are picked; an odd count here means creation will
+                  be rejected until a player's category is changed via Manage Players. */}
+              {categoryBreakdown && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-gray-700 mb-1.5">
+                    Category breakdown {(captainAId || captainBId) && "(captains excluded)"}
+                  </p>
+                  <ul className="space-y-0.5">
+                    {Object.entries(GROUP_LABELS).map(([group, label]) => {
+                      const count = categoryBreakdown.counts[group];
+                      const odd = count % 2 !== 0;
+                      return (
+                        <li
+                          key={group}
+                          className={`text-xs flex items-center justify-between ${odd ? "text-red-600 font-semibold" : "text-gray-600"}`}
+                        >
+                          <span>{label}</span>
+                          <span>{count}{odd && " ⚠️ odd — won't split evenly"}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {categoryBreakdown.missingCategory > 0 && (
+                    <p className="text-xs text-red-600 mt-1.5">
+                      ⚠️ {categoryBreakdown.missingCategory} player(s) have no category set — creation will fail until fixed.{" "}
+                      <Link to="/admin/players" className="underline">Manage Players</Link>
+                    </p>
+                  )}
+                </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
