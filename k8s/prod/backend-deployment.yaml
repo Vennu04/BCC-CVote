@@ -58,6 +58,11 @@ spec:
                 secretKeyRef:
                   name: bcc-cvote-secret
                   key: SECRET_KEY
+            - name: OPENWEATHER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bcc-cvote-secret
+                  key: OPENWEATHER_API_KEY
           resources:
             requests:
               cpu: 100m
