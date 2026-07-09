@@ -13,6 +13,7 @@ from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot
 )
 from ..utils.export import build_csv_report
+from ..services.weather import get_forecast_for_slot
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -680,8 +681,10 @@ def get_window():
         sid = str(slot["_id"])
         window = _get_active_window(sid)
         suggested = suggested_window_for_slot(slot)
+        slot_dict = _slot_to_dict(slot)
+        slot_dict["weather"] = get_forecast_for_slot(slot)
         windows.append({
-            "slot": _slot_to_dict(slot),
+            "slot": slot_dict,
             "window": _window_info(window) if window else None,
             "suggested": {
                 "opens_at": suggested["opens_at_display"],

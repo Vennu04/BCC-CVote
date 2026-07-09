@@ -3,6 +3,7 @@ import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import WeatherForecast from "../../components/WeatherForecast";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.jpg";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
 
@@ -193,6 +194,8 @@ export default function VotingWindow() {
                       Suggested: <strong>{suggested.opens_at}</strong> → <strong>{suggested.closes_at}</strong>
                     </p>
                   )}
+
+                  <WeatherForecast weather={slot.weather} />
 
                   <form onSubmit={(e) => handleSave(slot.id, e)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
