@@ -103,6 +103,14 @@ export default function AdminDashboard() {
               }`}>
                 {slot.window?.is_open ? "OPEN" : "CLOSED"}
               </span>
+              {/* Compact weather glance — full forecast card lives on the
+                  voting page and Voting Windows page; this dashboard's cards
+                  are too small for the 4-line version, so just temp + rain%. */}
+              {slot.weather?.status === "ok" && (
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {Math.round(slot.weather.temp_c)}°C 🌧️{slot.weather.rain_chance_pct}%
+                </p>
+              )}
               <p className="text-3xl font-bold text-pitch-600 mt-1">{slot.available}</p>
               <p className="text-xs text-gray-400">Available</p>
               <div className="flex justify-center gap-2 mt-2 text-xs text-gray-500">

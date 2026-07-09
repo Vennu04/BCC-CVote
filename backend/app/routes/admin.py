@@ -164,6 +164,7 @@ def dashboard():
             "maybe": sum(1 for v in slot_votes if v["availability"] == "maybe"),
             "no_response": len(voters) - len(slot_votes),
             "window": window_info,
+            "weather": get_forecast_for_slot(slot),
         })
 
     return jsonify({
