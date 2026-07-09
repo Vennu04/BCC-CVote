@@ -18,18 +18,13 @@ const GROUP_LABELS = {
 
 // Plain-text summary for pasting into WhatsApp once an auction is done —
 // prices are deliberately left out (they're confidential post-completion,
-// same as the on-screen rosters), just team/captain/player names.
+// same as the on-screen rosters), just team/captain/player names. Category
+// (Power/Classic/etc.) is internal auction bookkeeping, not shown here.
 function buildWhatsAppSummary(auction) {
   const teamBlock = (label, captain) => {
     const heading = captain.team_name ? `${label} — ${captain.team_name}` : label;
     const lines = [`*${heading}*`, `Captain: ${captain.name}`, ""];
-    for (const group of Object.keys(GROUP_LABELS)) {
-      const players = (captain.roster || []).filter((p) => p.category === group);
-      if (players.length === 0) continue;
-      lines.push(`${GROUP_LABELS[group]}:`);
-      players.forEach((p, i) => lines.push(`${i + 1}. ${p.name}`));
-      lines.push("");
-    }
+    (captain.roster || []).forEach((p, i) => lines.push(`${i + 1}. ${p.name}`));
     return lines.join("\n").trim();
   };
 
