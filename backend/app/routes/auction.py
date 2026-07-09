@@ -18,6 +18,13 @@ STARTING_PRICE = 8.5
 TARGET_ROSTER_SIZE = 11
 SESSION_MINUTES = 25
 
+# Release order within a category is driven by batting/bowling average, not admin
+# choice (admin can only pick WHICH CATEGORY to release from next, never which
+# player within it — see release_player). Flip this to "asc" to release weakest
+# average first instead — the actual rule is still undecided, this is a swappable
+# placeholder until real averages are backfilled and a direction is chosen.
+RELEASE_ORDER_DIRECTION = "desc"
+
 
 def _get_active_window(slot_id):
     return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
@@ -99,6 +106,54 @@ def _check_leftover_award(auction, group):
         if auction.get("current_player_id") in remaining_ids:
             mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
         return  # only one side can hit quota first — nothing left to check for this group
+
+
+def _release_rank_score(player, users_map):
+    """The stat that decides release order for this player's category. Extra
+    Power groups already say which skill they're for; Power/Classic aren't
+    skill-specific so batting average is used as the default ranking stat —
+    swap this if a different stat should drive those two instead."""
+    user = users_map.get(player["user_id"], {})
+    bat = user.get("batting_average")
+    bowl = user.get("bowling_average")
+    if player["category"] == "extra_power_batsman":
+        return bat
+    if player["category"] == "extra_power_allrounder":
+        vals = [v for v in (bat, bowl) if v is not None]
+        return (sum(vals) / len(vals)) if vals else None
+    return bat  # power, classic
+
+
+def _next_release_candidate(auction, category, users_map):
+    """Automatically picks who goes up for bidding next in this category —
+    admin only ever chooses the category, never the specific player, so there's
+    no room for admin to favor either captain by release order. Ranked by
+    _release_rank_score (RELEASE_ORDER_DIRECTION); players without an average
+    yet sort after everyone who has one, by name. Players deprioritized by a
+    mutual double-drop (see drop_player) are held back to the very end of the
+    category, after every other player has already been offered."""
+    candidates = list(mongo.db.auction_players.find({
+        "auction_id": str(auction["_id"]), "category": category, "status": "available",
+    }))
+    if not candidates:
+        return None
+
+    def ordered(group):
+        scored = [(p, _release_rank_score(p, users_map)) for p in group]
+        with_score = sorted(
+            (x for x in scored if x[1] is not None),
+            key=lambda x: x[1], reverse=(RELEASE_ORDER_DIRECTION == "desc"),
+        )
+        without_score = sorted(
+            (x for x in scored if x[1] is None),
+            key=lambda x: users_map.get(x[0]["user_id"], {}).get("name", ""),
+        )
+        return [p for p, _ in (*with_score, *without_score)]
+
+    normal = ordered([p for p in candidates if not p.get("deprioritized")])
+    held_back = ordered([p for p in candidates if p.get("deprioritized")])
+    queue = normal + held_back
+    return queue[0] if queue else None
 
 
 def _apply_timeout_fallback(auction):
@@ -216,6 +271,7 @@ def create_auction():
             "sold_to": None,
             "sold_price": None,
             "assigned_via": None,
+            "deprioritized": False,
         })
 
     return jsonify({
@@ -246,22 +302,32 @@ def start_auction(auction_id):
 @auction_bp.route("/admin/auction/<auction_id>/release", methods=["POST"])
 @admin_required
 def release_player(auction_id):
+    """Admin picks a CATEGORY only — never a specific player. Which player
+    within it comes up next is decided automatically by _next_release_candidate,
+    so there's no room for admin to release players in an order that favors
+    either captain."""
     auction = _auction_or_404(auction_id)
     if not auction:
         return jsonify({"error": "Auction not found"}), 404
     if auction["status"] != "active":
         return jsonify({"error": "Auction is not active"}), 400
+    if auction.get("current_player_id"):
+        return jsonify({"error": "A player is already up for bidding"}), 400
 
     data = request.get_json(silent=True) or {}
-    player_id = data.get("player_id")
-    player = _player_doc(auction_id, player_id) if player_id else None
-    if not player:
-        return jsonify({"error": "Player not found in this auction"}), 404
-    if player["status"] != "available":
-        return jsonify({"error": "This player has already been sold or assigned"}), 400
+    category = data.get("category")
+    if category not in AUCTION_GROUPS:
+        return jsonify({"error": f"category must be one of {AUCTION_GROUPS}"}), 400
 
-    mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": player_id}})
-    return jsonify({"message": "Player released for bidding"})
+    user_ids = {p["user_id"] for p in mongo.db.auction_players.find({"auction_id": str(auction["_id"])})}
+    users_map = {str(u["_id"]): u for u in mongo.db.users.find({"_id": {"$in": [ObjectId(i) for i in user_ids]}})}
+
+    player = _next_release_candidate(auction, category, users_map)
+    if not player:
+        return jsonify({"error": "No players remaining in this category"}), 400
+
+    mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": str(player["_id"])}})
+    return jsonify({"message": "Player released for bidding", "player_id": str(player["_id"])})
 
 
 @auction_bp.route("/admin/auction/<auction_id>/close", methods=["POST"])
@@ -328,6 +394,12 @@ def get_auction(auction_id):
     def captain_name(captain_id):
         return users_map.get(captain_id, {}).get("name", "Unknown")
 
+    # Once the auction is over, what each captain paid for whom becomes
+    # confidential — only the final rosters (names) stay visible. Prices/
+    # points are removed from the response entirely, not just hidden in the
+    # UI, so they can't be recovered via devtools either.
+    reveal_prices = auction["status"] != "completed"
+
     def captain_summary(captain_id):
         roster = [p for p in players if p.get("sold_to") == captain_id]
         points_remaining = _captain_points_remaining(auction, captain_id)
@@ -337,12 +409,14 @@ def get_auction(auction_id):
         return {
             "captain_id": captain_id,
             "name": captain_name(captain_id),
-            "points_remaining": points_remaining,
-            "is_drained": points_remaining <= 0,
+            "points_remaining": points_remaining if reveal_prices else None,
+            "is_drained": (points_remaining <= 0) if reveal_prices else None,
             "roster_count": len(roster),
             "roster": [{
                 "user_id": p["user_id"], "name": users_map.get(p["user_id"], {}).get("name", "?"),
-                "category": p["category"], "price": p.get("sold_price"), "assigned_via": p.get("assigned_via"),
+                "category": p["category"],
+                "price": p.get("sold_price") if reveal_prices else None,
+                "assigned_via": p.get("assigned_via") if reveal_prices else None,
             } for p in roster],
             "group_counts": by_group,
         }
@@ -365,15 +439,20 @@ def get_auction(auction_id):
                 "current_high_bidder": captain_name(last_bid["captain_id"]) if last_bid else None,
             }
 
-    bids = list(mongo.db.auction_bids.find({"auction_id": auction_id}).sort("created_at", -1).limit(50))
-    bids.reverse()
-    bid_feed = [{
-        "captain_name": captain_name(b["captain_id"]),
-        "action": b["action"],
-        "amount": b.get("amount"),
-        "player_name": users_map.get(players_by_id.get(b["player_id"], {}).get("user_id", ""), {}).get("name", "?"),
-        "created_at": format_ist(b["created_at"]),
-    } for b in bids]
+    # The bid history is just as confidential as the final prices once the
+    # auction's over — it's the same information (who paid what), just in log
+    # form instead of a roster line, so it's withheld the same way.
+    bid_feed = []
+    if reveal_prices:
+        bids = list(mongo.db.auction_bids.find({"auction_id": auction_id}).sort("created_at", -1).limit(50))
+        bids.reverse()
+        bid_feed = [{
+            "captain_name": captain_name(b["captain_id"]),
+            "action": b["action"],
+            "amount": b.get("amount"),
+            "player_name": users_map.get(players_by_id.get(b["player_id"], {}).get("user_id", ""), {}).get("name", "?"),
+            "created_at": format_ist(b["created_at"]),
+        } for b in bids]
 
     available_players = [{
         "id": str(p["_id"]), "user_id": p["user_id"],
@@ -386,6 +465,7 @@ def get_auction(auction_id):
         "ends_at": format_ist(auction["ends_at"]) if auction.get("ends_at") else None,
         "points_budget": auction["points_budget"],
         "starting_price": auction["starting_price"],
+        "session_minutes": SESSION_MINUTES,
         "group_quotas": group_quotas,
         "current_player": current_player,
         "available_players": available_players,
@@ -515,9 +595,12 @@ def drop_player(auction_id):
         "auction_id": auction_id, "player_id": player_id, "captain_id": other_captain, "action": "drop",
     })
     if not last_bid and already_dropped:
-        # Both captains passed with no bids at all — leave it "available" for admin to re-release later.
+        # Both captains passed at the base price with no bids at all — stays
+        # "available", but deprioritized: _next_release_candidate holds these
+        # back until every other player in the category has already gone.
+        mongo.db.auction_players.update_one({"_id": ObjectId(player_id)}, {"$set": {"deprioritized": True}})
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
-        return jsonify({"message": "Both captains passed — player returned to the pool"})
+        return jsonify({"message": "Both captains passed — this player becomes the last option in their category"})
 
     return jsonify({"message": "Dropped"})
 

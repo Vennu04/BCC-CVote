@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import { UserPlus, Edit2, Check, X } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Smartphone, SmartphoneNfc } from "lucide-react";
 
 const STATUS_OPTIONS = [
   { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-gray-600" },
@@ -29,8 +29,9 @@ export default function ManageCaptains() {
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState(null);
   const [form, setForm]           = useState({ name: "", team_code: "", password: "" });
-  const [editRow, setEditRow]     = useState({ name: "", team_code: "", team_name: "", password: "", matches_scheduled: 0, matches_played: 0 });
+  const [editRow, setEditRow]     = useState({ name: "", team_code: "", team_name: "", password: "", matches_scheduled: 0, matches_played: 0, batting_average: "", bowling_average: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [resettingDevice, setResettingDevice] = useState(null);
 
   const fetchCaptains = async () => {
     try {
@@ -105,7 +106,23 @@ export default function ManageCaptains() {
       password: "",
       matches_scheduled: c.matches_scheduled ?? 0,
       matches_played: c.matches_played ?? 0,
+      batting_average: c.batting_average ?? "",
+      bowling_average: c.bowling_average ?? "",
     });
+  };
+
+  const handleResetDevice = async (c) => {
+    if (!confirm(`Reset device lock for ${c.name}? Their next login will register whatever device they use then.`)) return;
+    setResettingDevice(c.id);
+    try {
+      await api.post(`/admin/captains/${c.id}/reset-device`);
+      toast.success(`${c.name}'s device reset`);
+      setCaptains(prev => prev.map(x => x.id === c.id ? { ...x, device_locked: false } : x));
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to reset device");
+    } finally {
+      setResettingDevice(null);
+    }
   };
 
   return (
@@ -173,6 +190,9 @@ export default function ManageCaptains() {
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Matches Played</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bat Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bowl Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Device</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -287,6 +307,52 @@ export default function ManageCaptains() {
                         </select>
                       </td>
 
+                      {/* Batting Average */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.batting_average}
+                            onChange={e => setEditRow({ ...editRow, batting_average: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{c.batting_average ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Bowling Average */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.bowling_average}
+                            onChange={e => setEditRow({ ...editRow, bowling_average: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{c.bowling_average ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Device lock status */}
+                      <td className="px-4 py-3 text-center">
+                        {c.device_locked ? (
+                          <button
+                            onClick={() => handleResetDevice(c)}
+                            disabled={resettingDevice === c.id}
+                            className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 inline-flex"
+                            title="Device registered — click to reset (lost/new phone)"
+                          >
+                            <SmartphoneNfc size={14} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-300 inline-flex" title="No device registered yet">
+                            <Smartphone size={14} />
+                          </span>
+                        )}
+                      </td>
+
                       {/* Actions */}
                       <td className="px-4 py-3">
                         <div className="flex gap-2 items-center">
@@ -312,7 +378,7 @@ export default function ManageCaptains() {
                             <button
                               onClick={() => startEdit(c)}
                               className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                              title="Edit name / team / match counts"
+                              title="Edit name / team / match counts / averages"
                             >
                               <Edit2 size={14} />
                             </button>

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
+import AuctionRulesNote from "../../components/AuctionRulesNote";
 import { useAuction } from "../../hooks/useAuction";
 import { Gavel, PlayCircle, StopCircle, RefreshCw } from "lucide-react";
 
@@ -27,23 +28,6 @@ export default function AdminAuction() {
 
   const [auctionId, setAuctionId] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
   const { auction, loading, refetch } = useAuction(auctionId);
-  const [selectedByGroup, setSelectedByGroup] = useState({});
-
-  // Keep each category's dropdown selection valid as players get sold/released —
-  // default to the first still-available player in that group.
-  useEffect(() => {
-    if (!auction?.available_players) return;
-    setSelectedByGroup((prev) => {
-      const next = { ...prev };
-      for (const group of Object.keys(GROUP_LABELS)) {
-        const players = auction.available_players.filter((p) => p.category === group);
-        if (!players.some((p) => p.id === next[group])) {
-          next[group] = players[0]?.id || "";
-        }
-      }
-      return next;
-    });
-  }, [auction?.available_players]);
 
   useEffect(() => {
     api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => toast.error("Failed to load slots"));
@@ -90,10 +74,13 @@ export default function AdminAuction() {
     }
   };
 
-  const handleRelease = async (playerId) => {
-    setReleasing(playerId);
+  // Admin only ever picks the CATEGORY — the backend decides which specific
+  // player comes up next (by batting/bowling average), so there's no manual
+  // player-name picker here for admin to play favorites with.
+  const handleRelease = async (group) => {
+    setReleasing(group);
     try {
-      await api.post(`/admin/auction/${auctionId}/release`, { player_id: playerId });
+      await api.post(`/admin/auction/${auctionId}/release`, { category: group });
       refetch();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to release player");
@@ -197,6 +184,8 @@ export default function AdminAuction() {
 
         {auctionId && auction && (
           <>
+            <AuctionRulesNote auction={auction} />
+
             {auction.status === "pending" && (
               <div className="card text-center py-6">
                 <p className="text-gray-600 mb-3">Auction created — not started yet.</p>
@@ -220,31 +209,18 @@ export default function AdminAuction() {
                   </p>
                 )}
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
-                  const players = (auction.available_players || []).filter((p) => p.category === group);
-                  if (players.length === 0) return null;
-                  const selectedId = selectedByGroup[group] || "";
+                  const count = (auction.available_players || []).filter((p) => p.category === group).length;
+                  if (count === 0) return null;
                   return (
-                    <div key={group} className="mb-4">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</p>
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="input-field flex-1"
-                          value={selectedId}
-                          onChange={(e) => setSelectedByGroup({ ...selectedByGroup, [group]: e.target.value })}
-                          disabled={!!auction.current_player}
-                        >
-                          {players.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => handleRelease(selectedId)}
-                          disabled={!selectedId || releasing === selectedId || !!auction.current_player}
-                          className="text-sm py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50 whitespace-nowrap"
-                        >
-                          {releasing === selectedId ? "Releasing…" : "Release"}
-                        </button>
-                      </div>
+                    <div key={group} className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label} <span className="text-gray-400 normal-case font-normal">({count} left)</span></p>
+                      <button
+                        onClick={() => handleRelease(group)}
+                        disabled={releasing === group || !!auction.current_player}
+                        className="text-sm py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {releasing === group ? "Releasing…" : "Release Next"}
+                      </button>
                     </div>
                   );
                 })}
@@ -259,33 +235,43 @@ export default function AdminAuction() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[["Team A", auction.captain_a], ["Team B", auction.captain_b]].map(([label, c]) => (
-                <div key={c.captain_id} className="card">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-                      <h3 className="font-bold text-gray-900">{c.name}</h3>
+              {[["Team A", auction.captain_a], ["Team B", auction.captain_b]].map(([label, c]) => {
+                // Confidential once completed — backend strips prices/points from
+                // the response entirely (see auction.py get_auction), so
+                // points_remaining comes back null and only names are left to show.
+                const pricesHidden = c.points_remaining == null;
+                return (
+                  <div key={c.captain_id} className="card">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+                        <h3 className="font-bold text-gray-900">{c.name}</h3>
+                      </div>
+                      {!pricesHidden && (
+                        <span className={`text-sm font-semibold ${c.is_drained ? "text-red-600" : "text-pitch-700"}`}>
+                          {c.points_remaining} pts left{c.is_drained && " (drained)"}
+                        </span>
+                      )}
                     </div>
-                    <span className={`text-sm font-semibold ${c.is_drained ? "text-red-600" : "text-pitch-700"}`}>
-                      {c.points_remaining} pts left{c.is_drained && " (drained)"}
-                    </span>
+                    <p className="text-xs text-gray-500 mb-2">{c.roster_count} players picked</p>
+                    {c.roster?.length > 0 && (
+                      <div className="border-t pt-2 space-y-1">
+                        {c.roster.map((p) => (
+                          <div key={p.user_id} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-800">{p.name}</span>
+                            <span className="text-gray-400">
+                              {GROUP_LABELS[p.category] || p.category}
+                              {!pricesHidden && (
+                                <> — {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}</>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">{c.roster_count} players picked</p>
-                  {c.roster?.length > 0 && (
-                    <div className="border-t pt-2 space-y-1">
-                      {c.roster.map((p) => (
-                        <div key={p.user_id} className="flex items-center justify-between text-xs">
-                          <span className="text-gray-800">{p.name}</span>
-                          <span className="text-gray-400">
-                            {GROUP_LABELS[p.category] || p.category} —{" "}
-                            {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

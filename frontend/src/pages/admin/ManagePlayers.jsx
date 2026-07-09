@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import { UserPlus, Edit2, Check, X, Shield } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Shield, Smartphone, SmartphoneNfc } from "lucide-react";
 
 const AUCTION_CATEGORY_OPTIONS = [
   { value: "",                       label: "Not set" },
@@ -18,8 +18,9 @@ export default function ManagePlayers() {
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState(null);
   const [form, setForm]           = useState({ name: "", team_code: "", password: "" });
-  const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "" });
+  const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", batting_average: "", bowling_average: "" });
   const [submitting, setSubmitting] = useState(false);
+  const [resettingDevice, setResettingDevice] = useState(null);
 
   const fetchPlayers = async () => {
     try {
@@ -77,7 +78,24 @@ export default function ManagePlayers() {
 
   const startEdit = (p) => {
     setEditId(p.id);
-    setEditRow({ name: p.name, team_code: p.team_code, password: "" });
+    setEditRow({
+      name: p.name, team_code: p.team_code, password: "",
+      batting_average: p.batting_average ?? "", bowling_average: p.bowling_average ?? "",
+    });
+  };
+
+  const handleResetDevice = async (p) => {
+    if (!confirm(`Reset device lock for ${p.name}? Their next login will register whatever device they use then.`)) return;
+    setResettingDevice(p.id);
+    try {
+      await api.post(`/admin/players/${p.id}/reset-device`);
+      toast.success(`${p.name}'s device reset`);
+      setPlayers(prev => prev.map(x => x.id === p.id ? { ...x, device_locked: false } : x));
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to reset device");
+    } finally {
+      setResettingDevice(null);
+    }
   };
 
   const handleAuctionCategoryChange = async (person, newCategory) => {
@@ -156,6 +174,9 @@ export default function ManagePlayers() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Name</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Role</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bat Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bowl Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Device</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -216,6 +237,54 @@ export default function ManagePlayers() {
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                           ))}
                         </select>
+                      </td>
+
+                      {/* Batting Average */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.batting_average}
+                            onChange={e => setEditRow({ ...editRow, batting_average: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{p.batting_average ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Bowling Average */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.bowling_average}
+                            onChange={e => setEditRow({ ...editRow, bowling_average: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{p.bowling_average ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Device lock status */}
+                      <td className="px-4 py-3 text-center">
+                        {isCaptain ? (
+                          <span className="text-gray-300 italic text-xs" title="Manage this captain's device from Manage Captains">—</span>
+                        ) : p.device_locked ? (
+                          <button
+                            onClick={() => handleResetDevice(p)}
+                            disabled={resettingDevice === p.id}
+                            className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 inline-flex"
+                            title="Device registered — click to reset (lost/new phone)"
+                          >
+                            <SmartphoneNfc size={14} />
+                          </button>
+                        ) : (
+                          <span className="text-gray-300 inline-flex" title="No device registered yet">
+                            <Smartphone size={14} />
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3">

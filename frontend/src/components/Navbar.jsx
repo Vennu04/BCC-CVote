@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
 import api from "../utils/api";
 import toast from "react-hot-toast";
-import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, KeyRound } from "lucide-react";
 
 const MY_AUCTION_POLL_MS = 10000;
 
@@ -90,6 +90,9 @@ export default function Navbar() {
           <span className="bg-pitch-600 text-white text-xs font-bold px-2 py-0.5 rounded">
             {user?.team_code}
           </span>
+          <Link to="/change-password" className="p-1.5 hover:text-cricket-gold transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center" title="Change Password">
+            <KeyRound size={18} />
+          </Link>
           <button onClick={handleLogout} className="p-1.5 hover:text-cricket-gold transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center" title="Logout">
             <LogOut size={18} />
           </button>

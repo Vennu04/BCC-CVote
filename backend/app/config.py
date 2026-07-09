@@ -35,9 +35,22 @@ class ProductionConfig(Config):
     TESTING = False
 
 
+class TestingConfig(Config):
+    DEBUG = False
+    TESTING = True
+    # Separate database name so the test suite never touches dev/seed data,
+    # even though it talks to the same mongod as docker-compose.
+    MONGO_URI = os.environ.get(
+        "TEST_MONGODB_URI",
+        Config.MONGO_URI.rsplit("/", 1)[0] + "/bcc_cvote_test",
+    )
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+
+
 config_map = {
     "development": DevelopmentConfig,
     "staging": StagingConfig,
     "production": ProductionConfig,
+    "testing": TestingConfig,
     "default": DevelopmentConfig,
 }

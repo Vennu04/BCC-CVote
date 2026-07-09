@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Navbar from "../components/Navbar";
+import AuctionRulesNote from "../components/AuctionRulesNote";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
 import { Gavel, ThumbsDown, Clock, Trophy, Gift } from "lucide-react";
@@ -35,13 +36,74 @@ function CountdownBadge({ endsAtIso }) {
   );
 }
 
+// Fixed order/labels for every auction — not derived from the data, so a
+// category with zero players left still shows up as "(0 left)" instead of
+// disappearing, giving captains a stable 4-row layout to plan around.
+const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "classic"];
+
+function AvailablePlayersPool({ auction }) {
+  const players = auction.available_players || [];
+  const currentId = auction.current_player?.id;
+
+  const byCategory = useMemo(() => {
+    const map = { extra_power_allrounder: [], extra_power_batsman: [], power: [], classic: [] };
+    for (const p of players) {
+      if (map[p.category]) map[p.category].push(p);
+    }
+    return map;
+  }, [players]);
+
+  return (
+    <div className="card">
+      <h3 className="font-bold text-gray-900 mb-3 text-sm">Available Players</h3>
+      <div className="space-y-4">
+        {CATEGORY_ORDER.map((cat) => {
+          const list = byCategory[cat];
+          return (
+            <div key={cat}>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                {GROUP_LABELS[cat]} <span className="text-gray-400 normal-case font-normal">({list.length} left)</span>
+              </p>
+              {list.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">None remaining</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {list.map((p) => {
+                    const isCurrent = p.id === currentId;
+                    return (
+                      <span
+                        key={p.id}
+                        className={`text-xs rounded-full px-2.5 py-1 ${
+                          isCurrent
+                            ? "bg-amber-100 text-amber-800 border border-amber-300 font-semibold"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {isCurrent && "🔨 "}{p.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CaptainCard({ summary, isYou }) {
   if (!summary) return null;
+  // Once the auction is complete, prices/points are wiped from the API
+  // response entirely (confidential) — points_remaining comes back null, so
+  // this just shows the final name-only roster instead of any numbers.
+  const pricesHidden = summary.points_remaining == null;
   return (
     <div className={`card ${isYou ? "border-2 border-pitch-400" : ""}`}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-bold text-gray-900">{summary.name}{isYou && " (You)"}</h3>
-        <span className="text-sm font-semibold text-pitch-700">{summary.points_remaining} pts left</span>
+        {!pricesHidden && <span className="text-sm font-semibold text-pitch-700">{summary.points_remaining} pts left</span>}
       </div>
       <p className="text-xs text-gray-500 mb-2">{summary.roster_count} players picked</p>
       <div className="space-y-1 mb-3">
@@ -57,9 +119,11 @@ function CaptainCard({ summary, isYou }) {
           {summary.roster.map((p) => (
             <div key={p.user_id} className="flex items-center justify-between text-xs">
               <span className="text-gray-800">{p.name}</span>
-              <span className="text-gray-400">
-                {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
-              </span>
+              {!pricesHidden && (
+                <span className="text-gray-400">
+                  {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick" ? "free" : `${p.price} pts`}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -180,6 +244,8 @@ export default function Auction() {
           <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at : null} />
         </div>
 
+        <AuctionRulesNote auction={auction} />
+
         {auction.status === "pending" && (
           <div className="card text-center py-8 text-gray-600">Waiting for the admin to start the auction…</div>
         )}
@@ -194,6 +260,8 @@ export default function Auction() {
           <CaptainCard summary={auction.captain_a} isYou={auction.captain_a?.captain_id === user?.id} />
           <CaptainCard summary={auction.captain_b} isYou={auction.captain_b?.captain_id === user?.id} />
         </div>
+
+        {auction.status !== "completed" && <AvailablePlayersPool auction={auction} />}
 
         {auction.status === "active" && (
           <div className="card">
@@ -273,24 +341,26 @@ export default function Auction() {
           </div>
         )}
 
-        <div className="card">
-          <h3 className="font-bold text-gray-900 mb-3 text-sm">Live Feed</h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {(auction.bid_feed || []).length === 0 && (
-              <p className="text-xs text-gray-400">No bids yet.</p>
-            )}
-            {(auction.bid_feed || []).map((b, i) => (
-              <div key={i} className="text-sm bg-gray-50 rounded-lg px-3 py-2">
-                <span className="font-semibold">{b.captain_name}</span>{" "}
-                {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
-                {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
-                {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
-                {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
-                <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
-              </div>
-            ))}
+        {auction.status !== "completed" && (
+          <div className="card">
+            <h3 className="font-bold text-gray-900 mb-3 text-sm">Live Feed</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {(auction.bid_feed || []).length === 0 && (
+                <p className="text-xs text-gray-400">No bids yet.</p>
+              )}
+              {(auction.bid_feed || []).map((b, i) => (
+                <div key={i} className="text-sm bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="font-semibold">{b.captain_name}</span>{" "}
+                  {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
+                  {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
+                  {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
+                  {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
+                  <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

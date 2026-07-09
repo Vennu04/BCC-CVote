@@ -12,6 +12,7 @@ import ManagePlayers from "./pages/admin/ManagePlayers";
 import VotingWindow from "./pages/admin/VotingWindow";
 import AdminAuction from "./pages/admin/Auction";
 import Auction from "./pages/Auction";
+import ChangePassword from "./pages/ChangePassword";
 
 function NotFound() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
 
         <Route path="/captain/dashboard" element={<CaptainRoute><CaptainDashboard /></CaptainRoute>} />
         <Route path="/player/dashboard"  element={<PlayerRoute><PlayerDashboard /></PlayerRoute>} />
