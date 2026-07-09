@@ -28,15 +28,14 @@ def test_both_captains_passing_marks_player_deprioritized(client, admin_headers,
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
 
-    player = mongo.db.auction_players.find_one({"auction_id": auction_id, "category": "classic"})
-    client.post(f"/api/admin/auction/{auction_id}/release",
-                json={"player_id": str(player["_id"])}, headers=admin_headers)
+    release = client.post(f"/api/admin/auction/{auction_id}/release",
+                           json={"category": "classic"}, headers=admin_headers).get_json()
 
     client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
     res = client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
     assert "last option" in res.get_json()["message"]
 
-    updated = mongo.db.auction_players.find_one({"_id": player["_id"]})
+    updated = mongo.db.auction_players.find_one({"_id": ObjectId(release["player_id"])})
     assert updated["deprioritized"] is True
     assert updated["status"] == "available"  # still releasable, just held back
 
@@ -48,17 +47,17 @@ def test_deprioritized_player_sorts_last_in_available_players(client, admin_head
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
 
-    players = list(mongo.db.auction_players.find({"auction_id": auction_id, "category": "classic"}))
-    first_player_id = str(players[0]["_id"])
-
-    client.post(f"/api/admin/auction/{auction_id}/release",
-                json={"player_id": first_player_id}, headers=admin_headers)
+    # Admin only picks the category — the specific player comes back in the
+    # release response, since it's chosen automatically (see release_player).
+    release = client.post(f"/api/admin/auction/{auction_id}/release",
+                           json={"category": "classic"}, headers=admin_headers).get_json()
+    released_player_id = release["player_id"]
     client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
     client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
 
     state = client.get(f"/api/auction/{auction_id}", headers=admin_headers).get_json()
     available = state["available_players"]
-    assert available[-1]["id"] == first_player_id
+    assert available[-1]["id"] == released_player_id
     assert available[-1]["deprioritized"] is True
     assert all(not p["deprioritized"] for p in available[:-1])
 

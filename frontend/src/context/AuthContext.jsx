@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
 import { isVoter } from "../utils/roles";
+import { getDeviceId } from "../utils/device";
 
 const AuthContext = createContext(null);
 
@@ -30,7 +31,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (team_code, password) => {
-    const res = await api.post("/auth/login", { team_code, password });
+    const res = await api.post("/auth/login", { team_code, password, device_id: getDeviceId() });
     const { access_token, user: userData } = res.data;
     sessionStorage.setItem("bcc_token", access_token);
     sessionStorage.setItem("bcc_user", JSON.stringify(userData));
@@ -45,8 +46,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Re-pulls /auth/me and syncs sessionStorage — used after a password change
+  // so `user.must_change_password` flips to false without a full re-login.
+  const refreshMe = useCallback(async () => {
+    const res = await api.get("/auth/me");
+    sessionStorage.setItem("bcc_user", JSON.stringify(res.data));
+    setUser(res.data);
+    return res.data;
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin: user?.role === "admin", isVoter: isVoter(user) }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshMe, loading, isAdmin: user?.role === "admin", isVoter: isVoter(user) }}>
       {children}
     </AuthContext.Provider>
   );

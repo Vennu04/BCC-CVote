@@ -36,6 +36,10 @@ def _user_to_dict(u):
         "auction_category": u.get("auction_category"),
         "attendance_count": u.get("attendance_count", 0),
         "knockout_eligible": u.get("knockout_eligible", False),
+        "batting_average": u.get("batting_average"),
+        "bowling_average": u.get("bowling_average"),
+        "must_change_password": u.get("must_change_password", False),
+        "device_locked": bool(u.get("device_id")),
         "created_at": format_ist(u.get("created_at")),
     }
 
@@ -55,6 +59,21 @@ VOTER_FILTER = {"$or": [{"role": {"$in": ["captain", "player"]}}, {"is_player": 
 # have their own update_captain/remove_captain routes; letting update_player
 # match them too would just create two overlapping edit paths for the same row).
 ADMIN_VOTER_FILTER = {"role": "admin", "is_player": True}
+
+
+def _parse_average(value):
+    """None clears the stat (not yet recorded); anything else must be a
+    non-negative number — a captain's release order shouldn't silently break
+    on a bad value slipping through."""
+    if value is None or value == "":
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("must be a number")
+    if parsed < 0:
+        raise ValueError("must not be negative")
+    return parsed
 
 
 def _slot_to_dict(slot):
@@ -188,6 +207,7 @@ def add_captain():
         "matches_scheduled": 0,
         "matches_played": 0,
         "tournament_status": "not_played",
+        "must_change_password": True,
         "created_at": datetime.utcnow(),
     }
     result = mongo.db.users.insert_one(doc)
@@ -212,11 +232,22 @@ def update_captain(captain_id):
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
         updates["password_hash"] = generate_password_hash(data["password"])
+        updates["must_change_password"] = True
     if "team_code" in data:
         new_code = data["team_code"].strip().upper()
         if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(captain_id)}}):
             return jsonify({"error": "Team code already taken"}), 409
         updates["team_code"] = new_code
+    if "batting_average" in data:
+        try:
+            updates["batting_average"] = _parse_average(data["batting_average"])
+        except ValueError as e:
+            return jsonify({"error": f"batting_average {e}"}), 400
+    if "bowling_average" in data:
+        try:
+            updates["bowling_average"] = _parse_average(data["bowling_average"])
+        except ValueError as e:
+            return jsonify({"error": f"bowling_average {e}"}), 400
     if "matches_scheduled" in data:
         updates["matches_scheduled"] = max(0, int(data["matches_scheduled"]))
     if "matches_played" in data:
@@ -256,6 +287,21 @@ def remove_captain(captain_id):
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
     return jsonify({"message": "Captain deactivated"})
+
+
+@admin_bp.route("/captains/<captain_id>/reset-device", methods=["POST"])
+@admin_required
+def reset_captain_device(captain_id):
+    # Clears the bound device so the captain's next login registers whatever
+    # phone/browser they use then — for a lost/replaced phone, not a way
+    # around the lock for anyone but the account owner going forward.
+    result = mongo.db.users.update_one(
+        {"_id": ObjectId(captain_id), "role": "captain"},
+        {"$unset": {"device_id": ""}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Captain not found"}), 404
+    return jsonify({"message": "Device reset — next login will register a new device"})
 
 
 # ── Players management ──────────────────────────────────────────────────────────
@@ -474,6 +520,7 @@ def add_player():
         "role": "player",
         "is_player": True,
         "is_active": True,
+        "must_change_password": True,
         "created_at": datetime.utcnow(),
     }
     result = mongo.db.users.insert_one(doc)
@@ -496,11 +543,22 @@ def update_player(player_id):
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
         updates["password_hash"] = generate_password_hash(data["password"])
+        updates["must_change_password"] = True
     if "team_code" in data:
         new_code = data["team_code"].strip().upper()
         if mongo.db.users.find_one({"team_code": new_code, "_id": {"$ne": ObjectId(player_id)}}):
             return jsonify({"error": "Player code already taken"}), 409
         updates["team_code"] = new_code
+    if "batting_average" in data:
+        try:
+            updates["batting_average"] = _parse_average(data["batting_average"])
+        except ValueError as e:
+            return jsonify({"error": f"batting_average {e}"}), 400
+    if "bowling_average" in data:
+        try:
+            updates["bowling_average"] = _parse_average(data["bowling_average"])
+        except ValueError as e:
+            return jsonify({"error": f"bowling_average {e}"}), 400
     if "auction_category" in data:
         if data["auction_category"] not in AUCTION_CATEGORIES:
             return jsonify({"error": f"auction_category must be one of {sorted(AUCTION_CATEGORIES)}"}), 400
@@ -539,6 +597,18 @@ def remove_player(player_id):
     if result.matched_count == 0:
         return jsonify({"error": "Player not found"}), 404
     return jsonify({"message": "Player deactivated"})
+
+
+@admin_bp.route("/players/<player_id>/reset-device", methods=["POST"])
+@admin_required
+def reset_player_device(player_id):
+    result = mongo.db.users.update_one(
+        {"_id": ObjectId(player_id), "role": "player"},
+        {"$unset": {"device_id": ""}}
+    )
+    if result.matched_count == 0:
+        return jsonify({"error": "Player not found"}), 404
+    return jsonify({"message": "Device reset — next login will register a new device"})
 
 
 # ── Ad-hoc match slots ───────────────────────────────────────────────────────────

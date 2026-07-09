@@ -93,9 +93,8 @@ def test_captain_can_drop_at_base_price_with_no_bid_in_any_category(
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
 
     for category in ("extra_power_allrounder", "extra_power_batsman", "power", "classic"):
-        player = mongo.db.auction_players.find_one({"auction_id": auction_id, "category": category})
         client.post(f"/api/admin/auction/{auction_id}/release",
-                    json={"player_id": str(player["_id"])}, headers=admin_headers)
+                    json={"category": category}, headers=admin_headers)
         # No bid placed at all — straight to drop, at the 8.5 base price.
         res = client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
         assert res.status_code == 200
