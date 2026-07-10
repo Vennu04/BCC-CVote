@@ -31,7 +31,7 @@ export default function ManageCaptains() {
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState(null);
   const [form, setForm]           = useState({ name: "", team_code: "", password: "" });
-  const [editRow, setEditRow]     = useState({ name: "", team_code: "", team_name: "", password: "", matches_scheduled: 0, matches_played: 0, batting_average: "", bowling_average: "" });
+  const [editRow, setEditRow]     = useState({ name: "", team_code: "", team_name: "", password: "", matches_scheduled: 0, matches_played: 0, batting_average: "", strike_rate: "", bowling_average: "", economy: "" });
   const [submitting, setSubmitting] = useState(false);
   const [resettingDevice, setResettingDevice] = useState(null);
   const [resettingPassword, setResettingPassword] = useState(null);
@@ -110,7 +110,9 @@ export default function ManageCaptains() {
       matches_scheduled: c.matches_scheduled ?? 0,
       matches_played: c.matches_played ?? 0,
       batting_average: c.batting_average ?? "",
+      strike_rate: c.strike_rate ?? "",
       bowling_average: c.bowling_average ?? "",
+      economy: c.economy ?? "",
     });
   };
 
@@ -214,7 +216,9 @@ export default function ManageCaptains() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bat Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Strike Rate</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bowl Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Economy</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Device</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
@@ -344,6 +348,20 @@ export default function ManageCaptains() {
                         )}
                       </td>
 
+                      {/* Strike Rate */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.strike_rate}
+                            onChange={e => setEditRow({ ...editRow, strike_rate: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{c.strike_rate ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
                       {/* Bowling Average */}
                       <td className="px-4 py-3 text-center">
                         {isEditing ? (
@@ -355,6 +373,20 @@ export default function ManageCaptains() {
                           />
                         ) : (
                           <span className="text-gray-700">{c.bowling_average ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Economy */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.economy}
+                            onChange={e => setEditRow({ ...editRow, economy: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{c.economy ?? <span className="text-gray-400 italic">—</span>}</span>
                         )}
                       </td>
 
