@@ -62,7 +62,7 @@ export default function VotingSlots({ voting }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {rows.map(({ slot, availability, window }) => (
+          {rows.map(({ slot, availability, window, available_players }) => (
             <SlotCard
               key={slot.id}
               slot={slot}
@@ -73,6 +73,7 @@ export default function VotingSlots({ voting }) {
               windowInfo={window}
               onRevoke={handleRevoke}
               revoking={revoking === slot.id}
+              availablePlayers={available_players}
             />
           ))}
         </div>

@@ -87,25 +87,35 @@ def voting_status():
 @jwt_required()
 def my_votes():
     user = get_current_user()
+    uid = str(user["_id"])
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
+    voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}))
+    voter_names = {str(v["_id"]): v["name"] for v in voters}
 
     result = []
     for slot in slots:
         sid = str(slot["_id"])
         window = _get_active_window(sid)
         vote = None
+        # Only revealed once you've cast your own vote for this slot's window —
+        # same gating rule as /votes/summary's named attendance.
+        available_players = None
         if window:
-            vote = mongo.db.votes.find_one({
-                "captain_id": str(user["_id"]),
-                "slot_id": sid,
-                "window_id": str(window["_id"]),
-            })
+            slot_votes = list(mongo.db.votes.find({"slot_id": sid, "window_id": str(window["_id"])}))
+            vote = next((v for v in slot_votes if v["captain_id"] == uid), None)
+            if vote:
+                available_players = sorted(
+                    voter_names[v["captain_id"]]
+                    for v in slot_votes
+                    if v["availability"] == "available" and v["captain_id"] in voter_names
+                )
         serialized_slot = _serialize_slot(slot)
         serialized_slot["weather"] = get_forecast_for_slot(slot)
         result.append({
             "slot": serialized_slot,
             "availability": vote["availability"] if vote else None,
             "voted_at": format_ist(vote["voted_at"]) if vote else None,
+            "available_players": available_players,
             "window": _window_info(window, slot),
         })
 

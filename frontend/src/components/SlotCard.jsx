@@ -1,7 +1,8 @@
+import { useState } from "react";
 import VoteButton from "./VoteButton";
 import WeatherForecast from "./WeatherForecast";
 import { useCountdown } from "../hooks/useCountdown";
-import { Sun, Sunset, Clock, Lock, AlertTriangle } from "lucide-react";
+import { Sun, Sunset, Clock, Lock, AlertTriangle, Users, ChevronDown, ChevronUp } from "lucide-react";
 
 const DAY_COLORS = {
   Saturday: "from-blue-50 to-blue-100 border-blue-200",
@@ -39,7 +40,8 @@ function WindowStatus({ windowInfo }) {
   );
 }
 
-export default function SlotCard({ slot, currentVote, onVote, disabled, loading, windowInfo, onRevoke, revoking }) {
+export default function SlotCard({ slot, currentVote, onVote, disabled, loading, windowInfo, onRevoke, revoking, availablePlayers }) {
+  const [showAvailable, setShowAvailable] = useState(false);
   const showRevoke = currentVote && windowInfo?.can_revoke;
 
   return (
@@ -100,6 +102,26 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           colorIdle="bg-white text-red-700 border-red-300 hover:bg-red-50"
         />
       </div>
+
+      {/* Available players — only revealed once you've cast your own vote */}
+      {availablePlayers && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setShowAvailable((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-medium text-pitch-600 hover:text-pitch-700"
+          >
+            <Users size={13} />
+            Available Players ({availablePlayers.length})
+            {showAvailable ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+          {showAvailable && (
+            <p className="mt-2 text-xs text-gray-500">
+              {availablePlayers.length ? availablePlayers.join(", ") : "No one yet — be the first!"}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Emergency revoke — withdraw an existing vote, even after the window closes */}
       {showRevoke && (

@@ -5,7 +5,7 @@ import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import WeatherForecast from "../../components/WeatherForecast";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.jpg";
-import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
+import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Users, ChevronDown, ChevronUp } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
 
@@ -16,6 +16,9 @@ export default function VotingWindow() {
   const [savingSlot, setSavingSlot] = useState(null);
   const [newSlot, setNewSlot] = useState(EMPTY_NEW_SLOT);
   const [addingSlot, setAddingSlot] = useState(false);
+  const [expanded, setExpanded] = useState({});
+
+  const toggleExpanded = (slotId) => setExpanded((prev) => ({ ...prev, [slotId]: !prev[slotId] }));
 
   const fetchWindows = async () => {
     try {
@@ -170,7 +173,7 @@ export default function VotingWindow() {
           <p className="text-gray-500 text-sm">Loading…</p>
         ) : (
           <div className="space-y-5">
-            {windows.map(({ slot, window: win, suggested }) => {
+            {windows.map(({ slot, window: win, suggested, available_players }) => {
               const form = forms[slot.id] || {};
               return (
                 <div key={slot.id} className="card">
@@ -196,6 +199,27 @@ export default function VotingWindow() {
                   )}
 
                   <WeatherForecast weather={slot.weather} />
+
+                  {win && (
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(slot.id)}
+                        className="flex items-center gap-1.5 text-xs font-medium text-pitch-600 hover:text-pitch-700"
+                      >
+                        <Users size={13} />
+                        Available Players ({available_players?.length || 0})
+                        {expanded[slot.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+                      {expanded[slot.id] && (
+                        <p className="mt-2 text-xs text-gray-500 pl-1">
+                          {available_players?.length
+                            ? available_players.join(", ")
+                            : "No one has voted available yet."}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <form onSubmit={(e) => handleSave(slot.id, e)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
