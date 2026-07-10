@@ -14,53 +14,82 @@ const AUCTION_CATEGORY_OPTIONS = [
   { value: "classic",                label: "Classic" },
 ];
 
-export default function ManagePlayers() {
-  const [players, setPlayers]     = useState([]);
+const STATUS_OPTIONS = [
+  { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-gray-600" },
+  { value: "in_progress", label: "In-Progress",          color: "bg-blue-100 text-blue-700" },
+  { value: "qualified",   label: "Qualified",            color: "bg-green-100 text-green-700" },
+  { value: "eliminated",  label: "Eliminated",           color: "bg-red-100 text-red-700" },
+];
+
+function statusMeta(value) {
+  return STATUS_OPTIONS.find(s => s.value === value) || STATUS_OPTIONS[0];
+}
+
+// Captains and players are both rows in the same voter roster (GET
+// /admin/players already returns everyone), but they're backed by two
+// different Mongo update paths with different accepted fields — captains
+// alone carry matches_scheduled/matches_played/tournament_status/team_name.
+// Every mutation below picks the endpoint from the row's own role rather
+// than assuming one, so a single table can safely edit both kinds of rows.
+function endpointFor(person) {
+  return person.role === "captain" ? "captains" : "players";
+}
+
+export default function ManagePeople() {
+  const [people, setPeople]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState(null);
-  const [form, setForm]           = useState({ name: "", team_code: "", password: "" });
-  const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", batting_average: "", strike_rate: "", bowling_average: "", economy: "" });
+  const [form, setForm]           = useState({ role: "player", name: "", team_code: "", password: "" });
+  const [editRow, setEditRow]     = useState({
+    name: "", team_code: "", password: "", team_name: "",
+    matches_scheduled: 0, matches_played: 0,
+    batting_average: "", strike_rate: "", bowling_average: "", economy: "",
+  });
   const [submitting, setSubmitting] = useState(false);
   const [resettingDevice, setResettingDevice] = useState(null);
   const [resettingPassword, setResettingPassword] = useState(null);
 
-  const fetchPlayers = async () => {
+  const fetchPeople = async () => {
     try {
       const res = await api.get("/admin/players");
-      setPlayers(res.data);
+      setPeople(res.data);
     } catch {
-      toast.error("Failed to load players");
+      toast.error("Failed to load people");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchPlayers(); }, []);
+  useEffect(() => { fetchPeople(); }, []);
 
   const handleAdd = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await api.post("/admin/players", form);
-      toast.success(`${res.data.player.name} added! Password: ${res.data.default_password}`);
-      setForm({ name: "", team_code: "", password: "" });
+      const endpoint = form.role === "captain" ? "captains" : "players";
+      const res = await api.post(`/admin/${endpoint}`, {
+        name: form.name, team_code: form.team_code, password: form.password,
+      });
+      const added = res.data.captain || res.data.player;
+      toast.success(`${added.name} added! Password: ${res.data.default_password}`);
+      setForm({ role: "player", name: "", team_code: "", password: "" });
       setShowForm(false);
-      fetchPlayers();
+      fetchPeople();
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to add player");
+      toast.error(err.response?.data?.error || "Failed to add person");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleSaveRow = async (id) => {
+  const handleSaveRow = async (person) => {
     setSubmitting(true);
     try {
-      await api.put(`/admin/players/${id}`, editRow);
-      toast.success("Player updated");
+      await api.put(`/admin/${endpointFor(person)}/${person.id}`, editRow);
+      toast.success(`${person.name} updated`);
       setEditId(null);
-      fetchPlayers();
+      fetchPeople();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to update");
     } finally {
@@ -68,12 +97,12 @@ export default function ManagePlayers() {
     }
   };
 
-  const handleDeactivate = async (player) => {
-    if (!confirm(`Remove ${player.name} from the player roster?`)) return;
+  const handleDeactivate = async (person) => {
+    if (!confirm(`Remove ${person.name} from the player roster?`)) return;
     try {
-      await api.delete(`/admin/players/${player.id}`);
-      toast.success(`${player.name} removed`);
-      fetchPlayers();
+      await api.delete(`/admin/players/${person.id}`);
+      toast.success(`${person.name} removed`);
+      fetchPeople();
     } catch {
       toast.error("Failed to remove player");
     }
@@ -83,6 +112,9 @@ export default function ManagePlayers() {
     setEditId(p.id);
     setEditRow({
       name: p.name, team_code: p.team_code, password: "",
+      team_name: p.team_name || "",
+      matches_scheduled: p.matches_scheduled ?? 0,
+      matches_played: p.matches_played ?? 0,
       batting_average: p.batting_average ?? "", strike_rate: p.strike_rate ?? "",
       bowling_average: p.bowling_average ?? "", economy: p.economy ?? "",
     });
@@ -92,9 +124,9 @@ export default function ManagePlayers() {
     if (!confirm(`Reset device lock for ${p.name}? Their next login will register whatever device they use then.`)) return;
     setResettingDevice(p.id);
     try {
-      await api.post(`/admin/players/${p.id}/reset-device`);
+      await api.post(`/admin/${endpointFor(p)}/${p.id}/reset-device`);
       toast.success(`${p.name}'s device reset`);
-      setPlayers(prev => prev.map(x => x.id === p.id ? { ...x, device_locked: false } : x));
+      setPeople(prev => prev.map(x => x.id === p.id ? { ...x, device_locked: false } : x));
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to reset device");
     } finally {
@@ -102,17 +134,17 @@ export default function ManagePlayers() {
     }
   };
 
-  // For a forgotten password (no self-service recovery — player calls admin
-  // directly). A random temp password is generated server-side (never needs
-  // the old one), the player is forced to change it on next login, and the
+  // For a forgotten password (no self-service recovery — the person calls
+  // admin directly). A random temp password is generated server-side (never
+  // needs the old one), they're forced to change it on next login, and the
   // reset is logged for accountability.
   const handleResetPassword = async (p) => {
     if (!confirm(`Reset ${p.name}'s password? A new temporary password will be generated — relay it to them directly (e.g. by phone).`)) return;
     setResettingPassword(p.id);
     try {
-      const res = await api.post(`/admin/players/${p.id}/reset-password`);
+      const res = await api.post(`/admin/${endpointFor(p)}/${p.id}/reset-password`);
       toast.success(`${p.name}'s temporary password: ${res.data.temp_password}`, { duration: 15000 });
-      setPlayers(prev => prev.map(x => x.id === p.id ? { ...x, must_change_password: true } : x));
+      setPeople(prev => prev.map(x => x.id === p.id ? { ...x, must_change_password: true } : x));
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to reset password");
     } finally {
@@ -122,49 +154,71 @@ export default function ManagePlayers() {
 
   const handleAuctionCategoryChange = async (person, newCategory) => {
     if (!newCategory) return;
-    const endpoint = person.role === "captain" ? "captains" : "players";
     try {
-      await api.put(`/admin/${endpoint}/${person.id}`, { auction_category: newCategory });
-      setPlayers(prev => prev.map(p => p.id === person.id ? { ...p, auction_category: newCategory } : p));
+      await api.put(`/admin/${endpointFor(person)}/${person.id}`, { auction_category: newCategory });
+      setPeople(prev => prev.map(p => p.id === person.id ? { ...p, auction_category: newCategory } : p));
       toast.success(`${person.name}'s auction category updated`);
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to update auction category");
     }
   };
 
+  const handleStatusChange = async (person, newStatus) => {
+    try {
+      await api.put(`/admin/captains/${person.id}`, { tournament_status: newStatus });
+      setPeople(prev => prev.map(p => p.id === person.id ? { ...p, tournament_status: newStatus } : p));
+      toast.success(`${person.name} → ${statusMeta(newStatus).label}`);
+    } catch {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const captainCount = people.filter(p => p.role === "captain").length;
+  const playerCount = people.length - captainCount;
+
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
       <PageBackgroundPhoto src={playersPhoto} />
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Manage Players</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Manage People</h1>
             <p className="text-sm text-gray-500">
-              {players.length} people who can cast an availability vote
-              {" "}({players.filter(p => p.role === "captain").length} captains + {players.filter(p => p.role === "player").length} players)
+              {people.length} people who can cast an availability vote ({captainCount} captains + {playerCount} players)
             </p>
           </div>
           <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2">
-            <UserPlus size={16} /> Add Player
+            <UserPlus size={16} /> Add Person
           </button>
         </div>
 
-        {/* Add player form */}
+        {/* Add person form */}
         {showForm && (
           <form onSubmit={handleAdd} className="card mb-6">
-            <h3 className="font-semibold text-gray-800 mb-4">New Player</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <h3 className="font-semibold text-gray-800 mb-4">New Person</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Player Name *</label>
-                <input className="input-field" placeholder="Abhi" value={form.name}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                <select
+                  className="input-field"
+                  value={form.role}
+                  onChange={e => setForm({ ...form, role: e.target.value })}
+                >
+                  <option value="player">Player</option>
+                  <option value="captain">Captain</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input className="input-field" placeholder={form.role === "captain" ? "Rohit Sharma" : "Abhi"} value={form.name}
                   onChange={e => setForm({ ...form, name: e.target.value })} required />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Login Code *</label>
-                <input className="input-field uppercase" placeholder="ABH" value={form.team_code}
+                <input className="input-field uppercase" placeholder={form.role === "captain" ? "MI" : "ABH"} value={form.team_code}
                   onChange={e => setForm({ ...form, team_code: e.target.value.toUpperCase() })} required maxLength={6} />
               </div>
               <div>
@@ -175,7 +229,7 @@ export default function ManagePlayers() {
             </div>
             <div className="flex gap-3 mt-4">
               <button type="submit" disabled={submitting} className="btn-primary text-sm py-2 px-4">
-                {submitting ? "Adding…" : "Add Player"}
+                {submitting ? "Adding…" : "Add Person"}
               </button>
               <button type="button" onClick={() => setShowForm(false)} className="btn-secondary text-sm py-2 px-4">
                 Cancel
@@ -184,7 +238,7 @@ export default function ManagePlayers() {
           </form>
         )}
 
-        {/* Player table */}
+        {/* People table */}
         {loading ? (
           <p className="text-gray-500 text-sm">Loading…</p>
         ) : (
@@ -196,6 +250,10 @@ export default function ManagePlayers() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Name</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Role</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Team Name</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Sched.</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Played</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bat Avg</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Strike Rate</th>
@@ -206,13 +264,16 @@ export default function ManagePlayers() {
                 </tr>
               </thead>
               <tbody>
-                {players.map((p, i) => {
+                {people.map((p, i) => {
                   const isEditing = editId === p.id;
                   const isCaptain = p.role === "captain";
+                  const meta = statusMeta(p.tournament_status);
+                  const dash = <span className="text-gray-300 italic">—</span>;
                   return (
                     <tr key={p.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
                       <td className="px-4 py-3 text-gray-400 font-mono">{i + 1}</td>
 
+                      {/* Code */}
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <input
@@ -227,6 +288,7 @@ export default function ManagePlayers() {
                         )}
                       </td>
 
+                      {/* Name */}
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <input
@@ -239,6 +301,7 @@ export default function ManagePlayers() {
                         )}
                       </td>
 
+                      {/* Role */}
                       <td className="px-4 py-3">
                         {isCaptain ? (
                           <span className="flex items-center gap-1 text-xs font-medium text-cricket-navy bg-blue-50 rounded-full px-2.5 py-1 w-fit">
@@ -251,7 +314,64 @@ export default function ManagePlayers() {
                         )}
                       </td>
 
-                      {/* Auction Category */}
+                      {/* Team Name — captain-only */}
+                      <td className="px-4 py-3">
+                        {!isCaptain ? dash : isEditing ? (
+                          <input
+                            className="input-field py-1.5 text-sm"
+                            value={editRow.team_name}
+                            onChange={e => setEditRow({ ...editRow, team_name: e.target.value })}
+                            placeholder="Team name"
+                          />
+                        ) : (
+                          <span className="text-gray-800 font-medium">{p.team_name || <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Matches Scheduled — captain-only */}
+                      <td className="px-4 py-3 text-center">
+                        {!isCaptain ? dash : isEditing ? (
+                          <input
+                            type="number" min="0"
+                            className="input-field py-1.5 text-sm text-center w-16 mx-auto"
+                            value={editRow.matches_scheduled}
+                            onChange={e => setEditRow({ ...editRow, matches_scheduled: e.target.value })}
+                          />
+                        ) : (
+                          <span className="font-semibold text-gray-700">{p.matches_scheduled ?? 0}</span>
+                        )}
+                      </td>
+
+                      {/* Matches Played — captain-only */}
+                      <td className="px-4 py-3 text-center">
+                        {!isCaptain ? dash : isEditing ? (
+                          <input
+                            type="number" min="0"
+                            className="input-field py-1.5 text-sm text-center w-16 mx-auto"
+                            value={editRow.matches_played}
+                            onChange={e => setEditRow({ ...editRow, matches_played: e.target.value })}
+                          />
+                        ) : (
+                          <span className="font-semibold text-gray-700">{p.matches_played ?? 0}</span>
+                        )}
+                      </td>
+
+                      {/* Status — captain-only, always a dropdown for admin */}
+                      <td className="px-4 py-3">
+                        {!isCaptain ? dash : (
+                          <select
+                            value={p.tournament_status || "not_played"}
+                            onChange={e => handleStatusChange(p, e.target.value)}
+                            className={`text-xs font-semibold rounded px-2 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${meta.color}`}
+                          >
+                            {STATUS_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+
+                      {/* Auction Category — single home for this now */}
                       <td className="px-4 py-3">
                         <select
                           value={p.auction_category || ""}
@@ -322,9 +442,7 @@ export default function ManagePlayers() {
 
                       {/* Device lock status */}
                       <td className="px-4 py-3 text-center">
-                        {isCaptain ? (
-                          <span className="text-gray-300 italic text-xs" title="Manage this captain's device from Manage Captains">—</span>
-                        ) : p.device_locked ? (
+                        {p.device_locked ? (
                           <button
                             onClick={() => handleResetDevice(p)}
                             disabled={resettingDevice === p.id}
@@ -340,59 +458,54 @@ export default function ManagePlayers() {
                         )}
                       </td>
 
+                      {/* Actions */}
                       <td className="px-4 py-3">
-                        {isCaptain ? (
-                          <span className="text-xs text-gray-400 italic" title="Edit this captain from Manage Captains">
-                            Managed in Captains
-                          </span>
-                        ) : (
-                          <div className="flex gap-2 items-center">
+                        <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => handleResetPassword(p)}
+                            disabled={resettingPassword === p.id}
+                            className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                            title="Reset password (forgotten password — generates a new temporary one)"
+                          >
+                            <KeyRound size={14} />
+                          </button>
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => handleSaveRow(p)}
+                                disabled={submitting}
+                                className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                title="Save"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button
+                                onClick={() => setEditId(null)}
+                                className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                title="Cancel"
+                              >
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
                             <button
-                              onClick={() => handleResetPassword(p)}
-                              disabled={resettingPassword === p.id}
-                              className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
-                              title="Reset password (forgotten password — generates a new temporary one)"
+                              onClick={() => startEdit(p)}
+                              className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                              title="Edit name / code / stats"
                             >
-                              <KeyRound size={14} />
+                              <Edit2 size={14} />
                             </button>
-                            {isEditing ? (
-                              <>
-                                <button
-                                  onClick={() => handleSaveRow(p.id)}
-                                  disabled={submitting}
-                                  className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
-                                  title="Save"
-                                >
-                                  <Check size={14} />
-                                </button>
-                                <button
-                                  onClick={() => setEditId(null)}
-                                  className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                                  title="Cancel"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => startEdit(p)}
-                                  className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                                  title="Edit name / code"
-                                >
-                                  <Edit2 size={14} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeactivate(p)}
-                                  className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                                  title="Remove player"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                          )}
+                          {!isCaptain && !isEditing && (
+                            <button
+                              onClick={() => handleDeactivate(p)}
+                              className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                              title="Remove player"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -400,8 +513,8 @@ export default function ManagePlayers() {
               </tbody>
             </table>
 
-            {players.length === 0 && (
-              <div className="text-center py-12 text-gray-400 text-sm">No players yet. Add one above.</div>
+            {people.length === 0 && (
+              <div className="text-center py-12 text-gray-400 text-sm">No one yet. Add someone above.</div>
             )}
           </div>
         )}

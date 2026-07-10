@@ -309,11 +309,9 @@ export default function Attendance() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Name</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Role</th>
-                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Attendance Count</th>
-                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">% Attended</th>
-                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap" title="Read-only, from the bulk stats import — separate from the Attendance Count/% Attended columns above">Matches Present</th>
-                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap" title="Read-only, from the bulk stats import">Total Matches</th>
-                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap" title="Read-only, from the bulk stats import">Attendance %</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Matches Present</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Total Matches</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Attendance %</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Knockout Eligible</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap"></th>
                 </tr>
@@ -343,8 +341,6 @@ export default function Attendance() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-gray-700">{r.attendance_count}</td>
-                        <td className="px-4 py-3 font-medium text-gray-700">{r.percentage}%</td>
                         <td className="px-4 py-3 text-gray-700">{r.matches_present ?? <span className="text-gray-400 italic">—</span>}</td>
                         <td className="px-4 py-3 text-gray-700">{r.total_matches ?? <span className="text-gray-400 italic">—</span>}</td>
                         <td className="px-4 py-3 text-gray-700">{r.attendance_percentage != null ? `${r.attendance_percentage}%` : <span className="text-gray-400 italic">—</span>}</td>
@@ -368,7 +364,7 @@ export default function Attendance() {
                       </tr>
                       {isExpanded && (
                         <tr className="border-b bg-blue-50/40">
-                          <td colSpan={11} className="px-4 py-3">
+                          <td colSpan={9} className="px-4 py-3">
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                               Matches {r.name} attended
                             </p>
