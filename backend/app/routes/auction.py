@@ -17,7 +17,7 @@ POINTS_BUDGET = 17
 STARTING_PRICE = 8.5
 TARGET_ROSTER_SIZE = 11
 SESSION_MINUTES = 25
-MIN_AUCTION_POOL_SIZE = 22  # a full cricket match needs 11 a side
+MIN_AUCTION_POOL_SIZE = 20  # a side can field 10, per admin's call — no longer requiring a full XI
 MAX_ROSTER_SIZE_PER_SIDE = 15
 
 # Release order within a category is driven by batting/bowling average, not admin
