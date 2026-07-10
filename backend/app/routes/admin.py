@@ -737,9 +737,6 @@ def remove_slot(slot_id):
 @admin_required
 def get_window():
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
-    voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}))
-    voter_names = {str(v["_id"]): v["name"] for v in voters}
-
     windows = []
     for slot in slots:
         sid = str(slot["_id"])
@@ -747,23 +744,9 @@ def get_window():
         suggested = suggested_window_for_slot(slot)
         slot_dict = _slot_to_dict(slot)
         slot_dict["weather"] = get_forecast_for_slot(slot)
-
-        # Admin doesn't need to vote first (unlike the gated view captains/players
-        # get on their own voting page) — sees who's available for this window
-        # as soon as anyone has voted, whether it's still open or already closed.
-        available_players = []
-        if window:
-            slot_votes = mongo.db.votes.find(
-                {"slot_id": sid, "window_id": str(window["_id"]), "availability": "available"}
-            )
-            available_players = sorted(
-                voter_names[v["captain_id"]] for v in slot_votes if v["captain_id"] in voter_names
-            )
-
         windows.append({
             "slot": slot_dict,
             "window": _window_info(window) if window else None,
-            "available_players": available_players,
             "suggested": {
                 "opens_at": suggested["opens_at_display"],
                 "closes_at": suggested["closes_at_display"],

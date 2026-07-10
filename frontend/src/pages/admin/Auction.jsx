@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import auctionPhoto from "../../assets/dashboard-backgrounds/auction.jpg";
 import AuctionRulesNote from "../../components/AuctionRulesNote";
+import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
 import { useAuction } from "../../hooks/useAuction";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy } from "lucide-react";
 
@@ -17,6 +17,11 @@ const GROUP_LABELS = {
   power: "Power",
   classic: "Classic",
 };
+
+// Same cadence as the Voting Windows page's turnout monitoring — frequent
+// enough to watch confirmations land live while deciding which slot to run,
+// without the overhead the 2.5s in-auction bidding poll needs once it's live.
+const SLOT_POLL_INTERVAL_MS = 5000;
 
 // Plain-text summary for pasting into WhatsApp once an auction is done —
 // prices are deliberately left out (they're confidential post-completion,
@@ -54,9 +59,21 @@ export default function AdminAuction() {
   const { auction, loading, refetch } = useAuction(auctionId);
 
   useEffect(() => {
-    api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => toast.error("Failed to load slots"));
-    api.get("/admin/dashboard").then((res) => setVoteMatrix(res.data.vote_matrix || [])).catch(() => toast.error("Failed to load votes"));
     api.get("/admin/captains").then((res) => setCaptains(res.data || [])).catch(() => toast.error("Failed to load captains"));
+  }, []);
+
+  // Slots + turnout are polled, not fetched once — this screen is exactly
+  // where admin watches confirmations land live to decide when there's
+  // enough turnout to create the auction (see ConfirmedPlayersPanel below),
+  // so it needs to update without a manual refresh, same as Voting Windows.
+  useEffect(() => {
+    const fetchSlotsAndVotes = () => {
+      api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => {});
+      api.get("/admin/dashboard").then((res) => setVoteMatrix(res.data.vote_matrix || [])).catch(() => {});
+    };
+    fetchSlotsAndVotes();
+    const interval = setInterval(fetchSlotsAndVotes, SLOT_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   // Informational only — Captain A/B can be any active captain (they're
@@ -66,26 +83,14 @@ export default function AdminAuction() {
     return voteMatrix.filter((row) => row.votes.some((v) => v.slot_id === selectedSlotId && v.availability === "available")).length;
   }, [voteMatrix, selectedSlotId]);
 
-  // Live preview of what create_auction will actually see — per-category
-  // quotas are derived fresh from this count every time (see _group_quota in
-  // auction.py), so an odd category here means creation will be rejected.
-  // Recomputes as captains are picked, since they're excluded from the pool
-  // the same way the backend excludes them.
-  const categoryBreakdown = useMemo(() => {
-    if (!selectedSlotId) return null;
-    const excludedIds = new Set([captainAId, captainBId].filter(Boolean));
-    const counts = { extra_power_allrounder: 0, extra_power_batsman: 0, power: 0, classic: 0 };
-    let missingCategory = 0;
-    voteMatrix.forEach((row) => {
-      if (excludedIds.has(row.captain.id)) return;
-      const voted = row.votes.some((v) => v.slot_id === selectedSlotId && v.availability === "available");
-      if (!voted) return;
-      const cat = row.captain.auction_category;
-      if (cat && cat in counts) counts[cat] += 1;
-      else missingCategory += 1;
-    });
-    return { counts, missingCategory };
-  }, [voteMatrix, selectedSlotId, captainAId, captainBId]);
+  // What create_auction will actually see once captains are picked — the
+  // panel below excludes them from the pool the same way the backend does,
+  // so an odd category there means creation will be rejected until a
+  // player's category is changed via Manage Players.
+  const excludeCaptainIds = useMemo(
+    () => new Set([captainAId, captainBId].filter(Boolean)),
+    [captainAId, captainBId]
+  );
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -190,6 +195,31 @@ export default function AdminAuction() {
           )}
         </div>
 
+        {!auctionId && slots.length > 0 && (
+          <div className="card">
+            <h2 className="font-bold text-gray-900 mb-1">Compare Available Slots</h2>
+            <p className="text-xs text-gray-500 mb-3">
+              Live turnout per candidate slot — pick whichever has enough confirmed players
+              in each category before setting up the auction below.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {slots.map(({ slot }) => (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => { setSelectedSlotId(slot.id); setCaptainAId(""); setCaptainBId(""); }}
+                  className={`text-left rounded-lg border-2 px-3 py-2.5 transition-colors ${
+                    selectedSlotId === slot.id ? "border-pitch-400 bg-pitch-50" : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                >
+                  <p className="text-xs font-semibold text-gray-700 mb-2">{slot.day} {slot.match_time || slot.time_of_day}</p>
+                  <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} compact />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!auctionId && (
           <div className="card">
             <h2 className="font-bold text-gray-900 mb-3">Set Up Auction</h2>
@@ -214,36 +244,11 @@ export default function AdminAuction() {
                 </p>
               )}
 
-              {/* Live per-category preview — this is exactly what create_auction will
-                  see once captains are picked; an odd count here means creation will
-                  be rejected until a player's category is changed via Manage Players. */}
-              {categoryBreakdown && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
-                  <p className="text-xs font-semibold text-gray-700 mb-1.5">
-                    Category breakdown {(captainAId || captainBId) && "(captains excluded)"}
-                  </p>
-                  <ul className="space-y-0.5">
-                    {Object.entries(GROUP_LABELS).map(([group, label]) => {
-                      const count = categoryBreakdown.counts[group];
-                      const odd = count % 2 !== 0;
-                      return (
-                        <li
-                          key={group}
-                          className={`text-xs flex items-center justify-between ${odd ? "text-red-600 font-semibold" : "text-gray-600"}`}
-                        >
-                          <span>{label}</span>
-                          <span>{count}{odd && " ⚠️ odd — won't split evenly"}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {categoryBreakdown.missingCategory > 0 && (
-                    <p className="text-xs text-red-600 mt-1.5">
-                      ⚠️ {categoryBreakdown.missingCategory} player(s) have no category set — creation will fail until fixed.{" "}
-                      <Link to="/admin/players" className="underline">Manage Players</Link>
-                    </p>
-                  )}
-                </div>
+              {/* Same live per-category view as the comparison strip above, now
+                  scoped to just the selected slot with the picked captains excluded
+                  — exactly what create_auction will see. */}
+              {selectedSlotId && (
+                <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={selectedSlotId} excludeIds={excludeCaptainIds} />
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -1,24 +1,30 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import WeatherForecast from "../../components/WeatherForecast";
+import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.jpg";
-import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
 
+// Confirmed-players turnout needs to update as votes come in without a manual
+// refresh — 5s is frequent enough for admin to watch it live while deciding
+// whether to start an auction, without hammering the server the way the
+// 2.5s in-auction bidding poll needs to (that's live bidding; this is just
+// pre-auction monitoring).
+const POLL_INTERVAL_MS = 5000;
+
 export default function VotingWindow() {
   const [windows, setWindows] = useState([]);
+  const [voteMatrix, setVoteMatrix] = useState([]);
   const [forms, setForms] = useState({}); // slot_id -> { opens_at, closes_at }
   const [loading, setLoading] = useState(true);
   const [savingSlot, setSavingSlot] = useState(null);
   const [newSlot, setNewSlot] = useState(EMPTY_NEW_SLOT);
   const [addingSlot, setAddingSlot] = useState(false);
-  const [expanded, setExpanded] = useState({});
-
-  const toggleExpanded = (slotId) => setExpanded((prev) => ({ ...prev, [slotId]: !prev[slotId] }));
 
   const fetchWindows = async () => {
     try {
@@ -41,7 +47,40 @@ export default function VotingWindow() {
     }
   };
 
-  useEffect(() => { fetchWindows(); }, []);
+  // vote_matrix already has every voter's role/category alongside their vote
+  // per slot — the same data admin/Auction.jsx already uses to preview
+  // quotas, computed client-side rather than adding a parallel backend route.
+  const fetchVoteMatrix = async () => {
+    try {
+      const res = await api.get("/admin/dashboard");
+      setVoteMatrix(res.data.vote_matrix || []);
+    } catch {
+      // Silent — the confirmed-players panel just won't show counts this tick;
+      // window controls above it don't depend on this and shouldn't error out.
+    }
+  };
+
+  useEffect(() => { fetchWindows(); fetchVoteMatrix(); }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => { fetchWindows(); fetchVoteMatrix(); }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Ad-hoc slots sharing a match_date are candidate options for the same match
+  // day (e.g. two alternate Saturday slots) — grouped side by side so admin can
+  // compare turnout at a glance. Everything else (the 4 fixed recurring slots,
+  // or an ad-hoc slot with a date no one else shares) keeps its own row, same
+  // as before.
+  const dayGroups = useMemo(() => {
+    const groups = new Map();
+    windows.forEach((w) => {
+      const key = w.slot.is_adhoc && w.slot.match_date ? w.slot.match_date : w.slot.id;
+      if (!groups.has(key)) groups.set(key, { key, label: w.slot.is_adhoc ? w.slot.match_date : null, items: [] });
+      groups.get(key).items.push(w);
+    });
+    return Array.from(groups.values());
+  }, [windows]);
 
   const handleSave = async (slotId, e) => {
     e.preventDefault();
@@ -173,102 +212,98 @@ export default function VotingWindow() {
           <p className="text-gray-500 text-sm">Loading…</p>
         ) : (
           <div className="space-y-5">
-            {windows.map(({ slot, window: win, suggested, available_players }) => {
-              const form = forms[slot.id] || {};
-              return (
-                <div key={slot.id} className="card">
-                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
-                      <h2 className="font-bold text-gray-900">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
-                    </div>
-                    {win && (
-                      <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${
-                        win.is_open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
-                      }`}>
-                        <Clock size={12} />
-                        {win.is_open ? "OPEN" : "CLOSED"} — {win.opens_at} to {win.closes_at}
-                      </span>
-                    )}
-                  </div>
+            {dayGroups.map((group) => (
+              <div key={group.key}>
+                {group.items.length > 1 && (
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    {group.label} — {group.items.length} candidate slots, compare turnout below
+                  </p>
+                )}
+                <div className={group.items.length > 1 ? "grid grid-cols-1 sm:grid-cols-2 gap-5" : ""}>
+                  {group.items.map(({ slot, window: win, suggested }) => {
+                    const form = forms[slot.id] || {};
+                    return (
+                      <div key={slot.id} className="card">
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
+                            <h2 className="font-bold text-gray-900">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
+                          </div>
+                          {win && (
+                            <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${
+                              win.is_open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                            }`}>
+                              <Clock size={12} />
+                              {win.is_open ? "OPEN" : "CLOSED"} — {win.opens_at} to {win.closes_at}
+                            </span>
+                          )}
+                        </div>
 
-                  {suggested && (
-                    <p className="text-xs text-gray-500 mb-3">
-                      Suggested: <strong>{suggested.opens_at}</strong> → <strong>{suggested.closes_at}</strong>
-                    </p>
-                  )}
+                        {suggested && (
+                          <p className="text-xs text-gray-500 mb-3">
+                            Suggested: <strong>{suggested.opens_at}</strong> → <strong>{suggested.closes_at}</strong>
+                          </p>
+                        )}
 
-                  <WeatherForecast weather={slot.weather} />
+                        <WeatherForecast weather={slot.weather} />
 
-                  {win && (
-                    <div className="mb-4">
-                      <button
-                        type="button"
-                        onClick={() => toggleExpanded(slot.id)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-pitch-600 hover:text-pitch-700"
-                      >
-                        <Users size={13} />
-                        Available Players ({available_players?.length || 0})
-                        {expanded[slot.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                      </button>
-                      {expanded[slot.id] && (
-                        <p className="mt-2 text-xs text-gray-500 pl-1">
-                          {available_players?.length
-                            ? available_players.join(", ")
-                            : "No one has voted available yet."}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                        {win && (
+                          <div className="mb-4">
+                            <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} />
+                          </div>
+                        )}
 
-                  <form onSubmit={(e) => handleSave(slot.id, e)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Opens At (IST)</label>
-                      <input
-                        type="datetime-local"
-                        className="input-field"
-                        value={form.opens_at || ""}
-                        onChange={(e) => setForms({ ...forms, [slot.id]: { ...form, opens_at: e.target.value } })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Closes At (IST)</label>
-                      <input
-                        type="datetime-local"
-                        className="input-field"
-                        value={form.closes_at || ""}
-                        onChange={(e) => setForms({ ...forms, [slot.id]: { ...form, closes_at: e.target.value } })}
-                        required
-                      />
-                    </div>
-                    <div className="sm:col-span-2 flex gap-3">
-                      <button type="submit" disabled={savingSlot === slot.id} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
-                        <Save size={14} /> {savingSlot === slot.id ? "Saving…" : "Save Window"}
-                      </button>
-                      {win?.is_open && (
-                        <button
-                          type="button"
-                          onClick={() => handleCloseEarly(slot.id)}
-                          className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
-                        >
-                          <XCircle size={14} /> Close Early
-                        </button>
-                      )}
-                      {slot.is_adhoc && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSlot(slot.id)}
-                          className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
-                        >
-                          <Trash2 size={14} /> Remove
-                        </button>
-                      )}
-                    </div>
-                  </form>
+                        <form onSubmit={(e) => handleSave(slot.id, e)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Opens At (IST)</label>
+                            <input
+                              type="datetime-local"
+                              className="input-field"
+                              value={form.opens_at || ""}
+                              onChange={(e) => setForms({ ...forms, [slot.id]: { ...form, opens_at: e.target.value } })}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Closes At (IST)</label>
+                            <input
+                              type="datetime-local"
+                              className="input-field"
+                              value={form.closes_at || ""}
+                              onChange={(e) => setForms({ ...forms, [slot.id]: { ...form, closes_at: e.target.value } })}
+                              required
+                            />
+                          </div>
+                          <div className="sm:col-span-2 flex gap-3">
+                            <button type="submit" disabled={savingSlot === slot.id} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
+                              <Save size={14} /> {savingSlot === slot.id ? "Saving…" : "Save Window"}
+                            </button>
+                            {win?.is_open && (
+                              <button
+                                type="button"
+                                onClick={() => handleCloseEarly(slot.id)}
+                                className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                              >
+                                <XCircle size={14} /> Close Early
+                              </button>
+                            )}
+                            {slot.is_adhoc && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSlot(slot.id)}
+                                className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                              >
+                                <Trash2 size={14} /> Remove
+                              </button>
+                            )}
+                          </div>
+                        </form>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>
