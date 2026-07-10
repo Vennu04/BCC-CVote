@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import playersPhoto from "../../assets/dashboard-backgrounds/players.jpg";
-import { UserPlus, Edit2, Check, X, Shield, Smartphone, SmartphoneNfc, KeyRound } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Shield, Smartphone, SmartphoneNfc, KeyRound, ChevronDown, ChevronUp } from "lucide-react";
 
 const AUCTION_CATEGORY_OPTIONS = [
   { value: "",                       label: "Not set" },
@@ -44,11 +44,18 @@ export default function ManagePeople() {
   const [editRow, setEditRow]     = useState({
     name: "", team_code: "", password: "", team_name: "",
     matches_scheduled: 0, matches_played: 0,
-    batting_average: "", strike_rate: "", bowling_average: "", economy: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [resettingDevice, setResettingDevice] = useState(null);
   const [resettingPassword, setResettingPassword] = useState(null);
+
+  // Bat Avg/Strike Rate/Bowl Avg/Economy live in their own expandable row
+  // (one "Stats" column + a chevron), separate from the main name/code/team
+  // edit above — same expand pattern Attendance.jsx already uses per-player,
+  // so admins have seen it before. Only one row's stats are open at a time.
+  const [expandedStatsId, setExpandedStatsId] = useState(null);
+  const [statsEditRow, setStatsEditRow] = useState({ batting_average: "", strike_rate: "", bowling_average: "", economy: "" });
+  const [savingStats, setSavingStats] = useState(false);
 
   const fetchPeople = async () => {
     try {
@@ -115,9 +122,33 @@ export default function ManagePeople() {
       team_name: p.team_name || "",
       matches_scheduled: p.matches_scheduled ?? 0,
       matches_played: p.matches_played ?? 0,
+    });
+  };
+
+  const toggleStats = (p) => {
+    if (expandedStatsId === p.id) {
+      setExpandedStatsId(null);
+      return;
+    }
+    setExpandedStatsId(p.id);
+    setStatsEditRow({
       batting_average: p.batting_average ?? "", strike_rate: p.strike_rate ?? "",
       bowling_average: p.bowling_average ?? "", economy: p.economy ?? "",
     });
+  };
+
+  const handleSaveStats = async (person) => {
+    setSavingStats(true);
+    try {
+      await api.put(`/admin/${endpointFor(person)}/${person.id}`, statsEditRow);
+      toast.success(`${person.name}'s stats updated`);
+      setExpandedStatsId(null);
+      fetchPeople();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update stats");
+    } finally {
+      setSavingStats(false);
+    }
   };
 
   const handleResetDevice = async (p) => {
@@ -255,10 +286,7 @@ export default function ManagePeople() {
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Played</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
-                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bat Avg</th>
-                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Strike Rate</th>
-                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bowl Avg</th>
-                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Economy</th>
+                  <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Stats</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Device</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
@@ -269,8 +297,10 @@ export default function ManagePeople() {
                   const isCaptain = p.role === "captain";
                   const meta = statusMeta(p.tournament_status);
                   const dash = <span className="text-gray-300 italic">—</span>;
+                  const statsExpanded = expandedStatsId === p.id;
                   return (
-                    <tr key={p.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
+                  <Fragment key={p.id}>
+                    <tr className={`border-b last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
                       <td className="px-4 py-3 text-gray-400 font-mono">{i + 1}</td>
 
                       {/* Code */}
@@ -384,60 +414,16 @@ export default function ManagePeople() {
                         </select>
                       </td>
 
-                      {/* Batting Average */}
-                      <td className="px-4 py-3 text-center">
-                        {isEditing ? (
-                          <input
-                            type="number" step="0.01" min="0"
-                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
-                            value={editRow.batting_average}
-                            onChange={e => setEditRow({ ...editRow, batting_average: e.target.value })}
-                          />
-                        ) : (
-                          <span className="text-gray-700">{p.batting_average ?? <span className="text-gray-400 italic">—</span>}</span>
-                        )}
-                      </td>
-
-                      {/* Strike Rate */}
-                      <td className="px-4 py-3 text-center">
-                        {isEditing ? (
-                          <input
-                            type="number" step="0.01" min="0"
-                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
-                            value={editRow.strike_rate}
-                            onChange={e => setEditRow({ ...editRow, strike_rate: e.target.value })}
-                          />
-                        ) : (
-                          <span className="text-gray-700">{p.strike_rate ?? <span className="text-gray-400 italic">—</span>}</span>
-                        )}
-                      </td>
-
-                      {/* Bowling Average */}
-                      <td className="px-4 py-3 text-center">
-                        {isEditing ? (
-                          <input
-                            type="number" step="0.01" min="0"
-                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
-                            value={editRow.bowling_average}
-                            onChange={e => setEditRow({ ...editRow, bowling_average: e.target.value })}
-                          />
-                        ) : (
-                          <span className="text-gray-700">{p.bowling_average ?? <span className="text-gray-400 italic">—</span>}</span>
-                        )}
-                      </td>
-
-                      {/* Economy */}
-                      <td className="px-4 py-3 text-center">
-                        {isEditing ? (
-                          <input
-                            type="number" step="0.01" min="0"
-                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
-                            value={editRow.economy}
-                            onChange={e => setEditRow({ ...editRow, economy: e.target.value })}
-                          />
-                        ) : (
-                          <span className="text-gray-700">{p.economy ?? <span className="text-gray-400 italic">—</span>}</span>
-                        )}
+                      {/* Stats — collapsed to one cell, expands to an editable row below */}
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => toggleStats(p)}
+                          className="flex items-center gap-1.5 text-xs text-gray-700 hover:text-cricket-navy whitespace-nowrap"
+                          title="View / edit batting & bowling stats"
+                        >
+                          <span>Bat {p.batting_average ?? "—"}/{p.strike_rate ?? "—"} · Bowl {p.bowling_average ?? "—"}/{p.economy ?? "—"}</span>
+                          {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
                       </td>
 
                       {/* Device lock status */}
@@ -491,7 +477,7 @@ export default function ManagePeople() {
                             <button
                               onClick={() => startEdit(p)}
                               className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                              title="Edit name / code / stats"
+                              title="Edit name / code"
                             >
                               <Edit2 size={14} />
                             </button>
@@ -508,6 +494,65 @@ export default function ManagePeople() {
                         </div>
                       </td>
                     </tr>
+
+                    {statsExpanded && (
+                      <tr className="border-b bg-blue-50/40">
+                        <td colSpan={12} className="px-4 py-3">
+                          <div className="flex flex-wrap items-end gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Bat Avg</label>
+                              <input
+                                type="number" step="0.01" min="0"
+                                className="input-field py-1.5 text-sm w-24"
+                                value={statsEditRow.batting_average}
+                                onChange={e => setStatsEditRow({ ...statsEditRow, batting_average: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Strike Rate</label>
+                              <input
+                                type="number" step="0.01" min="0"
+                                className="input-field py-1.5 text-sm w-24"
+                                value={statsEditRow.strike_rate}
+                                onChange={e => setStatsEditRow({ ...statsEditRow, strike_rate: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Bowl Avg</label>
+                              <input
+                                type="number" step="0.01" min="0"
+                                className="input-field py-1.5 text-sm w-24"
+                                value={statsEditRow.bowling_average}
+                                onChange={e => setStatsEditRow({ ...statsEditRow, bowling_average: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Economy</label>
+                              <input
+                                type="number" step="0.01" min="0"
+                                className="input-field py-1.5 text-sm w-24"
+                                value={statsEditRow.economy}
+                                onChange={e => setStatsEditRow({ ...statsEditRow, economy: e.target.value })}
+                              />
+                            </div>
+                            <button
+                              onClick={() => handleSaveStats(p)}
+                              disabled={savingStats}
+                              className="btn-primary text-xs py-1.5 px-4"
+                            >
+                              {savingStats ? "Saving…" : "Save Stats"}
+                            </button>
+                            <button
+                              onClick={() => setExpandedStatsId(null)}
+                              className="btn-secondary text-xs py-1.5 px-4"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                   );
                 })}
               </tbody>
