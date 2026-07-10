@@ -141,7 +141,7 @@ export default function AdminDashboard() {
 
         {/* Quick links */}
         <div className="flex gap-3 mt-6 flex-wrap">
-          <Link to="/admin/people" className="btn-secondary text-sm py-2 px-4">Manage People</Link>
+          <Link to="/admin/players" className="btn-secondary text-sm py-2 px-4">Manage Players</Link>
           <Link to="/admin/window" className="btn-secondary text-sm py-2 px-4">Voting Windows</Link>
         </div>
       </div>
