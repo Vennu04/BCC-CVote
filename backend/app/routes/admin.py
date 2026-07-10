@@ -40,7 +40,12 @@ def _user_to_dict(u):
         "attendance_count": u.get("attendance_count", 0),
         "knockout_eligible": u.get("knockout_eligible", False),
         "batting_average": u.get("batting_average"),
+        "strike_rate": u.get("strike_rate"),
         "bowling_average": u.get("bowling_average"),
+        "economy": u.get("economy"),
+        "matches_present": u.get("matches_present"),
+        "total_matches": u.get("total_matches"),
+        "attendance_percentage": u.get("attendance_percentage"),
         "must_change_password": u.get("must_change_password", False),
         "device_locked": bool(u.get("device_id")),
         "created_at": format_ist(u.get("created_at")),
@@ -285,6 +290,16 @@ def update_captain(captain_id):
             updates["bowling_average"] = _parse_average(data["bowling_average"])
         except ValueError as e:
             return jsonify({"error": f"bowling_average {e}"}), 400
+    if "strike_rate" in data:
+        try:
+            updates["strike_rate"] = _parse_average(data["strike_rate"])
+        except ValueError as e:
+            return jsonify({"error": f"strike_rate {e}"}), 400
+    if "economy" in data:
+        try:
+            updates["economy"] = _parse_average(data["economy"])
+        except ValueError as e:
+            return jsonify({"error": f"economy {e}"}), 400
     if "matches_scheduled" in data:
         updates["matches_scheduled"] = max(0, int(data["matches_scheduled"]))
     if "matches_played" in data:
@@ -613,6 +628,16 @@ def update_player(player_id):
             updates["bowling_average"] = _parse_average(data["bowling_average"])
         except ValueError as e:
             return jsonify({"error": f"bowling_average {e}"}), 400
+    if "strike_rate" in data:
+        try:
+            updates["strike_rate"] = _parse_average(data["strike_rate"])
+        except ValueError as e:
+            return jsonify({"error": f"strike_rate {e}"}), 400
+    if "economy" in data:
+        try:
+            updates["economy"] = _parse_average(data["economy"])
+        except ValueError as e:
+            return jsonify({"error": f"economy {e}"}), 400
     if "auction_category" in data:
         if data["auction_category"] not in AUCTION_CATEGORIES:
             return jsonify({"error": f"auction_category must be one of {sorted(AUCTION_CATEGORIES)}"}), 400

@@ -20,7 +20,7 @@ export default function ManagePlayers() {
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState(null);
   const [form, setForm]           = useState({ name: "", team_code: "", password: "" });
-  const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", batting_average: "", bowling_average: "" });
+  const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", batting_average: "", strike_rate: "", bowling_average: "", economy: "" });
   const [submitting, setSubmitting] = useState(false);
   const [resettingDevice, setResettingDevice] = useState(null);
   const [resettingPassword, setResettingPassword] = useState(null);
@@ -83,7 +83,8 @@ export default function ManagePlayers() {
     setEditId(p.id);
     setEditRow({
       name: p.name, team_code: p.team_code, password: "",
-      batting_average: p.batting_average ?? "", bowling_average: p.bowling_average ?? "",
+      batting_average: p.batting_average ?? "", strike_rate: p.strike_rate ?? "",
+      bowling_average: p.bowling_average ?? "", economy: p.economy ?? "",
     });
   };
 
@@ -197,7 +198,9 @@ export default function ManagePlayers() {
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Role</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Auction Category</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bat Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Strike Rate</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Bowl Avg</th>
+                  <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Economy</th>
                   <th className="text-center px-4 py-3 font-semibold whitespace-nowrap">Device</th>
                   <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Actions</th>
                 </tr>
@@ -275,6 +278,20 @@ export default function ManagePlayers() {
                         )}
                       </td>
 
+                      {/* Strike Rate */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.strike_rate}
+                            onChange={e => setEditRow({ ...editRow, strike_rate: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{p.strike_rate ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
                       {/* Bowling Average */}
                       <td className="px-4 py-3 text-center">
                         {isEditing ? (
@@ -286,6 +303,20 @@ export default function ManagePlayers() {
                           />
                         ) : (
                           <span className="text-gray-700">{p.bowling_average ?? <span className="text-gray-400 italic">—</span>}</span>
+                        )}
+                      </td>
+
+                      {/* Economy */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            className="input-field py-1.5 text-sm text-center w-20 mx-auto"
+                            value={editRow.economy}
+                            onChange={e => setEditRow({ ...editRow, economy: e.target.value })}
+                          />
+                        ) : (
+                          <span className="text-gray-700">{p.economy ?? <span className="text-gray-400 italic">—</span>}</span>
                         )}
                       </td>
 

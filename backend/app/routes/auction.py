@@ -20,12 +20,18 @@ SESSION_MINUTES = 25
 MIN_AUCTION_POOL_SIZE = 20  # a side can field 10, per admin's call — no longer requiring a full XI
 MAX_ROSTER_SIZE_PER_SIDE = 15
 
-# Release order within a category is driven by batting/bowling average, not admin
+# Release order within a category is driven by batting/bowling stats, not admin
 # choice (admin can only pick WHICH CATEGORY to release from next, never which
-# player within it — see release_player). Flip this to "asc" to release weakest
-# average first instead — the actual rule is still undecided, this is a swappable
-# placeholder until real averages are backfilled and a direction is chosen.
-RELEASE_ORDER_DIRECTION = "desc"
+# player within it — see release_player).
+#
+# extra_power_batsman is graded on batting only (this is the one group that's
+# explicitly a pure-batting pool). The other three groups (extra_power_allrounder,
+# power, classic) are graded on both skills combined via a direct signed sum:
+# battingAverage - bowlingAverage as the primary key, strikeRate - economy as
+# the secondary key (admin's explicit call — simple to reason about, though it
+# means a stat with larger typical magnitude has more pull on the ranking).
+# Any remaining tie is broken by attendance_percentage descending.
+BATSMAN_ONLY_GROUPS = ("extra_power_batsman",)
 
 
 def _get_active_window(slot_id):
@@ -110,52 +116,82 @@ def _check_leftover_award(auction, group):
         return  # only one side can hit quota first — nothing left to check for this group
 
 
-def _release_rank_score(player, users_map):
-    """The stat that decides release order for this player's category. Extra
-    Power groups already say which skill they're for; Power/Classic aren't
-    skill-specific so batting average is used as the default ranking stat —
-    swap this if a different stat should drive those two instead."""
+def _release_rank_key(player, users_map):
+    """Sort key for one candidate within a category's release queue. Returns
+    (has_score, primary, secondary, attendance) where every component sorts
+    descending (higher = released sooner) — has_score alone already pushes
+    players with no usable stats to the back, ahead of the by-name fallback
+    ordered() applies to that subgroup.
+
+    extra_power_batsman: battingAverage, then strikeRate. Bowling is never
+    consulted for this group — it's explicitly a pure-batting pool.
+
+    extra_power_allrounder / power / classic: (battingAverage - bowlingAverage)
+    as the primary key, (strikeRate - economy) as the secondary — both skills
+    have to be present to produce a score; a player with only one half of the
+    pair (e.g. a specialist batsman with no bowling record) falls into the
+    no-score/by-name group for these three, same as a player with neither.
+    """
     user = users_map.get(player["user_id"], {})
     bat = user.get("batting_average")
     bowl = user.get("bowling_average")
-    if player["category"] == "extra_power_batsman":
-        return bat
-    if player["category"] == "extra_power_allrounder":
-        vals = [v for v in (bat, bowl) if v is not None]
-        return (sum(vals) / len(vals)) if vals else None
-    return bat  # power, classic
+    sr = user.get("strike_rate")
+    econ = user.get("economy")
+    attendance = user.get("attendance_percentage")
+    attendance_key = attendance if attendance is not None else -1
+
+    if player["category"] in BATSMAN_ONLY_GROUPS:
+        if bat is None:
+            return None
+        primary = bat
+        secondary = sr if sr is not None else float("-inf")
+    else:
+        if bat is None or bowl is None:
+            return None
+        primary = bat - bowl
+        secondary = (sr if sr is not None else 0) - (econ if econ is not None else 0)
+
+    return (primary, secondary, attendance_key)
 
 
-def _next_release_candidate(auction, category, users_map):
-    """Automatically picks who goes up for bidding next in this category —
-    admin only ever chooses the category, never the specific player, so there's
-    no room for admin to favor either captain by release order. Ranked by
-    _release_rank_score (RELEASE_ORDER_DIRECTION); players without an average
-    yet sort after everyone who has one, by name. Players deprioritized by a
-    mutual double-drop (see drop_player) are held back to the very end of the
-    category, after every other player has already been offered."""
-    candidates = list(mongo.db.auction_players.find({
-        "auction_id": str(auction["_id"]), "category": category, "status": "available",
-    }))
-    if not candidates:
-        return None
+def get_next_player_in_category(candidates, category, users_map):
+    """Pure ranking function: given the pool of still-available auction_player
+    docs for ONE category (already filtered by caller — no Mongo access here,
+    so this is unit-testable on its own), returns whichever one should be
+    released next, or None if the pool is empty.
 
+    Ranking: _release_rank_key descending (primary stat, then secondary stat,
+    then attendance_percentage as the final tie-break); players with no usable
+    score sort after every scored player, ordered by name. Players flagged
+    `deprioritized` (both captains passed on them at the base price — see
+    drop_player) are held back to the very end of the category's queue,
+    after every other player has already been offered, ranked the same way
+    within that held-back group.
+    """
     def ordered(group):
-        scored = [(p, _release_rank_score(p, users_map)) for p in group]
-        with_score = sorted(
-            (x for x in scored if x[1] is not None),
-            key=lambda x: x[1], reverse=(RELEASE_ORDER_DIRECTION == "desc"),
-        )
-        without_score = sorted(
-            (x for x in scored if x[1] is None),
-            key=lambda x: users_map.get(x[0]["user_id"], {}).get("name", ""),
-        )
-        return [p for p, _ in (*with_score, *without_score)]
+        scored = []
+        unscored = []
+        for p in group:
+            key = _release_rank_key({**p, "category": category}, users_map)
+            (scored if key is not None else unscored).append((p, key))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        unscored.sort(key=lambda x: users_map.get(x[0]["user_id"], {}).get("name", ""))
+        return [p for p, _ in (*scored, *unscored)]
 
     normal = ordered([p for p in candidates if not p.get("deprioritized")])
     held_back = ordered([p for p in candidates if p.get("deprioritized")])
     queue = normal + held_back
     return queue[0] if queue else None
+
+
+def _next_release_candidate(auction, category, users_map):
+    """Mongo-querying wrapper around get_next_player_in_category — admin only
+    ever chooses the category, never the specific player, so there's no room
+    for admin to favor either captain by release order."""
+    candidates = list(mongo.db.auction_players.find({
+        "auction_id": str(auction["_id"]), "category": category, "status": "available",
+    }))
+    return get_next_player_in_category(candidates, category, users_map)
 
 
 def _apply_timeout_fallback(auction):
