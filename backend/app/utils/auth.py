@@ -30,7 +30,14 @@ def admin_required(fn):
     def wrapper(*args, **kwargs):
         verify_jwt_in_request()
         identity = get_jwt_identity()
-        user = mongo.db.users.find_one({"_id": ObjectId(identity), "role": "admin", "is_active": True})
+        # role=="admin" is the normal case; a captain/player can also be
+        # granted admin capability via is_admin=True without losing their
+        # own login/team_code/voting ability — the reverse of the existing
+        # is_player flag that lets an admin account also vote.
+        user = mongo.db.users.find_one({
+            "_id": ObjectId(identity), "is_active": True,
+            "$or": [{"role": "admin"}, {"is_admin": True}],
+        })
         if not user or not _token_version_matches(user):
             return jsonify({"error": "Admin access required"}), 403
         return fn(*args, **kwargs)

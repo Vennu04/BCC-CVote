@@ -15,6 +15,11 @@ def _user_summary(user):
         "team_code": user["team_code"],
         "role": user["role"],
         "is_player": True if user["role"] == "captain" else user.get("is_player", False),
+        # Grants admin capability to a captain/player without changing their
+        # primary role — they keep their own login and voting ability, and
+        # still land on their own dashboard by default; the Admin nav links
+        # just become reachable too (see admin_required).
+        "is_admin": user.get("is_admin", False),
         "must_change_password": user.get("must_change_password", False),
     }
     if user["role"] == "captain":

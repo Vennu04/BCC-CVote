@@ -32,6 +32,7 @@ def _user_to_dict(u):
         "role": u["role"],
         "is_active": u.get("is_active", True),
         "is_player": is_player,
+        "is_admin": u.get("is_admin", False),
         "matches_scheduled": u.get("matches_scheduled", 0),
         "matches_played": u.get("matches_played", 0),
         "tournament_status": u.get("tournament_status", "not_played"),

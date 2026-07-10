@@ -27,7 +27,22 @@ export function ProtectedRoute({ children }) {
 }
 
 export function AdminRoute({ children }) {
-  return <RequireAuth role="admin">{children}</RequireAuth>;
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  // role=="admin" is the normal case; a captain/player flagged is_admin=True
+  // (see AuthContext's isAdmin) may reach admin routes too, without losing
+  // their own dashboard/login — the reverse of PlayerRoute's admin+is_player
+  // exception below.
+  if (user.role !== "admin" && !user.is_admin) {
+    return <Navigate to={homePathFor(user)} replace />;
+  }
+  // A default-password account must reset it before touching anything else.
+  if (user.must_change_password && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
+  return children;
 }
 
 export function CaptainRoute({ children }) {

@@ -68,10 +68,14 @@ export default function Navbar() {
               </Link>
             </>
           )}
-          {isAdmin && isVoter && (
-            // Plain captains/players already land here via the logo link
-            // (homePathFor); an admin's logo always goes to /admin instead,
-            // so they need an explicit way in.
+          {user?.role === "admin" && isVoter && (
+            // Specifically for role=="admin" (flagged is_player) — their logo
+            // link goes to /admin, so they need an explicit way to their own
+            // vote via /player/dashboard. A captain/player flagged is_admin
+            // is the reverse case: their logo link already goes to their own
+            // dashboard (homePathFor is unchanged), so they don't need this —
+            // and /player/dashboard would be wrong for one whose role is
+            // actually "captain".
             <Link to="/player/dashboard" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
               <UserCircle size={15} /> My Votes
             </Link>
