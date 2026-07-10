@@ -185,6 +185,22 @@ redeploys both images.
   voter — without becoming a separate captain/player account or gaining a normal player's
   restrictions. Bootstrapped once via `backend/scripts/flag_admin_voters.py` against named
   `team_code`s (never by name, to avoid mismatching real players who share a name).
+- **Self-service reset from the login page**: a "Reset Password" link next to the password
+  field leads to a public `/reset-password` form (team code + current password + new
+  password) — for anyone who remembers their current password but isn't/can't get logged
+  in. Same validation and current-password check as the in-app change-password flow, just
+  reachable without a session; a wrong team code and a wrong password return the identical
+  error so it can't be used to probe which codes are real. Admin accounts are excluded, same
+  as every other password-reset path. Forgetting the current password entirely still falls
+  back to an admin-assisted reset.
+- **Bulk credential regeneration**: `backend/scripts/regenerate_credentials.py` is a one-off
+  migration that gives every active captain/player a fresh random 4-letter team_code and
+  8-character password in one pass, sets the forced-change flag, invalidates existing
+  sessions, and unsets device bindings. The generated passwords are never stored anywhere —
+  they're written once to STDOUT as a CSV (progress/summary go to STDERR instead), meant to
+  be redirected straight into the file admin distributes:
+  `docker exec bcc-backend python scripts/regenerate_credentials.py > credentials.csv`.
+  Never touches admin accounts.
 
 ---
 
