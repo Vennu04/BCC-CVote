@@ -17,8 +17,15 @@ const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power"
 // excludeIds lets the auction setup screen preview what create_auction will
 // actually see once two captains are picked (they're excluded from their own
 // auction's pool the same way the backend excludes them).
+//
+// Captains are grouped by auction_category exactly like players — create_auction
+// (backend) counts every available voter by category regardless of role, and
+// only excludes the two captains actually running that draft (via excludeIds).
+// A captain-role person sitting in a separate "Captains" bucket here used to
+// make the per-category odd/even counts (and the ⚠️ odd warning) diverge from
+// what the backend would actually see, silently hiding imbalance until
+// create_auction rejected it.
 export function confirmedForSlot(voteMatrix, slotId, excludeIds) {
-  const captains = { confirmed: [], pending: [] };
   const categories = {};
   CATEGORY_ORDER.forEach((cat) => { categories[cat] = { confirmed: [], pending: [] }; });
   let uncategorizedConfirmed = 0;
@@ -30,11 +37,6 @@ export function confirmedForSlot(voteMatrix, slotId, excludeIds) {
     const vote = row.votes.find((v) => v.slot_id === slotId);
     const isConfirmed = vote?.availability === "available";
 
-    if (person.role === "captain") {
-      (isConfirmed ? captains.confirmed : captains.pending).push(person);
-      return;
-    }
-
     const cat = person.auction_category;
     if (cat && categories[cat]) {
       (isConfirmed ? categories[cat].confirmed : categories[cat].pending).push(person);
@@ -44,11 +46,10 @@ export function confirmedForSlot(voteMatrix, slotId, excludeIds) {
   });
 
   const totalConfirmed =
-    captains.confirmed.length +
     CATEGORY_ORDER.reduce((sum, cat) => sum + categories[cat].confirmed.length, 0) +
     uncategorizedConfirmed;
 
-  return { captains, categories, uncategorizedConfirmed, totalConfirmed };
+  return { categories, uncategorizedConfirmed, totalConfirmed };
 }
 
 function NameChips({ people, tone }) {
@@ -62,7 +63,7 @@ function NameChips({ people, tone }) {
             tone === "pending" ? "bg-gray-50 text-gray-400 border border-gray-200" : "bg-gray-100 text-gray-700"
           }`}
         >
-          {p.name}{p.team_name ? ` — ${p.team_name}` : ""}
+          {p.name}{p.role === "captain" ? " (C)" : ""}{p.team_name ? ` — ${p.team_name}` : ""}
         </span>
       ))}
     </div>
@@ -70,17 +71,16 @@ function NameChips({ people, tone }) {
 }
 
 // Renders live turnout for one slot, grouped exactly like the auction pool
-// view: captains separated out at the top, then the 4 player categories in a
-// fixed order (a category with zero confirmed still shows up, so admin gets a
-// stable layout to compare against). Odd/missing-category flags mirror the
-// same wording admin/Auction.jsx already uses for create_auction's quota check.
+// view: the 4 auction categories in a fixed order, captains and players mixed
+// in together by category (a category with zero confirmed still shows up, so
+// admin gets a stable layout to compare against). Odd/missing-category flags
+// mirror the same wording admin/Auction.jsx already uses for create_auction's
+// quota check.
 export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, compact }) {
   const [showPending, setShowPending] = useState(false);
   const data = useMemo(() => confirmedForSlot(voteMatrix, slotId, excludeIds), [voteMatrix, slotId, excludeIds]);
 
-  const pendingTotal =
-    data.captains.pending.length +
-    CATEGORY_ORDER.reduce((sum, cat) => sum + data.categories[cat].pending.length, 0);
+  const pendingTotal = CATEGORY_ORDER.reduce((sum, cat) => sum + data.categories[cat].pending.length, 0);
 
   return (
     <div className={compact ? "" : "rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"}>
@@ -103,18 +103,6 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
           </button>
         )}
       </div>
-
-      {data.captains.confirmed.length > 0 || data.captains.pending.length > 0 ? (
-        <div className="mb-2.5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-            Captains <span className="text-gray-400 normal-case font-normal">({data.captains.confirmed.length} confirmed)</span>
-          </p>
-          <NameChips people={data.captains.confirmed} />
-          {showPending && data.captains.pending.length > 0 && (
-            <div className="mt-1"><NameChips people={data.captains.pending} tone="pending" /></div>
-          )}
-        </div>
-      ) : null}
 
       <div className={compact ? "grid grid-cols-2 gap-2" : "space-y-2.5"}>
         {CATEGORY_ORDER.map((cat) => {
