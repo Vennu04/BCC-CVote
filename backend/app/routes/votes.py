@@ -207,13 +207,18 @@ def not_available_week():
     return jsonify({"message": f"Marked not available for {updated} match(es)", "updated": updated, "skipped": skipped})
 
 
-# ── Vote summary — admin only ──────────────────────────────────────────────────
+# ── Vote summary — counts for everyone, named attendance once you've voted ────
 
 @votes_bp.route("/votes/summary", methods=["GET"])
 @jwt_required()
 def vote_summary():
+    user = get_current_user()
+    uid = str(user["_id"])
+
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
-    total_captains = mongo.db.users.count_documents({"is_active": True, "role": {"$in": ["captain", "player"]}})
+    voters = list(mongo.db.users.find({"is_active": True, "role": {"$in": ["captain", "player"]}}))
+    total_captains = len(voters)
+    voter_names = {str(v["_id"]): v["name"] for v in voters}
 
     summary = []
     for slot in slots:
@@ -221,6 +226,21 @@ def vote_summary():
         window = _get_active_window(sid)
         slot_votes = list(mongo.db.votes.find({"slot_id": sid, "window_id": str(window["_id"])})) if window else []
         total_voted = len(slot_votes)
+
+        # Named attendance is only revealed to a player once they've cast
+        # their own vote for this slot's window -- otherwise just the counts.
+        you_voted = window is not None and any(v["captain_id"] == uid for v in slot_votes)
+        named_attendance = None
+        if you_voted:
+            votes_by_voter = {v["captain_id"]: v["availability"] for v in slot_votes}
+            named_attendance = sorted(
+                (
+                    {"name": voter_names[voter_id], "availability": votes_by_voter.get(voter_id)}
+                    for voter_id in voter_names
+                ),
+                key=lambda a: (a["availability"] is None, a["name"]),
+            )
+
         summary.append({
             "slot": _serialize_slot(slot),
             "window": _window_info(window),
@@ -232,6 +252,8 @@ def vote_summary():
             },
             "total_voted": total_voted,
             "total_captains": total_captains,
+            "you_voted": you_voted,
+            "attendance": named_attendance,
         })
 
     return jsonify({"summary": summary})
