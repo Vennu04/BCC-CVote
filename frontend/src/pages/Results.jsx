@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 import Navbar from "../components/Navbar";
-import { BarChart2 } from "lucide-react";
+import { BarChart2, Lock, ChevronDown, ChevronUp, Users } from "lucide-react";
 
 const AVAILABILITY_COLOR = {
   available:     "bg-green-500",
@@ -10,9 +10,42 @@ const AVAILABILITY_COLOR = {
   no_response:   "bg-gray-200",
 };
 
+const AVAILABILITY_LABEL = {
+  available:     "Available",
+  not_available: "Not Available",
+  maybe:         "Maybe",
+  no_response:   "No Response",
+};
+
+const AVAILABILITY_ORDER = ["available", "maybe", "not_available", "no_response"];
+
+function AttendanceList({ attendance }) {
+  const groups = AVAILABILITY_ORDER.map((status) => ({
+    status,
+    names: attendance.filter((a) => (a.availability || "no_response") === status).map((a) => a.name),
+  })).filter((g) => g.names.length > 0);
+
+  return (
+    <div className="mt-2 space-y-2">
+      {groups.map((g) => (
+        <div key={g.status} className="text-xs">
+          <span className="flex items-center gap-1 font-medium text-gray-600 mb-1">
+            <span className={`w-2 h-2 rounded-full inline-block ${AVAILABILITY_COLOR[g.status]}`} />
+            {AVAILABILITY_LABEL[g.status]} ({g.names.length})
+          </span>
+          <p className="text-gray-500 pl-3">{g.names.join(", ")}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Results() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState({});
+
+  const toggleExpanded = (slotId) => setExpanded((prev) => ({ ...prev, [slotId]: !prev[slotId] }));
 
   useEffect(() => {
     api.get("/votes/summary")
@@ -48,7 +81,7 @@ export default function Results() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {summary.map((item) => {
-              const { slot, counts, total_captains, total_voted, window } = item;
+              const { slot, counts, total_captains, total_voted, window, you_voted, attendance } = item;
               const pct = (v) => total_captains > 0 ? Math.round((v / total_captains) * 100) : 0;
 
               return (
@@ -89,6 +122,27 @@ export default function Results() {
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />{counts.not_available} Not Available</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" />{counts.no_response} No Response</span>
                   </div>
+
+                  {you_voted ? (
+                    attendance && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(slot.id)}
+                          className="flex items-center gap-1 text-xs font-medium text-pitch-600 hover:text-pitch-700"
+                        >
+                          <Users size={13} />
+                          {expanded[slot.id] ? "Hide players" : "View players"}
+                          {expanded[slot.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                        {expanded[slot.id] && <AttendanceList attendance={attendance} />}
+                      </div>
+                    )
+                  ) : window ? (
+                    <p className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400 flex items-center gap-1">
+                      <Lock size={12} /> Vote for this match to see who else is available
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
