@@ -51,8 +51,8 @@ export default function Navbar() {
               <Link to="/admin" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 <LayoutDashboard size={15} /> Admin
               </Link>
-              <Link to="/admin/people" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
-                <Users size={15} /> People
+              <Link to="/admin/players" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+                <Users size={15} /> Players
               </Link>
               <Link to="/admin/window" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 <Settings size={15} /> Window
