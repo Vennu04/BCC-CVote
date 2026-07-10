@@ -97,6 +97,37 @@ def _reset_password(user_id, role):
     return jsonify({"message": "Password reset", "temp_password": temp_password})
 
 
+def _increment_attendance(user_id, role):
+    """+1 attendance for one player/captain, independent of everyone else —
+    each person's own matches_present and total_matches both advance by 1 on
+    their own click, there's no shared "this match happened" event tying
+    multiple people's numbers together. attendance_percentage is recomputed
+    from the two right away so it's never stale relative to the counts it's
+    derived from."""
+    target = mongo.db.users.find_one({"_id": ObjectId(user_id), "role": role})
+    if not target:
+        return jsonify({"error": f"{role.title()} not found"}), 404
+
+    matches_present = (target.get("matches_present") or 0) + 1
+    total_matches = (target.get("total_matches") or 0) + 1
+    attendance_percentage = round(matches_present / total_matches * 100, 2)
+
+    mongo.db.users.update_one(
+        {"_id": target["_id"]},
+        {"$set": {
+            "matches_present": matches_present,
+            "total_matches": total_matches,
+            "attendance_percentage": attendance_percentage,
+        }},
+    )
+    return jsonify({
+        "message": f"{target['name']}'s attendance updated",
+        "matches_present": matches_present,
+        "total_matches": total_matches,
+        "attendance_percentage": attendance_percentage,
+    })
+
+
 def _parse_average(value):
     """None clears the stat (not yet recorded); anything else must be a
     non-negative number — a captain's release order shouldn't silently break
@@ -368,6 +399,12 @@ def reset_captain_password(captain_id):
     return _reset_password(captain_id, "captain")
 
 
+@admin_bp.route("/captains/<captain_id>/attendance/increment", methods=["POST"])
+@admin_required
+def increment_captain_attendance(captain_id):
+    return _increment_attendance(captain_id, "captain")
+
+
 # ── Players management ──────────────────────────────────────────────────────────
 
 @admin_bp.route("/players", methods=["GET"])
@@ -400,7 +437,7 @@ def _attendance_settings():
     doc = mongo.db.settings.find_one({"_id": ATTENDANCE_SETTINGS_ID})
     return {
         "total_matches_organized": mongo.db.league_matches.count_documents({}),
-        "knockout_cutoff": doc.get("knockout_cutoff", 28) if doc else 28,
+        "knockout_cutoff": doc.get("knockout_cutoff", 14) if doc else 14,
     }
 
 
@@ -697,6 +734,12 @@ def reset_player_device(player_id):
 @admin_required
 def reset_player_password(player_id):
     return _reset_password(player_id, "player")
+
+
+@admin_bp.route("/players/<player_id>/attendance/increment", methods=["POST"])
+@admin_required
+def increment_player_attendance(player_id):
+    return _increment_attendance(player_id, "player")
 
 
 # ── Ad-hoc match slots ───────────────────────────────────────────────────────────

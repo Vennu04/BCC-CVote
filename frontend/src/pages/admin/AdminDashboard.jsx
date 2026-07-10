@@ -11,6 +11,7 @@ import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "
 export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -24,6 +25,17 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // fetchData alone gave no feedback on click — it silently refetches, so if
+  // nothing on screen happens to change, admin has no way to tell the button
+  // did anything at all. Wrapping it with a spinner + toast makes the refresh
+  // visibly happen every time, whether or not the underlying numbers moved.
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    toast.success("Dashboard refreshed");
+    setRefreshing(false);
+  };
 
   const downloadFile = async (endpoint, filenamePrefix, ext) => {
     try {
@@ -75,8 +87,8 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={fetchData} className="btn-secondary flex items-center gap-1.5 text-sm py-2 px-4">
-              <RefreshCw size={15} /> Refresh
+            <button onClick={handleRefresh} disabled={refreshing} className="btn-secondary flex items-center gap-1.5 text-sm py-2 px-4 disabled:opacity-50">
+              <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> {refreshing ? "Refreshing…" : "Refresh"}
             </button>
             <Link to="/admin/window" className="btn-secondary flex items-center gap-1.5 text-sm py-2 px-4">
               <Settings size={15} /> Manage Windows
