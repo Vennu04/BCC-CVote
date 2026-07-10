@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/AuthContext";
 import { ProtectedRoute, AdminRoute, CaptainRoute, PlayerRoute, homePathFor } from "./components/ProtectedRoute";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import CaptainDashboard from "./pages/CaptainDashboard";
 import PlayerDashboard from "./pages/PlayerDashboard";
 import Results from "./pages/Results";
@@ -37,6 +38,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
 
         <Route path="/captain/dashboard" element={<CaptainRoute><CaptainDashboard /></CaptainRoute>} />

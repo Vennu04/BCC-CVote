@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "../components/ProtectedRoute";
 import toast from "react-hot-toast";
@@ -64,7 +64,12 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">Password</label>
+              <Link to="/reset-password" className="text-xs text-pitch-600 hover:text-pitch-700 font-medium">
+                Reset Password
+              </Link>
+            </div>
             <input
               type="password"
               className="input-field"

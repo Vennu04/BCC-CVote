@@ -110,6 +110,40 @@ def change_password():
     return jsonify({"message": "Password updated", "access_token": new_token})
 
 
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password_public():
+    """Same self-service 'change password with current password' flow as
+    /change-password, just reachable straight from the login screen without
+    needing a valid session first — for a captain/player who remembers their
+    current password but isn't (or can't get) logged in. Admin accounts are
+    excluded, and a wrong team_code gets the exact same error as a wrong
+    password so this can't be used to probe which codes are real."""
+    data = request.get_json(silent=True) or {}
+    team_code = (data.get("team_code") or "").strip().upper()
+    current_password = data.get("current_password") or ""
+    new_password = data.get("new_password") or ""
+
+    generic_error = ("Team code or current password is incorrect", 401)
+
+    user = mongo.db.users.find_one({"team_code": team_code, "is_active": True})
+    if not user or user["role"] == "admin" or not check_password_hash(user["password_hash"], current_password):
+        msg, status = generic_error
+        return jsonify({"error": msg}), status
+
+    password_error = validate_password(new_password)
+    if password_error:
+        return jsonify({"error": password_error}), 400
+    if check_password_hash(user["password_hash"], new_password):
+        return jsonify({"error": "New password must be different from your current password"}), 400
+
+    mongo.db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": generate_password_hash(new_password), "must_change_password": False},
+         "$inc": {"token_version": 1}},
+    )
+    return jsonify({"message": "Password updated — sign in with your new password"})
+
+
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def me():
