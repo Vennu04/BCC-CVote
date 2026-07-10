@@ -11,6 +11,13 @@ class Config:
     JWT_HEADER_TYPE = "Bearer"
     MONGO_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/bcc_cvote")
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    # Temporary escape hatch — flip to "false" (via bcc-cvote-config configmap
+    # in prod) to let captains/players log in from any device without being
+    # locked to the first one, e.g. while they're testing the app across
+    # multiple phones/browsers. Defaults on (the normal, enforced behavior);
+    # this is meant to be flipped back once that testing period is over, not
+    # a permanent removal of the feature.
+    DEVICE_LOCK_ENABLED = os.environ.get("DEVICE_LOCK_ENABLED", "true").lower() == "true"
     # IST timezone (UTC+5:30)
     TIMEZONE = "Asia/Kolkata"
     # Default voting window schedule (IST)

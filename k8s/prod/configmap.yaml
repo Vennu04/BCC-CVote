@@ -10,3 +10,11 @@ data:
   # Same one-time manual step as ingress.yaml — replace with the real value
   # from `terraform output app_url` after the first apply.
   FRONTEND_URL: "https://13-206-106-36.sslip.io"
+  # TEMPORARY (2026-07-10): disabled while players test the app across
+  # multiple devices they own — a device switch would otherwise require an
+  # admin-triggered reset-device. Flip back to "true" (or delete this line,
+  # "true" is the code default) once that testing window is over. This
+  # ConfigMap isn't part of prod-cd.yml's auto-apply, so a change here needs
+  # `kubectl apply -f k8s/prod/configmap.yaml` + a backend rollout restart to
+  # actually take effect (envFrom values are only read at container start).
+  DEVICE_LOCK_ENABLED: "false"

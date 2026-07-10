@@ -1,4 +1,5 @@
 """Requirement #6 (forced password reset) and #3/#4 (device lock + admin reset)."""
+from app import mongo
 
 
 def test_login_rejects_wrong_password(client, make_user):
@@ -77,6 +78,26 @@ def test_login_from_different_device_is_rejected(client, make_user):
 
     res = client.post("/api/auth/login", json={"team_code": "CAP1", "password": "cap1", "device_id": "device-B"})
     assert res.status_code == 403
+
+
+def test_device_lock_disabled_allows_switching_devices_freely(client, make_user, app):
+    # Temporary escape hatch (DEVICE_LOCK_ENABLED=false) for e.g. players
+    # testing across multiple devices — see config.py.
+    app.config["DEVICE_LOCK_ENABLED"] = False
+    try:
+        make_user("captain", "CAP1", "cap1")
+        client.post("/api/auth/login", json={"team_code": "CAP1", "password": "cap1", "device_id": "device-A"})
+
+        res = client.post("/api/auth/login", json={"team_code": "CAP1", "password": "cap1", "device_id": "device-B"})
+        assert res.status_code == 200
+
+        # Still quietly tracks the latest device rather than leaving the
+        # very first one bound forever, so re-enabling later locks onto
+        # whichever device is actually in use at that point.
+        user = mongo.db.users.find_one({"team_code": "CAP1"})
+        assert user["device_id"] == "device-B"
+    finally:
+        app.config["DEVICE_LOCK_ENABLED"] = True
 
 
 def test_admin_login_is_exempt_from_device_lock(client, make_user):

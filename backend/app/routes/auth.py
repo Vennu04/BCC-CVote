@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import check_password_hash, generate_password_hash
 from .. import mongo
@@ -47,13 +47,21 @@ def login():
     # ask admin for a reset (e.g. after getting a new phone) rather than a
     # silent bypass.
     if user["role"] != "admin" and device_id:
-        bound_device = user.get("device_id")
-        if bound_device and bound_device != device_id:
-            return jsonify({
-                "error": "This account is already registered to another device. "
-                         "Ask your admin to reset device access if you've switched phones."
-            }), 403
-        if not bound_device:
+        if current_app.config.get("DEVICE_LOCK_ENABLED", True):
+            bound_device = user.get("device_id")
+            if bound_device and bound_device != device_id:
+                return jsonify({
+                    "error": "This account is already registered to another device. "
+                             "Ask your admin to reset device access if you've switched phones."
+                }), 403
+            if not bound_device:
+                mongo.db.users.update_one({"_id": user["_id"]}, {"$set": {"device_id": device_id}})
+        else:
+            # Enforcement is temporarily off (e.g. players testing across
+            # multiple devices) — still keep device_id current, unconditionally
+            # rather than only-if-unset, so whichever device someone's actively
+            # using when this gets flipped back on isn't the one that suddenly
+            # gets locked out.
             mongo.db.users.update_one({"_id": user["_id"]}, {"$set": {"device_id": device_id}})
 
     token = create_access_token(
