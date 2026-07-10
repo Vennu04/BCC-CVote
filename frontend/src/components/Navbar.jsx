@@ -57,11 +57,11 @@ export default function Navbar() {
               <Link to="/admin/window" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 <Settings size={15} /> Window
               </Link>
-              <Link to="/admin/auction" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
-                <Gavel size={15} /> Auction
-              </Link>
               <Link to="/admin/attendance" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
                 <ClipboardCheck size={15} /> Attendance
+              </Link>
+              <Link to="/admin/auction" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+                <Gavel size={15} /> Auction
               </Link>
             </>
           )}
