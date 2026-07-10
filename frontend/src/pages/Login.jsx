@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "../components/ProtectedRoute";
+import { COMPANY_NAME } from "../config/appMeta";
 import toast from "react-hot-toast";
 
 export default function Login() {
@@ -37,6 +38,7 @@ export default function Login() {
         <div className="text-6xl mb-3">🏏</div>
         <h1 className="text-3xl font-bold text-white">BCC-CVote</h1>
         <p className="text-gray-300 text-sm mt-1">Cricket Captain Availability Voting</p>
+        <p className="text-gray-400 text-xs mt-1">Powered by {COMPANY_NAME}</p>
       </div>
 
       {/* Card */}

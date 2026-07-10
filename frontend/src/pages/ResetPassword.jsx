@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import api from "../utils/api";
+import { COMPANY_NAME } from "../config/appMeta";
 import { KeyRound } from "lucide-react";
 
 export default function ResetPassword() {
@@ -38,6 +39,7 @@ export default function ResetPassword() {
       <div className="text-center mb-8">
         <div className="text-6xl mb-3">🏏</div>
         <h1 className="text-3xl font-bold text-white">BCC-CVote</h1>
+        <p className="text-gray-400 text-xs mt-1">Powered by {COMPANY_NAME}</p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">

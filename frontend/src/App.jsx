@@ -15,6 +15,7 @@ import VotingWindow from "./pages/admin/VotingWindow";
 import AdminAuction from "./pages/admin/Auction";
 import Auction from "./pages/Auction";
 import ChangePassword from "./pages/ChangePassword";
+import Footer from "./components/Footer";
 
 function NotFound() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/"   element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
         <Route path="*"   element={<NotFound />} />
       </Routes>
+      <Footer />
     </AuthProvider>
   );
 }
