@@ -1,19 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
+import { LoadingState } from "../../components/LoadingState";
 import adminPhoto from "../../assets/dashboard-backgrounds/admin.jpg";
 import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "lucide-react";
+
+// Live vote counts matter most on this page (the Thu-Fri voting window is
+// actively running), so it polls in the background — same pattern as
+// useAuction.js's bidding loop and VotingWindow's turnout poll, just a
+// slower interval since a full captain×slot matrix is a bigger payload.
+// Silent (no toast) so it doesn't spam every 10s — the toast is reserved
+// for the explicit manual Refresh click below.
+const POLL_INTERVAL_MS = 10000;
 
 export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const res = await api.get("/admin/dashboard");
       setData(res.data);
@@ -22,9 +31,14 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    const interval = setInterval(fetchData, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   // fetchData alone gave no feedback on click — it silently refetches, so if
   // nothing on screen happens to change, admin has no way to tell the button
@@ -63,14 +77,17 @@ export default function AdminDashboard() {
     downloadFile("/admin/export/available-players", "BCC-Available-Players", "xlsx");
   };
 
-  if (loading) return (
-    <div className="min-h-screen"><Navbar />
-      <div className="flex items-center justify-center h-64"><p className="text-gray-500">Loading…</p></div>
-    </div>
+  const matrix = useMemo(() => data?.vote_matrix || [], [data]);
+  const slots = useMemo(
+    () => matrix[0]?.votes?.map((v) => ({ slot_number: parseInt(v.slot_label.replace("Slot ", "")), day: v.day, time_of_day: v.time_of_day })) || [],
+    [matrix]
   );
 
-  const matrix = data?.vote_matrix || [];
-  const slots = matrix[0]?.votes?.map((v) => ({ slot_number: parseInt(v.slot_label.replace("Slot ", "")), day: v.day, time_of_day: v.time_of_day })) || [];
+  if (loading) return (
+    <div className="min-h-screen"><Navbar />
+      <div className="flex items-center justify-center h-64"><LoadingState /></div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
@@ -149,12 +166,6 @@ export default function AdminDashboard() {
           <div className="p-4">
             <AvailabilityGrid matrix={matrix} slots={slots} />
           </div>
-        </div>
-
-        {/* Quick links */}
-        <div className="flex gap-3 mt-6 flex-wrap">
-          <Link to="/admin/players" className="btn-secondary text-sm py-2 px-4">Manage Players</Link>
-          <Link to="/admin/window" className="btn-secondary text-sm py-2 px-4">Voting Windows</Link>
         </div>
       </div>
     </div>

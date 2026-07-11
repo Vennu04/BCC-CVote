@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
 import api from "../utils/api";
@@ -11,7 +11,15 @@ const MY_AUCTION_POLL_MS = 10000;
 export default function Navbar() {
   const { user, logout, isAdmin, isVoter } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [myAuctionId, setMyAuctionId] = useState(null);
+
+  // Highlights whichever nav link matches the current route, so a fast-scanning
+  // admin always has an at-a-glance answer to "which admin page am I on".
+  const navLinkClass = (path) =>
+    `flex items-center gap-1 transition-colors whitespace-nowrap py-1 ${
+      location.pathname === path ? "text-cricket-gold font-semibold" : "hover:text-cricket-gold"
+    }`;
 
   // Lets a captain (or an admin who's also flagged as a voter) discover "I'm
   // in a live auction right now" without needing a manually-shared link —
@@ -48,19 +56,19 @@ export default function Navbar() {
         <div className="order-3 sm:order-none w-full sm:w-auto flex items-center gap-x-4 gap-y-1 text-sm overflow-x-auto flex-wrap sm:flex-nowrap">
           {isAdmin && (
             <>
-              <Link to="/admin" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <Link to="/admin" className={navLinkClass("/admin")}>
                 <LayoutDashboard size={15} /> Admin
               </Link>
-              <Link to="/admin/players" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <Link to="/admin/players" className={navLinkClass("/admin/players")}>
                 <Users size={15} /> Players
               </Link>
-              <Link to="/admin/window" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <Link to="/admin/window" className={navLinkClass("/admin/window")}>
                 <Settings size={15} /> Window
               </Link>
-              <Link to="/admin/attendance" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <Link to="/admin/attendance" className={navLinkClass("/admin/attendance")}>
                 <ClipboardCheck size={15} /> Attendance
               </Link>
-              <Link to="/admin/auction" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <Link to="/admin/auction" className={navLinkClass("/admin/auction")}>
                 <Gavel size={15} /> Auction
               </Link>
             </>
@@ -73,13 +81,13 @@ export default function Navbar() {
             // dashboard (homePathFor is unchanged), so they don't need this —
             // and /player/dashboard would be wrong for one whose role is
             // actually "captain".
-            <Link to="/player/dashboard" className="flex items-center gap-1 hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+            <Link to="/player/dashboard" className={navLinkClass("/player/dashboard")}>
               <UserCircle size={15} /> My Votes
             </Link>
           )}
           {isVoter && (
             <>
-              <Link to="/results" className="hover:text-cricket-gold transition-colors whitespace-nowrap py-1">
+              <Link to="/results" className={navLinkClass("/results")}>
                 Results
               </Link>
               {myAuctionId && (

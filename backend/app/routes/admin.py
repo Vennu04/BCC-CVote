@@ -414,6 +414,12 @@ def list_players():
     # weekend their own team has no match scheduled — so this roster is
     # everyone who can cast an availability vote, not just the dedicated
     # player-only accounts.
+    #
+    # No pagination: returns the full roster in one response. Fine at ~54
+    # voters; if the roster grows well past that, add limit/offset params
+    # here (and to /attendance below) plus matching frontend fetch changes
+    # before this becomes a real payload-size problem — deliberately deferred
+    # rather than built speculatively.
     players = list(mongo.db.users.find(
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
@@ -453,6 +459,8 @@ def _attendance_counts():
 @admin_bp.route("/attendance", methods=["GET"])
 @admin_required
 def list_attendance():
+    # Same no-pagination tradeoff as list_players() above — deferred, not
+    # forgotten.
     voters = list(mongo.db.users.find(
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
