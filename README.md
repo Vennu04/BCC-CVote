@@ -19,15 +19,28 @@ auction to split available players into two balanced teams.
    unconditionally on the Voting Windows page, without needing to vote.
 2. **Ad-hoc dated matches** — admin can add a one-off match for any date (a weather-driven
    Saturday, a public holiday, etc.) on top of the 4 fixed slots. Same voting mechanism,
-   soft-removable, doesn't touch the original 4.
-3. **Live player auction** — once a match's availability is known, admin runs a live
+   soft-removable, doesn't touch the original 4. Ad-hoc slots sharing the same date are
+   grouped side by side on Voting Windows so admin can compare turnout between candidate
+   slots for the same day.
+3. **Admin can cast or change anyone's vote** — for the real case where a captain/player
+   confirmed by phone/WhatsApp but couldn't cast their own vote in the app in time (mobile
+   issues, travel, work). Two entry points, both usable regardless of whether that slot's
+   window is still open or already closed:
+   - **Admin Dashboard**: each slot's stat card has a "yet to vote" toggle that expands to
+     the actual list of non-voters, with inline ✅/🤔/❌ buttons.
+   - **Voting Window / Auction setup**: every name in the Confirmed/Pending turnout panel
+     is clickable — set a first vote immediately, or change an existing one (asks for
+     confirmation first, since that overwrites a real answer). See
+     [Admin vote management](#admin-vote-management) below.
+4. **Live player auction** — once a match's availability is known, admin runs a live
    points-based auction between two designated captains to split everyone who voted
    available into two balanced XIs. See [Auction rules](#auction-rules) below.
-4. **Attendance & knockout-eligibility tracking** — admin logs actual attendance per
-   completed league match (checklist of who showed up), independent of the voting
-   system. Voters are ranked by % of league matches attended, with a configurable
-   cutoff to auto-mark the top N as eligible for knockout-stage selection.
-5. **Account security & self-service** — scrypt-hashed passwords with minimum-length /
+5. **Attendance & knockout-eligibility tracking** — real season attendance (matches present
+   / total matches, tracked with a simple "+1" per player/captain), independent of the
+   voting system. Voters are ranked by attendance %, with a configurable cutoff to
+   auto-mark the top N as eligible for knockout-stage selection. See
+   [Attendance & knockout eligibility](#attendance--knockout-eligibility) below.
+6. **Account security & self-service** — scrypt-hashed passwords with minimum-length /
    not-all-numeric validation, forced password change on first login or after an admin
    reset, per-device login lock (toggle-able), and immediate session invalidation on any
    password change. See [Accounts & security](#accounts--security) below.
@@ -90,7 +103,9 @@ already gives a sequential (not simultaneous) cutover — the new pod must pass 
 probe before the old one is killed. No parallel blue/green Deployment pair needed.
 
 Push to `main` → pipeline runs automatically. No path filter — any push rebuilds and
-redeploys both images.
+redeploys both images. Each successful run also commits its own image-tag bump back to
+`main` (`chore: deploy <sha> to prod [skip ci]`) — expect `git pull`/`git fetch` to show
+one of these after every deploy; they're informational only, not app changes.
 
 ---
 
@@ -132,8 +147,13 @@ redeploys both images.
 - **Purse-drained rule (Power/Classic only)**: once a captain's 17-point purse hits 0, the
   other captain can freely claim any remaining Power/Classic player without bidding — Extra
   Power is excluded from this since it already has its own quota-based rule above.
+- **Minimum pool size**: at least **20** players must have voted available for the selected
+  slot (10 per side) before an auction can be created — deliberately not a full-XI
+  requirement, per admin's call.
 - Captains are never part of their own auctioned pool, even if they voted available for
-  that match.
+  that match. If a captain also has admin capability (see
+  [Accounts & security](#accounts--security)), they're additionally blocked from running an
+  auction they'd be participating in themselves.
 - Session cap: 25 minutes from admin clicking Start; any players still unresolved at that
   point are distributed evenly between both captains.
 - **Release order is automatic, not admin's pick** — admin only clicks "Release Next" per
@@ -146,13 +166,41 @@ redeploys both images.
 - **Live quota-balance preview** — the setup screen shows a per-category breakdown of the
   selected slot's confirmed voters before the auction is even created, flagging odd counts
   (⚠️ won't split evenly) and missing categories, so admin can fix roster tagging in Manage
-  Players before hitting Create.
+  Players before hitting Create. Every name in this preview is clickable — see
+  [Admin vote management](#admin-vote-management).
 - **Shared "Available Players" pool panel** — both captains' live auction view shows a
   running count of unsold players left per category (highlighting whoever's currently up
   for bid), so neither side is guessing what's left.
 - **Post-completion confidentiality** — once an auction is closed, bid prices, remaining
   points, and how each player was assigned are stripped from the API response entirely
   (not just hidden in the UI). Only the final name-and-category rosters remain visible.
+
+---
+
+## Admin vote management
+
+For the real-world case where a captain/player confirmed availability by phone/WhatsApp but
+couldn't cast (or fix) their own vote in the app in time.
+
+- `POST /admin/votes` sets or changes anyone's vote for any slot; `DELETE
+  /admin/votes/<slot_id>/<user_id>` clears one. Both are admin-only and deliberately bypass
+  the self-service rules in `votes.py` (window must be open to vote at all; a short
+  emergency-revoke deadline after close) — admin acting on an explicit request is a
+  different trust boundary, and the whole point is that it still works after those
+  deadlines pass. Works identically for the 4 fixed slots and any ad-hoc match.
+- Two places to use it:
+  - **Admin Dashboard** — each slot's stat card shows a "yet to vote" count; expanding it
+    lists exactly those non-voters with one-click ✅ Available / 🤔 Maybe / ❌ Not Available
+    buttons.
+  - **Voting Window / Auction setup screen** — the Confirmed/Pending turnout panel
+    (`ConfirmedPlayersPanel`) makes every name clickable, for both groups. Marking someone
+    with no vote yet happens immediately; changing someone who already has a vote recorded
+    (including a "Pending" person who actually voted maybe/not_available, not just a true
+    non-voter) asks for confirmation first, since that overwrites a real answer rather than
+    filling a blank.
+- Every override — set or clear — is logged to the `vote_overrides` collection (admin,
+  target person, slot, old → new availability, timestamp), the same accountability pattern
+  already used for `password_resets`.
 
 ---
 
@@ -177,14 +225,25 @@ redeploys both images.
   test the app across multiple devices of their own; re-enable by flipping it back once
   that testing period ends.
 - **Role promotion**: admin can convert an existing player to captain (or the reverse) in
-  place via Manage Players/Captains, keeping their login (team code + password) untouched
-  instead of creating a new account under a different code.
+  place via Manage Players, keeping their login (team code + password) untouched instead of
+  creating a new account under a different code. (Manage Captains and Manage Players used to
+  be two separate pages/routes — they were merged into one Manage Players page; the old
+  `/admin/captains` and `/admin/people` routes now just redirect there.)
 - **Admin-as-voter**: a small number of admin accounts (used for admin-side testing) are
   flagged `is_player=True` so that same login can also cast an availability vote via
   `/player/dashboard` — counted in the dashboard/summary/exports/auction pool like any other
   voter — without becoming a separate captain/player account or gaining a normal player's
   restrictions. Bootstrapped once via `backend/scripts/flag_admin_voters.py` against named
   `team_code`s (never by name, to avoid mismatching real players who share a name).
+- **Captain/player promoted to admin (the reverse case)**: `backend/scripts/
+  grant_admin_access.py` grants admin capability to an existing captain/player account by
+  `team_code`, without changing their role or login — checked via `admin_required`'s
+  `{"role": "admin"} OR {"is_admin": True}`, looked up fresh on every request (no JWT
+  re-issue needed; an already-open session just won't see the Admin nav until it re-fetches
+  `/auth/me`). `backend/scripts/link_dual_role_captains.py` then links such an account to
+  the real captain record it corresponds to, so `create_auction` can refuse to let them run
+  an auction they'd also be bidding in themselves (a conflict of interest over release timing
+  and order).
 - **Self-service reset from the login page**: a "Reset Password" link next to the password
   field leads to a public `/reset-password` form (team code + current password + new
   password) — for anyone who remembers their current password but isn't/can't get logged
@@ -201,23 +260,37 @@ redeploys both images.
   be redirected straight into the file admin distributes:
   `docker exec bcc-backend python scripts/regenerate_credentials.py > credentials.csv`.
   Never touches admin accounts.
+- **Roster reconciliation**: `backend/scripts/sync_players.py` is a one-off migration that
+  deactivates leftover demo/IPL captain accounts, flags existing captains who are also on
+  the real player roster with `is_player=True` (one login, dual capability — no duplicate
+  account), and creates new `role="player"` accounts for roster names with no existing
+  account.
 
 ---
 
 ## Attendance & knockout eligibility
 
-A separate tracking system from match-slot voting — this is about real-world turnout
-across a league season, used to decide who's eligible once the league stage ends and a
-knockout round begins.
+A separate tracking system from match-slot voting — this is about real-world season
+attendance, used to decide who's eligible once the league stage ends and a knockout round
+begins.
 
-- Admin logs each completed league match as its own record and checks off who actually
-  showed up (a per-match attendee checklist), with an inline "quick add" to log a brand-new
-  match without leaving the checklist for an existing one.
-- Every voter is ranked by **% of league matches attended**, sorted high to low.
-- A configurable **knockout cutoff** (default top 28) can auto-mark the top N ranked voters
-  as `knockout_eligible` in one click; admin can still hand-adjust individual flags after.
+- Every voter has their own **matches present** / **total matches** counters. A single "+1"
+  button per row (Manage Attendance page) credits one more match to that person alone —
+  there's no shared "a match happened" event tying multiple people's numbers together, each
+  person's own click advances their own two counters independently.
+- **Attendance %** (`matches_present / total_matches`) is recomputed immediately on every
+  +1 click, and is what ranks and highlights the list — not a separate league-match
+  checklist.
+- A configurable **knockout cutoff** (default top 14) can auto-mark the top N ranked voters
+  as `knockout_eligible` in one click; admin can still hand-adjust individual checkboxes
+  after, and "Save All" persists both the cutoff and any hand-adjustments together.
 - Purely a selection aid — `knockout_eligible` doesn't gate voting or auction participation,
   it's just a flag admin uses when picking knockout-stage lineups.
+- An older design tracked attendance via a per-match checklist (`league_matches` collection,
+  admin logs each completed match and checks off who showed up). Those backend routes
+  (`/admin/attendance/matches/*`) and their tests still exist and pass, but nothing in the
+  current frontend drives them anymore — retired in favor of the simpler +1-per-person
+  model above once the checklist approach turned out to sit mostly empty in practice.
 
 ---
 
@@ -231,9 +304,10 @@ BCC-CVote/
 │   │   ├── config.py
 │   │   ├── routes/
 │   │   │   ├── auth.py            # /api/auth/* — login, device binding, change-password
-│   │   │   ├── votes.py           # /api/slots, /api/votes/* — voting + named per-slot attendance
-│   │   │   ├── admin.py           # /api/admin/* — captains, players, windows, ad-hoc slots,
-│   │   │   │                      #   attendance/knockout tracking, reset-device/reset-password, exports
+│   │   │   ├── votes.py           # /api/slots, /api/votes/* — self-service voting + named per-slot attendance
+│   │   │   ├── admin.py           # /api/admin/* — captains/players, windows, ad-hoc slots,
+│   │   │   │                      #   admin vote override, attendance/knockout tracking,
+│   │   │   │                      #   reset-device/reset-password, exports
 │   │   │   └── auction.py         # /api/admin/auction/*, /api/auction/* — the live auction
 │   │   ├── services/weather.py    # OpenWeatherMap call + Mongo-cached forecast lookup
 │   │   └── utils/
@@ -241,24 +315,30 @@ BCC-CVote/
 │   │       ├── passwords.py       # shared password validation + temp-password generation
 │   │       ├── time_utils.py      # IST timezone helpers, voting-window logic
 │   │       └── export.py          # CSV/Excel report builders
-│   ├── scripts/seed.py
-│   ├── tests/                     # pytest — auth, auction lifecycle, password/device security
+│   ├── scripts/                   # seed.py + one-off migrations (credential regen, roster
+│   │                              #   sync, admin-access grants — see Accounts & security)
+│   ├── tests/                     # pytest — auth, auction lifecycle, password/device security,
+│   │                              #   admin vote override, attendance
 │   ├── Dockerfile, gunicorn.conf.py, run.py
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/
+│   │   │   ├── Login.jsx, ResetPassword.jsx  # public self-service reset form
 │   │   │   ├── CaptainDashboard.jsx, PlayerDashboard.jsx, Results.jsx, Auction.jsx
 │   │   │   ├── ChangePassword.jsx  # forced/self-service password change
 │   │   │   └── admin/
-│   │   │       ├── AdminDashboard.jsx, ManageCaptains.jsx, ManagePlayers.jsx
-│   │   │       ├── VotingWindow.jsx    # includes the "Add Ad-hoc Match" form
-│   │   │       ├── Attendance.jsx      # league match checklist + knockout-eligibility ranking
+│   │   │       ├── AdminDashboard.jsx  # captain×slot grid + per-slot "yet to vote" mark-vote panel
+│   │   │       ├── ManagePlayers.jsx   # captains + players, merged into one page
+│   │   │       ├── VotingWindow.jsx    # "Add Ad-hoc Match" form + Confirmed/Pending turnout
+│   │   │       ├── Attendance.jsx      # +1 attendance credit + knockout-eligibility ranking
 │   │   │       └── Auction.jsx         # auction setup + live control screen
-│   │   ├── components/       # Navbar, SlotCard, VotingSlots, WeatherForecast,
-│   │   │                      #   AuctionRulesNote, PageBackgroundPhoto
-│   │   ├── hooks/             # useVoting.js, useAuction.js (2.5s polling)
+│   │   ├── components/       # Navbar, SlotCard, VotingSlots, WeatherForecast, Footer,
+│   │   │                      #   AuctionRulesNote, PageBackgroundPhoto, LoadingState,
+│   │   │                      #   ConfirmDialog, ConfirmedPlayersPanel, YetToVotePanel
+│   │   ├── hooks/             # useVoting.js, useAuction.js (2.5s polling), useConfirm.js
 │   │   ├── context/AuthContext.jsx   # sessionStorage-based — per-tab login isolation
-│   │   ├── utils/pwaUpdate.js  # service-worker update detection/reload
+│   │   ├── config/appMeta.js  # app name/version, company name (shown in Footer)
+│   │   ├── utils/             # api.js, device.js, roles.js, formatDate.js, pwaUpdate.js
 │   │   └── App.jsx
 │   ├── Dockerfile, nginx.conf, vite.config.js  # vite-plugin-pwa (autoUpdate)
 ├── k8s/prod/                  # applied directly by the deploy job (no GitOps controller)
@@ -275,10 +355,11 @@ BCC-CVote/
 - **Per-device login lock is currently disabled in prod** (`DEVICE_LOCK_ENABLED=false`)
   while players test across multiple devices — see [Accounts & security](#accounts--security).
   No end date set; check with the team before re-enabling.
-- A stale, superseded branch — `feature/admin-dual-role-voter` — still exists in the repo.
-  It duplicates work already shipped directly to `main` in commit `5f17eea` (admin accounts
-  flagged `is_player` can vote as themselves — see [Accounts & security](#accounts--security)),
-  and is 57 commits behind. Safe to delete; do not merge it.
+- A stale, superseded branch — `feature/admin-dual-role-voter` — still exists in the repo
+  (as of this writing, still not deleted despite being safe to). It duplicates work already
+  shipped directly to `main` (admin accounts flagged `is_player` can vote as themselves — see
+  [Accounts & security](#accounts--security)) and is well behind `main`. Safe to delete; do
+  not merge it.
 - cert-manager, external-secrets, and monitoring exporters are scaled to 0 (see
   [Infrastructure](#infrastructure)) — not a permanent decision yet.
 - The k3s node's control-plane process alone uses ~770MB of the node's 2GB RAM at idle —
@@ -286,6 +367,12 @@ BCC-CVote/
 - A handful of duplicate captain accounts created during early auction testing (team codes
   `CHT`, `MLS`, `NDU`, `PDU`, `PHK`, `RMP`, `SDA`, `SKS`, `SRN`) are soft-deactivated but not
   hard-deleted — those codes remain reserved.
+- The old per-match attendance checklist (`league_matches` collection, `/admin/attendance/
+  matches/*` routes) is retired from the frontend but not removed from the backend — see the
+  note in [Attendance & knockout eligibility](#attendance--knockout-eligibility). Low
+  priority; not causing any issue, just unused code.
+- The `captains.jpg` dashboard background image is now unused (Manage Captains was merged
+  into Manage Players, which uses `players.jpg`) — harmless, just an orphaned asset.
 - No Playwright (or other browser-automation) dependency committed to the project — some
   features have been visually verified with a throwaway local Playwright install, but there's
   no repeatable e2e suite in CI. Backend has a real pytest suite (`backend/tests/`).
