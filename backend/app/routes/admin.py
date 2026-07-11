@@ -10,7 +10,8 @@ import pytz
 from .. import mongo
 from ..utils.auth import admin_required, get_current_user
 from ..utils.time_utils import (
-    is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot
+    is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot,
+    get_next_match_slot,
 )
 from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
@@ -19,7 +20,7 @@ from ..utils.passwords import validate_password, generate_temp_password
 admin_bp = Blueprint("admin", __name__)
 
 
-def _user_to_dict(u):
+def _user_to_dict(u, next_match_available=False):
     # Every captain is also a player — they should be able to cast their own
     # vote even on a weekend their team has no match scheduled — so this isn't
     # a one-off flag, it's implied by the role.
@@ -49,6 +50,13 @@ def _user_to_dict(u):
         "must_change_password": u.get("must_change_password", False),
         "device_locked": bool(u.get("device_id")),
         "created_at": format_ist(u.get("created_at")),
+        # Scoped to the next chronological match only (see _next_match_context
+        # below) — deliberately binary: "maybe", not-yet-voted, and "no voting
+        # window open yet" all read as False here, same as an explicit
+        # not_available vote. Only list_players() passes a real computed
+        # value; every other caller gets the harmless default since none of
+        # them render this field.
+        "next_match_available": next_match_available,
     }
 
 
@@ -158,6 +166,38 @@ def _slot_to_dict(slot):
 
 def _get_active_window(slot_id):
     return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
+
+
+def _next_match_context():
+    """
+    (slot, availability_map) for whichever active match_slots doc is
+    chronologically next. availability_map is {user_id_str: True} for every
+    voter with an explicit "available" vote logged against that match's
+    current voting window. Anyone missing from the map — no vote yet, an
+    explicit not_available/maybe, or no window open at all for that slot —
+    is treated as unavailable by the caller, since the dashboard tag this
+    feeds is deliberately binary, not tri-state.
+    """
+    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}))
+    slot, _ = get_next_match_slot(slots)
+    if not slot:
+        return None, {}
+    window = _get_active_window(str(slot["_id"]))
+    if not window:
+        return slot, {}
+    votes = mongo.db.votes.find({
+        "slot_id": str(slot["_id"]), "window_id": str(window["_id"]), "availability": "available",
+    })
+    return slot, {v["captain_id"]: True for v in votes}
+
+
+def _next_match_label(slot):
+    if not slot:
+        return None
+    label = f"{slot['day']} {slot['time_of_day']}"
+    if slot.get("is_adhoc") and slot.get("match_date"):
+        label += f" ({slot['match_date']})"
+    return label
 
 
 def _window_info(window):
@@ -520,7 +560,14 @@ def list_players():
     players = list(mongo.db.users.find(
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))
-    return jsonify([_user_to_dict(p) for p in players])
+    next_slot, avail_map = _next_match_context()
+    next_match_label = _next_match_label(next_slot)
+    result = []
+    for p in players:
+        d = _user_to_dict(p, next_match_available=avail_map.get(str(p["_id"]), False))
+        d["next_match_label"] = next_match_label
+        result.append(d)
+    return jsonify(result)
 
 
 # ── Knockout attendance (reference-only — nothing else in the app reads or

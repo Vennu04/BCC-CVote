@@ -17,6 +17,18 @@ const AUCTION_CATEGORY_OPTIONS = [
   { value: "classic",                label: "Classic" },
 ];
 
+// Separate from AUCTION_CATEGORY_OPTIONS above: "" means "no filter applied"
+// here (vs. "clear the category" in the per-row edit dropdown), so unset
+// players need their own sentinel value to stay filterable.
+const AUCTION_CATEGORY_FILTER_OPTIONS = [
+  { value: "",                       label: "All Categories" },
+  { value: "unset",                  label: "Not set" },
+  { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
+  { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
+  { value: "power",                  label: "Power" },
+  { value: "classic",                label: "Classic" },
+];
+
 const STATUS_OPTIONS = [
   { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-gray-600" },
   { value: "in_progress", label: "In-Progress",          color: "bg-blue-100 text-blue-700" },
@@ -48,6 +60,7 @@ export default function ManagePlayers() {
   const [submitting, setSubmitting] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(null);
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [mobileExpanded, setMobileExpanded] = useState(new Set());
   const { confirmProps, requestConfirm } = useConfirm();
 
@@ -62,9 +75,13 @@ export default function ManagePlayers() {
 
   const filteredPlayers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return players;
-    return players.filter(p => p.name.toLowerCase().includes(q) || p.team_code.toLowerCase().includes(q));
-  }, [players, search]);
+    return players.filter(p => {
+      const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.team_code.toLowerCase().includes(q);
+      const matchesCategory = !categoryFilter
+        || (categoryFilter === "unset" ? !p.auction_category : p.auction_category === categoryFilter);
+      return matchesSearch && matchesCategory;
+    });
+  }, [players, search, categoryFilter]);
 
   const fetchPlayers = async () => {
     try {
@@ -189,6 +206,23 @@ export default function ManagePlayers() {
         setResettingPassword(null);
       }
     });
+  };
+
+  const handleRoleChange = (person, newRole) => {
+    if (newRole === person.role) return;
+    const label = newRole === "captain" ? "Captain" : "Player";
+    requestConfirm(
+      `Change ${person.name}'s role to ${label}? Team Name, Status, and tournament fields are left as-is — fill them in separately if needed.`,
+      async () => {
+        try {
+          await api.put(`/admin/${endpointFor(person)}/${person.id}`, { role: newRole });
+          toast.success(`${person.name} is now a ${label}`);
+          await fetchPlayers();
+        } catch (err) {
+          toast.error(err.response?.data?.error || "Failed to update role");
+        }
+      }
+    );
   };
 
   const handleAuctionCategoryChange = async (person, newCategory) => {
@@ -327,17 +361,28 @@ export default function ManagePlayers() {
           </form>
         )}
 
-        {/* Search */}
+        {/* Search + Auction Category filter */}
         {!loading && players.length > 0 && (
-          <div className="relative mb-4 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              className="input-field pl-9"
-              placeholder="Search by name or code…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="relative max-w-sm flex-1 min-w-[200px]">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                className="input-field pl-9"
+                placeholder="Search by name or code…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="input-field max-w-[240px]"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              {AUCTION_CATEGORY_FILTER_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -404,17 +449,24 @@ export default function ManagePlayers() {
                           )}
                         </td>
 
-                        {/* Role */}
+                        {/* Role + next-match availability, grouped together */}
                         <td className="px-4 py-3">
-                          {isCaptain ? (
-                            <span className="flex items-center gap-1 text-xs font-medium text-cricket-navy bg-blue-50 rounded-full px-2.5 py-1 w-fit">
-                              <Shield size={11} /> Captain
+                          <div className="flex flex-col gap-1 items-start">
+                            <select
+                              value={p.role}
+                              onChange={e => handleRoleChange(p, e.target.value)}
+                              className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                            >
+                              <option value="player">Player</option>
+                              <option value="captain">Captain</option>
+                            </select>
+                            <span
+                              title={p.next_match_label ? `Availability for ${p.next_match_label}` : "No upcoming match scheduled yet"}
+                              className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${p.next_match_available ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"}`}
+                            >
+                              {p.next_match_available ? "Available" : "Not Available"}
                             </span>
-                          ) : (
-                            <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1 w-fit">
-                              Player
-                            </span>
-                          )}
+                          </div>
                         </td>
 
                         {/* Team Name — captain-only */}
@@ -589,6 +641,26 @@ export default function ManagePlayers() {
                           </div>
                         )}
 
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-gray-500">Role</span>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={p.role}
+                              onChange={e => handleRoleChange(p, e.target.value)}
+                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                            >
+                              <option value="player">Player</option>
+                              <option value="captain">Captain</option>
+                            </select>
+                            <span
+                              title={p.next_match_label ? `Availability for ${p.next_match_label}` : "No upcoming match scheduled yet"}
+                              className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${p.next_match_available ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"}`}
+                            >
+                              {p.next_match_available ? "Available" : "Not Available"}
+                            </span>
+                          </div>
+                        </div>
+
                         {isCaptain && (
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-gray-500">Team Name</span>
@@ -694,7 +766,11 @@ export default function ManagePlayers() {
 
             {players.length === 0 && <EmptyState message="No players yet. Add one above." />}
             {players.length > 0 && filteredPlayers.length === 0 && (
-              <EmptyState message={`No players match "${search}".`} />
+              <EmptyState message={
+                search
+                  ? `No players match "${search}"${categoryFilter ? " in that category" : ""}.`
+                  : "No players in that category."
+              } />
             )}
           </div>
         )}

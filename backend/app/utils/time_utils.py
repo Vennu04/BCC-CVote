@@ -111,6 +111,26 @@ def match_datetime_for_slot(slot: dict):
     return IST.localize(naive_ist).astimezone(pytz.utc).replace(tzinfo=None)
 
 
+def get_next_match_slot(slots: list):
+    """
+    (slot_dict, match_datetime_utc) for whichever active slot is soonest to
+    occur, by match_datetime_for_slot() -- or (None, None) if none of the
+    given slots have a determinable date. Slots whose computed date+time has
+    already passed are used only as a last resort (still preferring the
+    earliest of them) so something is always returned as long as at least one
+    slot has a date, even in the narrow window right after a match's
+    calendar date rolls over before get_match_weekend_dates() itself advances.
+    """
+    dated = [(s, match_datetime_for_slot(s)) for s in slots]
+    dated = [(s, dt) for s, dt in dated if dt is not None]
+    if not dated:
+        return None, None
+    now = datetime.utcnow()
+    upcoming = [(s, dt) for s, dt in dated if dt >= now]
+    pool = upcoming or dated
+    return min(pool, key=lambda pair: pair[1])
+
+
 # (day, time_of_day) -> which weekend date the window falls on, and the IST open/close time
 _WINDOW_RULES = {
     ("Saturday", "Morning"): {"date_key": "friday",   "open": (6, 0),  "close": (18, 30)},
