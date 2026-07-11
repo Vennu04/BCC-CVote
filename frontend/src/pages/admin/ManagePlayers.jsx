@@ -1,10 +1,13 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import { LoadingState, EmptyState } from "../../components/LoadingState";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 import playersPhoto from "../../assets/dashboard-backgrounds/players.jpg";
-import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp, Search } from "lucide-react";
 
 const AUCTION_CATEGORY_OPTIONS = [
   { value: "",                       label: "Not set" },
@@ -44,6 +47,9 @@ export default function ManagePlayers() {
   const [editRow, setEditRow]     = useState({ name: "", team_code: "", password: "", team_name: "" });
   const [submitting, setSubmitting] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(null);
+  const [search, setSearch] = useState("");
+  const [mobileExpanded, setMobileExpanded] = useState(new Set());
+  const { confirmProps, requestConfirm } = useConfirm();
 
   // Bat Avg/Strike Rate/Bowl Avg/Economy live in their own expandable row
   // (one "Player Insights" column + a chevron), separate from the main
@@ -53,6 +59,12 @@ export default function ManagePlayers() {
   const [expandedStatsId, setExpandedStatsId] = useState(null);
   const [statsEditRow, setStatsEditRow] = useState({ batting_average: "", strike_rate: "", bowling_average: "", economy: "" });
   const [savingStats, setSavingStats] = useState(false);
+
+  const filteredPlayers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return players;
+    return players.filter(p => p.name.toLowerCase().includes(q) || p.team_code.toLowerCase().includes(q));
+  }, [players, search]);
 
   const fetchPlayers = async () => {
     try {
@@ -66,6 +78,14 @@ export default function ManagePlayers() {
   };
 
   useEffect(() => { fetchPlayers(); }, []);
+
+  const toggleMobileExpanded = (id) => {
+    setMobileExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -101,15 +121,16 @@ export default function ManagePlayers() {
     }
   };
 
-  const handleDeactivate = async (person) => {
-    if (!confirm(`Remove ${person.name} from the player roster?`)) return;
-    try {
-      await api.delete(`/admin/players/${person.id}`);
-      toast.success(`${person.name} removed`);
-      fetchPlayers();
-    } catch {
-      toast.error("Failed to remove player");
-    }
+  const handleDeactivate = (person) => {
+    requestConfirm(`Remove ${person.name} from the player roster?`, async () => {
+      try {
+        await api.delete(`/admin/players/${person.id}`);
+        toast.success(`${person.name} removed`);
+        fetchPlayers();
+      } catch {
+        toast.error("Failed to remove player");
+      }
+    });
   };
 
   const startEdit = (p) => {
@@ -150,26 +171,32 @@ export default function ManagePlayers() {
   // admin directly). A random temp password is generated server-side (never
   // needs the old one), they're forced to change it on next login, and the
   // reset is logged for accountability.
-  const handleResetPassword = async (p) => {
-    if (!confirm(`Reset ${p.name}'s password? A new temporary password will be generated — relay it to them directly (e.g. by phone).`)) return;
-    setResettingPassword(p.id);
-    try {
-      const res = await api.post(`/admin/${endpointFor(p)}/${p.id}/reset-password`);
-      toast.success(`${p.name}'s temporary password: ${res.data.temp_password}`, { duration: 15000 });
-      setPlayers(prev => prev.map(x => x.id === p.id ? { ...x, must_change_password: true } : x));
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to reset password");
-    } finally {
-      setResettingPassword(null);
-    }
+  //
+  // This and the two handlers below always refetch the full list after a
+  // successful mutation rather than patching local state — standardized
+  // across all four admin pages so displayed data can never drift from what
+  // the server actually persisted.
+  const handleResetPassword = (p) => {
+    requestConfirm(`Reset ${p.name}'s password? A new temporary password will be generated — relay it to them directly (e.g. by phone).`, async () => {
+      setResettingPassword(p.id);
+      try {
+        const res = await api.post(`/admin/${endpointFor(p)}/${p.id}/reset-password`);
+        toast.success(`${p.name}'s temporary password: ${res.data.temp_password}`, { duration: 15000 });
+        await fetchPlayers();
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to reset password");
+      } finally {
+        setResettingPassword(null);
+      }
+    });
   };
 
   const handleAuctionCategoryChange = async (person, newCategory) => {
     if (!newCategory) return;
     try {
       await api.put(`/admin/${endpointFor(person)}/${person.id}`, { auction_category: newCategory });
-      setPlayers(prev => prev.map(p => p.id === person.id ? { ...p, auction_category: newCategory } : p));
       toast.success(`${person.name}'s auction category updated`);
+      await fetchPlayers();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to update auction category");
     }
@@ -178,8 +205,8 @@ export default function ManagePlayers() {
   const handleStatusChange = async (person, newStatus) => {
     try {
       await api.put(`/admin/captains/${person.id}`, { tournament_status: newStatus });
-      setPlayers(prev => prev.map(p => p.id === person.id ? { ...p, tournament_status: newStatus } : p));
       toast.success(`${person.name} → ${statusMeta(newStatus).label}`);
+      await fetchPlayers();
     } catch {
       toast.error("Failed to update status");
     }
@@ -188,6 +215,56 @@ export default function ManagePlayers() {
   const captainCount = players.filter(p => p.role === "captain").length;
   const playerCount = players.length - captainCount;
 
+  // Shared between the desktop table's expandable stats row and the mobile
+  // card's expanded section — the editable Bat Avg/Strike Rate/Bowl Avg/
+  // Economy form.
+  const renderStatsForm = (p) => (
+    <div className="flex flex-wrap items-end gap-4">
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Bat Avg</label>
+        <input
+          type="number" step="0.01" min="0"
+          className="input-field py-1.5 text-sm w-24"
+          value={statsEditRow.batting_average}
+          onChange={e => setStatsEditRow({ ...statsEditRow, batting_average: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Strike Rate</label>
+        <input
+          type="number" step="0.01" min="0"
+          className="input-field py-1.5 text-sm w-24"
+          value={statsEditRow.strike_rate}
+          onChange={e => setStatsEditRow({ ...statsEditRow, strike_rate: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Bowl Avg</label>
+        <input
+          type="number" step="0.01" min="0"
+          className="input-field py-1.5 text-sm w-24"
+          value={statsEditRow.bowling_average}
+          onChange={e => setStatsEditRow({ ...statsEditRow, bowling_average: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Economy</label>
+        <input
+          type="number" step="0.01" min="0"
+          className="input-field py-1.5 text-sm w-24"
+          value={statsEditRow.economy}
+          onChange={e => setStatsEditRow({ ...statsEditRow, economy: e.target.value })}
+        />
+      </div>
+      <button onClick={() => handleSaveStats(p)} disabled={savingStats} className="btn-primary text-xs py-1.5 px-4">
+        {savingStats ? "Saving…" : "Save"}
+      </button>
+      <button onClick={() => setExpandedStatsId(null)} className="btn-secondary text-xs py-1.5 px-4">
+        Close
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-cricket-cream isolate">
       <PageBackgroundPhoto src={playersPhoto} />
@@ -195,7 +272,7 @@ export default function ManagePlayers() {
       <div className="max-w-7xl mx-auto px-4 py-8">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Manage Players</h1>
             <p className="text-sm text-gray-500">
@@ -250,15 +327,29 @@ export default function ManagePlayers() {
           </form>
         )}
 
-        {/* Player table */}
+        {/* Search */}
+        {!loading && players.length > 0 && (
+          <div className="relative mb-4 max-w-sm">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              className="input-field pl-9"
+              placeholder="Search by name or code…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        )}
+
+        {/* Player list */}
         {loading ? (
-          <p className="text-gray-500 text-sm">Loading…</p>
+          <LoadingState />
         ) : (
-          <div className="card p-0 overflow-x-auto">
-            {/* max-h caps the table's own scroll area (not the whole page) so the
-                sticky header has a scrolling ancestor to stick within, no matter
-                how many players are loaded. */}
-            <div className="max-h-[75vh] overflow-y-auto overflow-x-auto rounded-xl">
+          <div className="card p-0 overflow-hidden">
+            {/* Desktop / tablet: table with sticky header. max-h caps the
+                table's own scroll area (not the whole page) so the sticky
+                header has a scrolling ancestor to stick within. */}
+            <div className="hidden sm:block max-h-[75vh] overflow-y-auto overflow-x-auto rounded-xl">
               <table className="min-w-full text-sm">
                 <thead className="bg-cricket-navy text-white sticky top-0 z-10">
                   <tr>
@@ -274,7 +365,7 @@ export default function ManagePlayers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {players.map((p, i) => {
+                  {filteredPlayers.map((p, i) => {
                     const isEditing = editId === p.id;
                     const isCaptain = p.role === "captain";
                     const meta = statusMeta(p.tournament_status);
@@ -437,57 +528,7 @@ export default function ManagePlayers() {
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                               Player Insights — {p.name}
                             </p>
-                            <div className="flex flex-wrap items-end gap-4">
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Bat Avg</label>
-                                <input
-                                  type="number" step="0.01" min="0"
-                                  className="input-field py-1.5 text-sm w-24"
-                                  value={statsEditRow.batting_average}
-                                  onChange={e => setStatsEditRow({ ...statsEditRow, batting_average: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Strike Rate</label>
-                                <input
-                                  type="number" step="0.01" min="0"
-                                  className="input-field py-1.5 text-sm w-24"
-                                  value={statsEditRow.strike_rate}
-                                  onChange={e => setStatsEditRow({ ...statsEditRow, strike_rate: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Bowl Avg</label>
-                                <input
-                                  type="number" step="0.01" min="0"
-                                  className="input-field py-1.5 text-sm w-24"
-                                  value={statsEditRow.bowling_average}
-                                  onChange={e => setStatsEditRow({ ...statsEditRow, bowling_average: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Economy</label>
-                                <input
-                                  type="number" step="0.01" min="0"
-                                  className="input-field py-1.5 text-sm w-24"
-                                  value={statsEditRow.economy}
-                                  onChange={e => setStatsEditRow({ ...statsEditRow, economy: e.target.value })}
-                                />
-                              </div>
-                              <button
-                                onClick={() => handleSaveStats(p)}
-                                disabled={savingStats}
-                                className="btn-primary text-xs py-1.5 px-4"
-                              >
-                                {savingStats ? "Saving…" : "Save"}
-                              </button>
-                              <button
-                                onClick={() => setExpandedStatsId(null)}
-                                className="btn-secondary text-xs py-1.5 px-4"
-                              >
-                                Close
-                              </button>
-                            </div>
+                            {renderStatsForm(p)}
                           </td>
                         </tr>
                       )}
@@ -496,14 +537,170 @@ export default function ManagePlayers() {
                   })}
                 </tbody>
               </table>
-
-              {players.length === 0 && (
-                <div className="text-center py-12 text-gray-400 text-sm">No players yet. Add one above.</div>
-              )}
             </div>
+
+            {/* Mobile: stacked cards — code/name/role up front, tap to
+                expand team name, auction category, status, player insights,
+                and actions. */}
+            <div className="sm:hidden divide-y">
+              {filteredPlayers.map((p) => {
+                const isEditing = editId === p.id;
+                const isCaptain = p.role === "captain";
+                const meta = statusMeta(p.tournament_status);
+                const statsExpanded = expandedStatsId === p.id;
+                const isExpanded = mobileExpanded.has(p.id);
+                return (
+                  <div key={p.id} className="p-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleMobileExpanded(p.id)}
+                      className="w-full flex items-center justify-between gap-2 text-left"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="bg-cricket-navy text-white text-xs font-bold px-2 py-1 rounded shrink-0">{p.team_code}</span>
+                        <span className="font-medium text-gray-900 truncate">{p.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isCaptain ? (
+                          <span className="flex items-center gap-1 text-xs font-medium text-cricket-navy bg-blue-50 rounded-full px-2 py-0.5">
+                            <Shield size={10} /> Captain
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Player</span>
+                        )}
+                        {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mt-3 pl-1 space-y-3 text-sm">
+                        {isEditing && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Code</label>
+                              <input className="input-field py-1.5 text-sm uppercase" value={editRow.team_code}
+                                onChange={e => setEditRow({ ...editRow, team_code: e.target.value.toUpperCase() })} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                              <input className="input-field py-1.5 text-sm" value={editRow.name}
+                                onChange={e => setEditRow({ ...editRow, name: e.target.value })} />
+                            </div>
+                          </div>
+                        )}
+
+                        {isCaptain && (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-gray-500">Team Name</span>
+                            {isEditing ? (
+                              <input className="input-field py-1.5 text-sm flex-1 max-w-[60%]" placeholder="Team name"
+                                value={editRow.team_name} onChange={e => setEditRow({ ...editRow, team_name: e.target.value })} />
+                            ) : (
+                              <span className="text-gray-800 font-medium">{p.team_name || "—"}</span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-500">Auction Category</span>
+                          <select
+                            value={p.auction_category || ""}
+                            onChange={e => handleAuctionCategoryChange(p, e.target.value)}
+                            className="text-xs font-medium rounded px-2 py-1 border border-gray-200 bg-white text-gray-700"
+                          >
+                            {AUCTION_CATEGORY_OPTIONS.map(opt => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {isCaptain && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500">Status</span>
+                            <select
+                              value={p.tournament_status || "not_played"}
+                              onChange={e => handleStatusChange(p, e.target.value)}
+                              className={`text-xs font-semibold rounded px-2 py-1 border-0 ${meta.color}`}
+                            >
+                              {STATUS_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div>
+                          <button
+                            onClick={() => toggleStats(p)}
+                            className="flex items-center gap-1.5 text-xs text-gray-700 hover:text-cricket-navy"
+                          >
+                            <span>Bat {p.batting_average ?? "—"}/{p.strike_rate ?? "—"} · Bowl {p.bowling_average ?? "—"}/{p.economy ?? "—"}</span>
+                            {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          {statsExpanded && (
+                            <div className="mt-2 pt-2 border-t">
+                              {renderStatsForm(p)}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            onClick={() => handleResetPassword(p)}
+                            disabled={resettingPassword === p.id}
+                            className="flex items-center gap-1 text-xs py-1.5 px-3 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                          >
+                            <KeyRound size={13} /> Reset Password
+                          </button>
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => handleSaveRow(p)}
+                                disabled={submitting}
+                                className="flex items-center gap-1 text-xs py-1.5 px-3 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                              >
+                                <Check size={13} /> Save
+                              </button>
+                              <button
+                                onClick={() => setEditId(null)}
+                                className="flex items-center gap-1 text-xs py-1.5 px-3 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                              >
+                                <X size={13} /> Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => startEdit(p)}
+                              className="flex items-center gap-1 text-xs py-1.5 px-3 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            >
+                              <Edit2 size={13} /> Edit
+                            </button>
+                          )}
+                          {!isCaptain && !isEditing && (
+                            <button
+                              onClick={() => handleDeactivate(p)}
+                              className="flex items-center gap-1 text-xs py-1.5 px-3 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                            >
+                              <X size={13} /> Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {players.length === 0 && <EmptyState message="No players yet. Add one above." />}
+            {players.length > 0 && filteredPlayers.length === 0 && (
+              <EmptyState message={`No players match "${search}".`} />
+            )}
           </div>
         )}
       </div>
+
+      <ConfirmDialog {...confirmProps} />
     </div>
   );
 }

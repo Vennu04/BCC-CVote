@@ -5,6 +5,10 @@ import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import WeatherForecast from "../../components/WeatherForecast";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
+import { LoadingState } from "../../components/LoadingState";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useConfirm } from "../../hooks/useConfirm";
+import { formatDateDisplay } from "../../utils/formatDate";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.jpg";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
 
@@ -25,6 +29,7 @@ export default function VotingWindow() {
   const [savingSlot, setSavingSlot] = useState(null);
   const [newSlot, setNewSlot] = useState(EMPTY_NEW_SLOT);
   const [addingSlot, setAddingSlot] = useState(false);
+  const { confirmProps, requestConfirm } = useConfirm();
 
   const fetchWindows = async () => {
     try {
@@ -98,15 +103,16 @@ export default function VotingWindow() {
     }
   };
 
-  const handleCloseEarly = async (slotId) => {
-    if (!confirm("Close this match's voting window early? Voters won't be able to vote on it anymore.")) return;
-    try {
-      await api.post("/admin/window/close", { slot_id: slotId });
-      toast.success("Window closed early");
-      fetchWindows();
-    } catch {
-      toast.error("Failed to close window");
-    }
+  const handleCloseEarly = (slotId) => {
+    requestConfirm("Close this match's voting window early? Voters won't be able to vote on it anymore.", async () => {
+      try {
+        await api.post("/admin/window/close", { slot_id: slotId });
+        toast.success("Window closed early");
+        fetchWindows();
+      } catch {
+        toast.error("Failed to close window");
+      }
+    });
   };
 
   const handleAddSlot = async (e) => {
@@ -125,15 +131,16 @@ export default function VotingWindow() {
     }
   };
 
-  const handleRemoveSlot = async (slotId) => {
-    if (!confirm("Remove this ad-hoc match? Its voting history stays on record, but it will disappear from the voting list.")) return;
-    try {
-      await api.delete(`/admin/slots/${slotId}`);
-      toast.success("Match removed");
-      fetchWindows();
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to remove match");
-    }
+  const handleRemoveSlot = (slotId) => {
+    requestConfirm("Remove this ad-hoc match? Its voting history stays on record, but it will disappear from the voting list.", async () => {
+      try {
+        await api.delete(`/admin/slots/${slotId}`);
+        toast.success("Match removed");
+        fetchWindows();
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to remove match");
+      }
+    });
   };
 
   return (
@@ -209,14 +216,14 @@ export default function VotingWindow() {
         </div>
 
         {loading ? (
-          <p className="text-gray-500 text-sm">Loading…</p>
+          <LoadingState />
         ) : (
           <div className="space-y-5">
             {dayGroups.map((group) => (
               <div key={group.key}>
                 {group.items.length > 1 && (
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    {group.label} — {group.items.length} candidate slots, compare turnout below
+                    {formatDateDisplay(group.label)} — {group.items.length} candidate slots, compare turnout below
                   </p>
                 )}
                 <div className={group.items.length > 1 ? "grid grid-cols-1 sm:grid-cols-2 gap-5" : ""}>
@@ -307,6 +314,8 @@ export default function VotingWindow() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog {...confirmProps} />
     </div>
   );
 }
