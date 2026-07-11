@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
+import YetToVotePanel from "../../components/YetToVotePanel";
 import { LoadingState } from "../../components/LoadingState";
 import adminPhoto from "../../assets/dashboard-backgrounds/admin.jpg";
 import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "lucide-react";
@@ -145,7 +146,12 @@ export default function AdminDashboard() {
               <div className="flex justify-center gap-2 mt-2 text-xs text-gray-500">
                 <span className="text-yellow-600">🤔 {slot.maybe}</span>
                 <span className="text-red-600">❌ {slot.not_available}</span>
-                <span className="text-gray-400">— {slot.no_response}</span>
+                <YetToVotePanel
+                  matrix={matrix}
+                  slotId={slot.slot_id}
+                  noResponseCount={slot.no_response}
+                  onVoteSet={fetchData}
+                />
               </div>
             </div>
           ))}

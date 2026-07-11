@@ -243,6 +243,103 @@ def dashboard():
     })
 
 
+# ── Admin vote override ─────────────────────────────────────────────────────────
+# Lets admin set or clear someone's vote directly — for the real-world case
+# where a captain/player couldn't cast or fix their own vote in time (mobile
+# issues, travel, work) and calls/messages admin instead. Deliberately not
+# subject to the same-user-only, window-must-be-open, or revoke-deadline
+# rules that guard the self-service routes in votes.py — an admin acting on
+# someone's explicit request is a different trust boundary than that
+# person's own account being used, and the whole point is to still work
+# after those deadlines have passed. Every override is logged to
+# vote_overrides for accountability, same pattern as password_resets above.
+
+@admin_bp.route("/votes", methods=["POST"])
+@admin_required
+def admin_set_vote():
+    """Body: { "user_id": "...", "slot_id": "...", "availability": "available" | "not_available" | "maybe" }"""
+    acting_admin = get_current_user()
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    slot_id = data.get("slot_id")
+    availability = data.get("availability")
+
+    if not user_id or not slot_id or availability not in ("available", "not_available", "maybe"):
+        return jsonify({"error": "user_id, slot_id, and a valid availability are required"}), 400
+
+    target = mongo.db.users.find_one({"_id": ObjectId(user_id), "is_active": True, **VOTER_FILTER})
+    if not target:
+        return jsonify({"error": "Voter not found"}), 404
+
+    slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
+    if not slot:
+        return jsonify({"error": "Slot not found"}), 404
+
+    window = _get_active_window(slot_id)
+    if not window:
+        return jsonify({"error": "No voting window has been configured for this match yet"}), 400
+
+    existing = mongo.db.votes.find_one({
+        "captain_id": user_id, "slot_id": slot_id, "window_id": str(window["_id"]),
+    })
+    old_availability = existing["availability"] if existing else None
+
+    now = datetime.utcnow()
+    mongo.db.votes.update_one(
+        {"captain_id": user_id, "slot_id": slot_id, "window_id": str(window["_id"])},
+        {
+            "$set": {"availability": availability, "updated_at": now},
+            "$setOnInsert": {"captain_id": user_id, "slot_id": slot_id,
+                              "window_id": str(window["_id"]), "voted_at": now},
+        },
+        upsert=True,
+    )
+    mongo.db.vote_overrides.insert_one({
+        "admin_id": str(acting_admin["_id"]),
+        "admin_name": acting_admin["name"],
+        "target_user_id": user_id,
+        "target_user_name": target["name"],
+        "slot_id": slot_id,
+        "action": "set",
+        "old_availability": old_availability,
+        "new_availability": availability,
+        "overridden_at": now,
+    })
+    return jsonify({"message": f"{target['name']}'s vote set to {availability}", "availability": availability})
+
+
+@admin_bp.route("/votes/<slot_id>/<user_id>", methods=["DELETE"])
+@admin_required
+def admin_clear_vote(slot_id, user_id):
+    acting_admin = get_current_user()
+    target = mongo.db.users.find_one({"_id": ObjectId(user_id), "is_active": True, **VOTER_FILTER})
+    if not target:
+        return jsonify({"error": "Voter not found"}), 404
+
+    window = _get_active_window(slot_id)
+    if not window:
+        return jsonify({"error": "No voting window has been configured for this match yet"}), 400
+
+    existing = mongo.db.votes.find_one_and_delete({
+        "captain_id": user_id, "slot_id": slot_id, "window_id": str(window["_id"]),
+    })
+    if not existing:
+        return jsonify({"error": f"{target['name']} has no vote to clear for this match"}), 404
+
+    mongo.db.vote_overrides.insert_one({
+        "admin_id": str(acting_admin["_id"]),
+        "admin_name": acting_admin["name"],
+        "target_user_id": user_id,
+        "target_user_name": target["name"],
+        "slot_id": slot_id,
+        "action": "clear",
+        "old_availability": existing["availability"],
+        "new_availability": None,
+        "overridden_at": datetime.utcnow(),
+    })
+    return jsonify({"message": f"{target['name']}'s vote cleared"})
+
+
 # ── Captains management ────────────────────────────────────────────────────────
 
 @admin_bp.route("/captains", methods=["GET"])
