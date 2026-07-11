@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, ChevronDown, ChevronUp } from "lucide-react";
+import toast from "react-hot-toast";
+import api from "../utils/api";
+import { useConfirm } from "../hooks/useConfirm";
+import ConfirmDialog from "./ConfirmDialog";
+import { Users, ChevronDown, ChevronUp, Check, HelpCircle, X } from "lucide-react";
 
 // Same fixed order/labels as the auction pool view (Auction.jsx, admin/Auction.jsx)
 // — kept in sync deliberately so a category reads the same everywhere in the app.
@@ -11,6 +15,12 @@ const GROUP_LABELS = {
   classic: "Classic",
 };
 const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "classic"];
+
+const AVAILABILITY_LABELS = {
+  available: "Available",
+  maybe: "Maybe",
+  not_available: "Not Available",
+};
 
 // Pure computation, exported so callers that need just the numbers (e.g. a
 // compact multi-slot comparison strip) don't have to render the full panel.
@@ -25,6 +35,11 @@ const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power"
 // make the per-category odd/even counts (and the ⚠️ odd warning) diverge from
 // what the backend would actually see, silently hiding imbalance until
 // create_auction rejected it.
+//
+// Each person carries their raw `availability` (available/maybe/not_available/
+// null) alongside the confirmed/pending bucketing — the admin mark-vote UI
+// below needs to know whether someone already has a recorded vote (any value,
+// not just "available") to decide whether overwriting it needs a confirm step.
 export function confirmedForSlot(voteMatrix, slotId, excludeIds) {
   const categories = {};
   CATEGORY_ORDER.forEach((cat) => { categories[cat] = { confirmed: [], pending: [] }; });
@@ -35,11 +50,13 @@ export function confirmedForSlot(voteMatrix, slotId, excludeIds) {
     if (excludeIds?.has(person.id)) return;
 
     const vote = row.votes.find((v) => v.slot_id === slotId);
-    const isConfirmed = vote?.availability === "available";
+    const availability = vote?.availability ?? null;
+    const isConfirmed = availability === "available";
+    const withAvailability = { ...person, availability };
 
     const cat = person.auction_category;
     if (cat && categories[cat]) {
-      (isConfirmed ? categories[cat].confirmed : categories[cat].pending).push(person);
+      (isConfirmed ? categories[cat].confirmed : categories[cat].pending).push(withAvailability);
     } else if (isConfirmed) {
       uncategorizedConfirmed += 1;
     }
@@ -52,19 +69,65 @@ export function confirmedForSlot(voteMatrix, slotId, excludeIds) {
   return { categories, uncategorizedConfirmed, totalConfirmed };
 }
 
-function NameChips({ people, tone }) {
+function NameChip({ person, tone, onMark, markingId }) {
+  const [open, setOpen] = useState(false);
+  const marking = markingId === person.id;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={marking}
+        className={`text-xs rounded-full px-2.5 py-1 hover:ring-2 hover:ring-pitch-300 transition-shadow disabled:opacity-50 ${
+          tone === "pending" ? "bg-gray-50 text-gray-400 border border-gray-200" : "bg-gray-100 text-gray-700"
+        }`}
+        title="Click to set or change this person's vote"
+      >
+        {person.name}{person.role === "captain" ? " (C)" : ""}{person.team_name ? ` — ${person.team_name}` : ""}
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-20 top-full left-0 mt-1 flex gap-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1"
+          onMouseLeave={() => setOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => { onMark(person, "available"); setOpen(false); }}
+            className="p-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
+            title={`Mark ${person.name} available`}
+          >
+            <Check size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={() => { onMark(person, "maybe"); setOpen(false); }}
+            className="p-1.5 rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+            title={`Mark ${person.name} maybe`}
+          >
+            <HelpCircle size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={() => { onMark(person, "not_available"); setOpen(false); }}
+            className="p-1.5 rounded bg-red-100 text-red-700 hover:bg-red-200"
+            title={`Mark ${person.name} not available`}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NameChips({ people, tone, onMark, markingId }) {
   if (people.length === 0) return <p className="text-xs text-gray-400 italic">None yet</p>;
   return (
     <div className="flex flex-wrap gap-1.5">
       {people.map((p) => (
-        <span
-          key={p.id}
-          className={`text-xs rounded-full px-2.5 py-1 ${
-            tone === "pending" ? "bg-gray-50 text-gray-400 border border-gray-200" : "bg-gray-100 text-gray-700"
-          }`}
-        >
-          {p.name}{p.role === "captain" ? " (C)" : ""}{p.team_name ? ` — ${p.team_name}` : ""}
-        </span>
+        <NameChip key={p.id} person={p} tone={tone} onMark={onMark} markingId={markingId} />
       ))}
     </div>
   );
@@ -76,11 +139,43 @@ function NameChips({ people, tone }) {
 // admin gets a stable layout to compare against). Odd/missing-category flags
 // mirror the same wording admin/Auction.jsx already uses for create_auction's
 // quota check.
-export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, compact }) {
+//
+// Every name here is clickable — admin can mark/change anyone's vote for this
+// slot (e.g. players who confirmed by phone/WhatsApp but couldn't cast their
+// own vote in time). Setting a vote for someone with none yet happens
+// immediately; changing someone's already-recorded vote asks for confirmation
+// first, since that's overwriting a real answer rather than filling a blank.
+export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, compact, onVoteSet }) {
   const [showPending, setShowPending] = useState(false);
+  const [markingId, setMarkingId] = useState(null);
+  const { confirmProps, requestConfirm } = useConfirm();
   const data = useMemo(() => confirmedForSlot(voteMatrix, slotId, excludeIds), [voteMatrix, slotId, excludeIds]);
 
   const pendingTotal = CATEGORY_ORDER.reduce((sum, cat) => sum + data.categories[cat].pending.length, 0);
+
+  const doMark = async (person, availability) => {
+    setMarkingId(person.id);
+    try {
+      await api.post("/admin/votes", { user_id: person.id, slot_id: slotId, availability });
+      toast.success(`${person.name} marked ${AVAILABILITY_LABELS[availability].toLowerCase()}`);
+      await onVoteSet?.();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to set vote");
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const handleMark = (person, availability) => {
+    if (person.availability) {
+      requestConfirm(
+        `${person.name} already voted "${AVAILABILITY_LABELS[person.availability]}". Change it to "${AVAILABILITY_LABELS[availability]}"?`,
+        () => doMark(person, availability)
+      );
+    } else {
+      doMark(person, availability);
+    }
+  };
 
   return (
     <div className={compact ? "" : "rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5"}>
@@ -116,9 +211,9 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
                   ({confirmed.length}{odd && " ⚠️ odd"})
                 </span>
               </p>
-              {!compact && <NameChips people={confirmed} />}
+              {!compact && <NameChips people={confirmed} onMark={handleMark} markingId={markingId} />}
               {!compact && showPending && pending.length > 0 && (
-                <div className="mt-1"><NameChips people={pending} tone="pending" /></div>
+                <div className="mt-1"><NameChips people={pending} tone="pending" onMark={handleMark} markingId={markingId} /></div>
               )}
             </div>
           );
@@ -131,6 +226,8 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
           <Link to="/admin/players" className="underline">Manage Players</Link>
         </p>
       )}
+
+      {!compact && <ConfirmDialog {...confirmProps} />}
     </div>
   );
 }

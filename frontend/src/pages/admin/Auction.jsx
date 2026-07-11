@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
@@ -66,15 +66,22 @@ export default function AdminAuction() {
   // where admin watches confirmations land live to decide when there's
   // enough turnout to create the auction (see ConfirmedPlayersPanel below),
   // so it needs to update without a manual refresh, same as Voting Windows.
+  // Pulled out of the effect (rather than an inline closure) so
+  // ConfirmedPlayersPanel's mark-vote controls can trigger the same refetch
+  // immediately after admin sets someone's vote here, not just on the next
+  // poll tick.
+  const fetchSlotsAndVotes = useCallback(async () => {
+    await Promise.all([
+      api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => {}),
+      api.get("/admin/dashboard").then((res) => setVoteMatrix(res.data.vote_matrix || [])).catch(() => {}),
+    ]);
+  }, []);
+
   useEffect(() => {
-    const fetchSlotsAndVotes = () => {
-      api.get("/admin/window").then((res) => setSlots(res.data.windows || [])).catch(() => {});
-      api.get("/admin/dashboard").then((res) => setVoteMatrix(res.data.vote_matrix || [])).catch(() => {});
-    };
     fetchSlotsAndVotes();
     const interval = setInterval(fetchSlotsAndVotes, SLOT_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchSlotsAndVotes]);
 
   // Informational only — Captain A/B can be any active captain (they're
   // running the draft, not required to be in the player pool themselves).
@@ -248,7 +255,7 @@ export default function AdminAuction() {
                   scoped to just the selected slot with the picked captains excluded
                   — exactly what create_auction will see. */}
               {selectedSlotId && (
-                <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={selectedSlotId} excludeIds={excludeCaptainIds} />
+                <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={selectedSlotId} excludeIds={excludeCaptainIds} onVoteSet={fetchSlotsAndVotes} />
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

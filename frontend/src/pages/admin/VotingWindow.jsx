@@ -256,7 +256,7 @@ export default function VotingWindow() {
 
                         {win && (
                           <div className="mb-4">
-                            <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} />
+                            <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} onVoteSet={fetchVoteMatrix} />
                           </div>
                         )}
 
