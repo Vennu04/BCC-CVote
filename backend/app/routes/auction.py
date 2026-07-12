@@ -395,7 +395,18 @@ def release_player(auction_id):
     if not player:
         return jsonify({"error": "No players remaining in this category"}), 400
 
-    mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": str(player["_id"])}})
+    # current_player_released_at scopes drop_player's "did both captains
+    # pass THIS time" check to actions taken since this exact release --
+    # without it, a player who's the only one left in their category (and
+    # so gets released again after a prior no-bid pass) would carry the
+    # OTHER captain's stale drop record forward from the earlier round,
+    # letting a single fresh drop from just one captain wrongly re-trigger
+    # "both passed" even though the other captain never acted this time.
+    released_at = datetime.utcnow()
+    mongo.db.auctions.update_one(
+        {"_id": auction["_id"]},
+        {"$set": {"current_player_id": str(player["_id"]), "current_player_released_at": released_at}},
+    )
 
     # Auditable release-order log — a real, timestamped record of every
     # release event, independent of the auction doc's current_player_id
@@ -729,8 +740,22 @@ def drop_player(auction_id):
     player = _player_doc(auction_id, player_id)
     other_captain = auction["captain_b_id"] if captain_id == auction["captain_a_id"] else auction["captain_a_id"]
 
+    # Scope "has the other captain already passed" and "who holds the active
+    # bid" to actions taken SINCE this exact release. Without this, a player
+    # who's the only one left in their category -- so gets released again
+    # after an earlier no-bid pass -- carries the other captain's stale drop
+    # record forward from that earlier round, letting a single fresh drop
+    # from just one captain wrongly resolve "both passed" even though the
+    # other captain never acted this time. Auctions already in flight when
+    # this shipped won't have current_player_released_at set yet for their
+    # current release; falling back to no scoping for just that one release
+    # keeps the old behavior for it instead of erroring, and self-heals from
+    # the very next release() call onward.
+    released_at = auction.get("current_player_released_at")
+    this_round = {"created_at": {"$gte": released_at}} if released_at else {}
+
     last_bid = mongo.db.auction_bids.find_one(
-        {"auction_id": auction_id, "player_id": player_id, "action": "bid"},
+        {"auction_id": auction_id, "player_id": player_id, "action": "bid", **this_round},
         sort=[("created_at", -1)],
     )
     if last_bid and last_bid["captain_id"] == captain_id:
@@ -754,7 +779,7 @@ def drop_player(auction_id):
         return jsonify({"message": "Sold", "sold_to": other_captain, "sold_price": last_bid["amount"]})
 
     already_dropped = mongo.db.auction_bids.find_one({
-        "auction_id": auction_id, "player_id": player_id, "captain_id": other_captain, "action": "drop",
+        "auction_id": auction_id, "player_id": player_id, "captain_id": other_captain, "action": "drop", **this_round,
     })
     if not last_bid and already_dropped:
         # Both captains passed at the base price with no bids at all — stays
