@@ -28,7 +28,7 @@ spec:
       containers:
         - name: frontend
           # Image tag updated by GitHub Actions prod-cd.yml
-          image: 661474704151.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-frontend:e9a5d96c
+          image: 661474704151.dkr.ecr.ap-south-1.amazonaws.com/bcc-cvote-frontend:3b0f4b6f
           imagePullPolicy: Always
           ports:
             - containerPort: 80
