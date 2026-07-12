@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from .. import mongo
 from ..utils.auth import admin_required, get_current_user
-from ..utils.time_utils import format_ist
+from ..utils.time_utils import format_ist, to_iso_utc
 
 auction_bp = Blueprint("auction", __name__)
 
@@ -364,7 +364,7 @@ def start_auction(auction_id):
         {"_id": auction["_id"]},
         {"$set": {"status": "active", "started_at": now, "ends_at": ends_at}},
     )
-    return jsonify({"message": "Auction started", "ends_at": format_ist(ends_at)})
+    return jsonify({"message": "Auction started", "ends_at": format_ist(ends_at), "ends_at_iso": to_iso_utc(ends_at)})
 
 
 @auction_bp.route("/admin/auction/<auction_id>/release", methods=["POST"])
@@ -541,6 +541,7 @@ def get_auction(auction_id):
         "id": auction_id,
         "status": auction["status"],
         "ends_at": format_ist(auction["ends_at"]) if auction.get("ends_at") else None,
+        "ends_at_iso": to_iso_utc(auction.get("ends_at")),
         "points_budget": auction["points_budget"],
         "starting_price": auction["starting_price"],
         "session_minutes": SESSION_MINUTES,

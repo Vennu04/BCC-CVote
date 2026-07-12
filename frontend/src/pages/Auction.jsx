@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import AuctionRulesNote from "../components/AuctionRulesNote";
+import CountdownBadge from "../components/CountdownBadge";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
-import { Gavel, ThumbsDown, Clock, Trophy, Gift } from "lucide-react";
+import { Gavel, ThumbsDown, Trophy, Gift } from "lucide-react";
 
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
@@ -13,28 +14,6 @@ const GROUP_LABELS = {
   power: "Power",
   classic: "Classic",
 };
-
-function CountdownBadge({ endsAtIso }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  if (!endsAtIso) return null;
-  const remainingMs = new Date(endsAtIso).getTime() - now;
-  const expired = remainingMs <= 0;
-  const totalSec = Math.max(0, Math.floor(remainingMs / 1000));
-  const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
-  const ss = String(totalSec % 60).padStart(2, "0");
-  return (
-    <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${
-      expired ? "bg-gray-100 text-gray-600" : "bg-amber-100 text-amber-700"
-    }`}>
-      <Clock size={12} />
-      {expired ? "Time's up" : `${mm}:${ss} left`}
-    </span>
-  );
-}
 
 // Fixed order/labels for every auction — not derived from the data, so a
 // category with zero players left still shows up as "(0 left)" instead of
@@ -264,7 +243,7 @@ export default function Auction() {
             <Gavel className="text-pitch-600" size={24} />
             <h1 className="text-2xl font-bold text-gray-900">Player Auction</h1>
           </div>
-          <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at : null} />
+          <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at_iso : null} />
         </div>
 
         <AuctionRulesNote auction={auction} />

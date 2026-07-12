@@ -28,6 +28,19 @@ def format_ist(dt: datetime) -> str:
     return dt.astimezone(IST).strftime("%d %b %Y %I:%M %p IST")
 
 
+def to_iso_utc(dt: datetime):
+    """Timezone-aware ISO 8601 string, safe for JS `new Date()` to parse
+    correctly -- unlike format_ist()'s human-readable IST string ("11 Jul
+    2026 11:47 PM IST"), which Date() silently mis-parses into NaN. Naive
+    datetimes are assumed UTC, matching how they're stored everywhere in
+    this codebase."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.isoformat()
+
+
 def is_voting_window_open(opens_at: datetime, closes_at: datetime) -> bool:
     now = now_ist()
     if opens_at.tzinfo is None:

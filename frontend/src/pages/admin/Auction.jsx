@@ -6,6 +6,7 @@ import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import auctionPhoto from "../../assets/dashboard-backgrounds/auction.jpg";
 import AuctionRulesNote from "../../components/AuctionRulesNote";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
+import CountdownBadge from "../../components/CountdownBadge";
 import { useAuction } from "../../hooks/useAuction";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy } from "lucide-react";
 
@@ -195,11 +196,14 @@ export default function AdminAuction() {
             <Gavel className="text-pitch-600" size={24} />
             <h1 className="text-2xl font-bold text-gray-900">Player Auction</h1>
           </div>
-          {auctionId && (
-            <button onClick={handleNewAuction} className="flex items-center gap-1 text-xs text-gray-500 hover:text-pitch-600">
-              <RefreshCw size={13} /> Start a new auction
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {auction?.status === "active" && <CountdownBadge endsAtIso={auction.ends_at_iso} />}
+            {auctionId && (
+              <button onClick={handleNewAuction} className="flex items-center gap-1 text-xs text-gray-500 hover:text-pitch-600">
+                <RefreshCw size={13} /> Start a new auction
+              </button>
+            )}
+          </div>
         </div>
 
         {!auctionId && slots.length > 0 && (

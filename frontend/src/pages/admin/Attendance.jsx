@@ -4,8 +4,10 @@ import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 import attendancePhoto from "../../assets/dashboard-backgrounds/attendance.jpg";
-import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp, UserCheck } from "lucide-react";
 
 // Mirrors the same role-aware endpoint pattern used on Manage Players —
 // captains and players are both rows in this roster but live on two
@@ -22,6 +24,18 @@ export default function Attendance() {
   const [incrementingId, setIncrementingId] = useState(null);
   const [search, setSearch] = useState("");
   const [mobileExpanded, setMobileExpanded] = useState(new Set());
+  const { confirmProps, requestConfirm } = useConfirm();
+
+  // Suggest Attendance from Votes — ties the "+1" credit to who actually
+  // voted available for a real match, instead of it being a blind click
+  // with no relationship to any match. Admin picks the slot explicitly
+  // (recurring slots don't carry their own per-occurrence history — see the
+  // backend comment on _attendance_suggest_candidates).
+  const [slots, setSlots] = useState([]);
+  const [suggestSlotId, setSuggestSlotId] = useState("");
+  const [suggestData, setSuggestData] = useState(null);
+  const [loadingSuggest, setLoadingSuggest] = useState(false);
+  const [applyingSuggest, setApplyingSuggest] = useState(false);
 
   const fetchAttendance = async () => {
     try {
@@ -35,7 +49,54 @@ export default function Attendance() {
     }
   };
 
-  useEffect(() => { fetchAttendance(); }, []);
+  const fetchSlots = async () => {
+    try {
+      const res = await api.get("/admin/window");
+      setSlots(res.data.windows || []);
+    } catch {
+      // Silent — the suggest panel just won't have a slot list this tick;
+      // doesn't block the rest of the page.
+    }
+  };
+
+  useEffect(() => { fetchAttendance(); fetchSlots(); }, []);
+
+  const fetchSuggestData = async (slotId) => {
+    setLoadingSuggest(true);
+    try {
+      const res = await api.get("/admin/attendance/suggest", { params: { slot_id: slotId } });
+      setSuggestData(res.data);
+    } catch {
+      toast.error("Failed to load suggested attendance");
+      setSuggestData(null);
+    } finally {
+      setLoadingSuggest(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!suggestSlotId) { setSuggestData(null); return; }
+    fetchSuggestData(suggestSlotId);
+  }, [suggestSlotId]);
+
+  const handleApplySuggested = () => {
+    const eligible = suggestData?.eligible_count ?? 0;
+    if (!eligible) return;
+    const matchLabel = `${suggestData.slot.day} ${suggestData.slot.match_time || suggestData.slot.time_of_day}`;
+    requestConfirm(`Credit attendance for ${eligible} player(s) who voted available for ${matchLabel}?`, async () => {
+      setApplyingSuggest(true);
+      try {
+        const res = await api.post("/admin/attendance/suggest/apply", { slot_id: suggestSlotId });
+        toast.success(res.data.message);
+        await fetchAttendance();
+        await fetchSuggestData(suggestSlotId);
+      } catch (err) {
+        toast.error(err.response?.data?.error || "Failed to credit attendance");
+      } finally {
+        setApplyingSuggest(false);
+      }
+    });
+  };
 
   const toggleMobileExpanded = (id) => {
     setMobileExpanded(prev => {
@@ -154,6 +215,65 @@ export default function Attendance() {
           <button onClick={handleAutoMarkTopN} disabled={loading} className="btn-secondary flex items-center gap-2">
             <Trophy size={15} /> Auto-Mark Top {settings.knockout_cutoff} as Eligible
           </button>
+        </div>
+
+        {/* Suggest Attendance from Votes */}
+        <div className="card mb-6">
+          <div className="flex items-center gap-2 mb-1">
+            <UserCheck size={16} className="text-pitch-600" />
+            <h2 className="font-bold text-gray-900 text-sm">Suggest Attendance from Votes</h2>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            Credit everyone who voted "Available" for a match — pick which one, review who's included, then apply.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[220px]">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Match</label>
+              <select
+                className="input-field py-1.5 text-sm"
+                value={suggestSlotId}
+                onChange={e => setSuggestSlotId(e.target.value)}
+              >
+                <option value="">Select a match…</option>
+                {slots.map(({ slot }) => (
+                  <option key={slot.id} value={slot.id}>{slot.day} {slot.match_time || slot.time_of_day}</option>
+                ))}
+              </select>
+            </div>
+            {suggestSlotId && !loadingSuggest && suggestData?.window && (
+              <button
+                onClick={handleApplySuggested}
+                disabled={applyingSuggest || suggestData.eligible_count === 0}
+                className="btn-primary text-sm py-1.5 px-4 disabled:opacity-50"
+              >
+                {applyingSuggest ? "Crediting…" : `Credit ${suggestData.eligible_count} Player(s)`}
+              </button>
+            )}
+          </div>
+
+          {suggestSlotId && loadingSuggest && <p className="text-xs text-gray-400 mt-3">Loading…</p>}
+
+          {suggestSlotId && !loadingSuggest && suggestData && (
+            !suggestData.window ? (
+              <p className="text-xs text-gray-400 mt-3">No voting window has ever been set for this match yet.</p>
+            ) : suggestData.candidates.length === 0 ? (
+              <p className="text-xs text-gray-400 mt-3">Nobody voted "Available" for this match.</p>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {suggestData.candidates.map(c => (
+                  <span
+                    key={c.id}
+                    title={c.already_credited ? "Already credited for this match" : "Will be credited"}
+                    className={`text-xs font-medium rounded-full px-2.5 py-1 ${
+                      c.already_credited ? "bg-gray-100 text-gray-400 line-through" : "bg-pitch-50 text-pitch-700"
+                    }`}
+                  >
+                    {c.name}
+                  </span>
+                ))}
+              </div>
+            )
+          )}
         </div>
 
         {/* Search */}
@@ -295,6 +415,8 @@ export default function Attendance() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog {...confirmProps} />
     </div>
   );
 }

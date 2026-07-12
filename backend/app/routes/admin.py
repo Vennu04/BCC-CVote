@@ -670,6 +670,138 @@ def update_attendance():
     return jsonify({"message": "Attendance updated", "modified_count": result.modified_count})
 
 
+# ── Suggest attendance from votes — closes the gap where the "+1" button
+# above has zero relationship to who actually said they'd show up. Recurring
+# slots don't carry their own per-occurrence history (their calendar date is
+# always "whichever Sat/Sun is next", recomputed live -- see
+# get_next_match_slot in time_utils.py), so there's no single "last match"
+# to auto-detect safely across a weekend boundary; admin picks which slot's
+# votes to credit from instead, same explicit-picker pattern already used on
+# Voting Windows and Auction. attendance_credits records exactly which
+# (user, slot, window) triples have already been credited, so re-running
+# this for the same match after admin double-clicks or comes back later is a
+# safe no-op instead of double-counting.
+
+def _latest_window_for_slot(slot_id):
+    """Most recent voting window ever set for this slot, active or not --
+    unlike _get_active_window, this still finds a slot's window once admin
+    has opened a newer one for its next occurrence, which is exactly the
+    state attendance-crediting needs to look back at (the match already
+    happened, so its window is likely deactivated by the time anyone gets
+    around to marking who showed up)."""
+    return mongo.db.voting_windows.find_one({"slot_id": slot_id}, sort=[("created_at", -1)])
+
+
+def _attendance_suggest_candidates(slot_id):
+    """(slot, window, candidates) shared by both routes below so the preview
+    and the apply can never disagree about who's eligible. candidates is
+    every active voter who voted "available" for the slot's latest window,
+    each flagged with whether they've already been credited for that exact
+    match instance."""
+    slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
+    if not slot:
+        return None, None, []
+    window = _latest_window_for_slot(slot_id)
+    if not window:
+        return slot, None, []
+
+    window_id = str(window["_id"])
+    available_ids = {
+        v["captain_id"] for v in mongo.db.votes.find(
+            {"slot_id": slot_id, "window_id": window_id, "availability": "available"}
+        )
+    }
+    if not available_ids:
+        return slot, window, []
+
+    already_credited = {
+        c["user_id"] for c in mongo.db.attendance_credits.find(
+            {"slot_id": slot_id, "window_id": window_id, "user_id": {"$in": list(available_ids)}}
+        )
+    }
+    voters = {str(u["_id"]): u for u in mongo.db.users.find(
+        {"_id": {"$in": [ObjectId(i) for i in available_ids]}, "is_active": True, **VOTER_FILTER}
+    )}
+    candidates = [
+        {"id": uid, "name": voters[uid]["name"], "team_code": voters[uid]["team_code"],
+         "already_credited": uid in already_credited}
+        for uid in available_ids if uid in voters
+    ]
+    candidates.sort(key=lambda c: c["name"].lower())
+    return slot, window, candidates
+
+
+@admin_bp.route("/attendance/suggest", methods=["GET"])
+@admin_required
+def suggest_attendance():
+    slot_id = request.args.get("slot_id")
+    if not slot_id or not ObjectId.is_valid(slot_id):
+        return jsonify({"error": "Valid slot_id is required"}), 400
+
+    slot, window, candidates = _attendance_suggest_candidates(slot_id)
+    if not slot:
+        return jsonify({"error": "Slot not found"}), 404
+
+    return jsonify({
+        "slot": _slot_to_dict(slot),
+        "window": _window_info(window) if window else None,
+        "candidates": candidates,
+        "eligible_count": sum(1 for c in candidates if not c["already_credited"]),
+    })
+
+
+@admin_bp.route("/attendance/suggest/apply", methods=["POST"])
+@admin_required
+def apply_suggested_attendance():
+    data = request.get_json(silent=True) or {}
+    slot_id = data.get("slot_id")
+    if not slot_id or not ObjectId.is_valid(slot_id):
+        return jsonify({"error": "Valid slot_id is required"}), 400
+
+    slot, window, candidates = _attendance_suggest_candidates(slot_id)
+    if not slot:
+        return jsonify({"error": "Slot not found"}), 404
+    if not window:
+        return jsonify({"error": "No voting window has ever been set for this match"}), 400
+
+    to_credit = [c for c in candidates if not c["already_credited"]]
+    if not to_credit:
+        return jsonify({
+            "message": "Nothing to credit — everyone who voted available is already marked present",
+            "credited_count": 0,
+        })
+
+    acting_admin = get_current_user()
+    window_id = str(window["_id"])
+    now = datetime.utcnow()
+    credited_names = []
+    for c in to_credit:
+        user = mongo.db.users.find_one({"_id": ObjectId(c["id"])})
+        if not user:
+            continue
+        matches_present = (user.get("matches_present") or 0) + 1
+        total_matches = (user.get("total_matches") or 0) + 1
+        mongo.db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "matches_present": matches_present,
+                "total_matches": total_matches,
+                "attendance_percentage": round(matches_present / total_matches * 100, 2),
+            }},
+        )
+        mongo.db.attendance_credits.insert_one({
+            "user_id": c["id"], "slot_id": slot_id, "window_id": window_id,
+            "credited_by": str(acting_admin["_id"]), "credited_at": now,
+        })
+        credited_names.append(user["name"])
+
+    return jsonify({
+        "message": f"Credited attendance for {len(credited_names)} player(s) who voted available",
+        "credited_count": len(credited_names),
+        "credited_names": credited_names,
+    })
+
+
 # ── League matches — one document per completed match, admin checks off who
 # actually attended; attendance_count/total_matches_organized above are both
 # derived from these. ───────────────────────────────────────────────────────
