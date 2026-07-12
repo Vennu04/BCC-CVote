@@ -7,6 +7,9 @@ import auctionPhoto from "../../assets/dashboard-backgrounds/auction.jpg";
 import AuctionRulesNote from "../../components/AuctionRulesNote";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
 import CountdownBadge from "../../components/CountdownBadge";
+import PlayerInsightsCard from "../../components/PlayerInsightsCard";
+import FairnessBanner from "../../components/FairnessBanner";
+import ReleaseOrderLog from "../../components/ReleaseOrderLog";
 import { useAuction } from "../../hooks/useAuction";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy } from "lucide-react";
 
@@ -300,6 +303,8 @@ export default function AdminAuction() {
           <>
             <AuctionRulesNote auction={auction} />
 
+            {auction.status !== "completed" && <FairnessBanner />}
+
             {auction.status === "pending" && (
               <div className="card text-center py-6">
                 <p className="text-gray-600 mb-3">Auction created — not started yet.</p>
@@ -348,6 +353,8 @@ export default function AdminAuction() {
                 )}
               </div>
             )}
+
+            {auction.current_player && <PlayerInsightsCard player={auction.current_player} />}
 
             {auction.status === "completed" && (
               <div className="card text-center py-6 text-green-700 font-medium space-y-3">
@@ -405,6 +412,8 @@ export default function AdminAuction() {
                 );
               })}
             </div>
+
+            {auction.status !== "pending" && <ReleaseOrderLog auctionId={auctionId} />}
           </>
         )}
       </div>

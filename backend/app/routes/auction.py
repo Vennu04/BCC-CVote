@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from .. import mongo
 from ..utils.auth import admin_required, get_current_user
 from ..utils.time_utils import format_ist, to_iso_utc
+from ..services.next_match import next_match_context, next_match_label
 
 auction_bp = Blueprint("auction", __name__)
 
@@ -395,7 +396,45 @@ def release_player(auction_id):
         return jsonify({"error": "No players remaining in this category"}), 400
 
     mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": str(player["_id"])}})
+
+    # Auditable release-order log — a real, timestamped record of every
+    # release event, independent of the auction doc's current_player_id
+    # (which only ever holds the ONE player up for bidding right now).
+    # order_index/category_index are safe to compute as "count so far" with
+    # no locking: a new release can never be requested while another player
+    # is already current_player (checked above), so releases for one
+    # auction are inherently serialized, never concurrent.
+    user = users_map.get(player["user_id"], {})
+    mongo.db.auction_release_log.insert_one({
+        "auction_id": str(auction["_id"]),
+        "category": category,
+        "player_id": str(player["_id"]),
+        "player_name": user.get("name", "?"),
+        "released_at": datetime.utcnow(),
+    })
     return jsonify({"message": "Player released for bidding", "player_id": str(player["_id"])})
+
+
+@auction_bp.route("/auction/<auction_id>/release-log", methods=["GET"])
+@jwt_required()
+def get_release_log(auction_id):
+    """View-only, full release-order history for this auction — available
+    to both captains, so the fixed rule (see get_next_player_in_category)
+    can be verified after the fact from the actual sequence of events, not
+    just trusted from the current player's own justification."""
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+
+    entries = list(mongo.db.auction_release_log.find({"auction_id": auction_id}).sort("released_at", 1))
+    return jsonify({
+        "entries": [{
+            "order_index": i + 1,
+            "category": e["category"],
+            "player_name": e["player_name"],
+            "released_at": format_ist(e["released_at"]),
+        } for i, e in enumerate(entries)],
+    })
 
 
 @auction_bp.route("/admin/auction/<auction_id>/close", methods=["POST"])
@@ -500,12 +539,56 @@ def get_auction(auction_id):
                 {"auction_id": auction_id, "player_id": auction["current_player_id"], "action": "bid"},
                 sort=[("created_at", -1)],
             )
+            user = users_map.get(cp["user_id"], {})
+
+            # Player Insights — auto-populated from data that already exists
+            # (Manage Players' stats fields, the same next-match vote data
+            # the Players dashboard tag uses), never manually entered per
+            # release. "Team history" has no real equivalent in this data
+            # model (teams are freshly drafted each auction, not persistent
+            # across seasons) — attendance is the closest real substitute.
+            next_slot, next_avail_map = next_match_context()
+            insights = {
+                "role": user.get("role"),
+                "team_name": user.get("team_name") or None,
+                "batting_average": user.get("batting_average"),
+                "strike_rate": user.get("strike_rate"),
+                "bowling_average": user.get("bowling_average"),
+                "economy": user.get("economy"),
+                "matches_present": user.get("matches_present"),
+                "total_matches": user.get("total_matches"),
+                "attendance_percentage": user.get("attendance_percentage"),
+                "next_match_available": next_avail_map.get(cp["user_id"], False),
+                "next_match_label": next_match_label(next_slot),
+            }
+
+            # Release order justification — every number here is a live
+            # count, not a pre-generated slot, since admin still chooses
+            # which CATEGORY to release from at each click (see
+            # release_player's docstring). "index"/"category_index" already
+            # include the current release itself, since its log entry was
+            # written synchronously in release_player before this endpoint
+            # can ever be polled for it.
+            release_order = {
+                "category": cp["category"],
+                "index": mongo.db.auction_release_log.count_documents({"auction_id": auction_id}),
+                "of_total": mongo.db.auction_players.count_documents({"auction_id": auction_id}),
+                "category_index": mongo.db.auction_release_log.count_documents(
+                    {"auction_id": auction_id, "category": cp["category"]}
+                ),
+                "category_of_total": mongo.db.auction_players.count_documents(
+                    {"auction_id": auction_id, "category": cp["category"]}
+                ),
+            }
+
             current_player = {
                 "id": str(cp["_id"]), "user_id": cp["user_id"],
-                "name": users_map.get(cp["user_id"], {}).get("name", "?"),
+                "name": user.get("name", "?"),
                 "category": cp["category"],
                 "current_high_bid": last_bid["amount"] if last_bid else auction["starting_price"],
                 "current_high_bidder": captain_name(last_bid["captain_id"]) if last_bid else None,
+                "insights": insights,
+                "release_order": release_order,
             }
 
     # The bid history is just as confidential as the final prices once the

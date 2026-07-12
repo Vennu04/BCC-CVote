@@ -4,6 +4,9 @@ import toast from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import AuctionRulesNote from "../components/AuctionRulesNote";
 import CountdownBadge from "../components/CountdownBadge";
+import PlayerInsightsCard from "../components/PlayerInsightsCard";
+import FairnessBanner from "../components/FairnessBanner";
+import ReleaseOrderLog from "../components/ReleaseOrderLog";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
 import { Gavel, ThumbsDown, Trophy, Gift } from "lucide-react";
@@ -248,6 +251,8 @@ export default function Auction() {
 
         <AuctionRulesNote auction={auction} />
 
+        {auction.status !== "completed" && <FairnessBanner />}
+
         {auction.status === "pending" && (
           <div className="card text-center py-8 text-gray-600">Waiting for the admin to start the auction…</div>
         )}
@@ -345,6 +350,8 @@ export default function Auction() {
           </div>
         )}
 
+        {auction.current_player && <PlayerInsightsCard player={auction.current_player} />}
+
         {freePickable.length > 0 && (
           <div className="card border-2 border-amber-300 bg-amber-50">
             <div className="flex items-center gap-2 mb-2">
@@ -389,6 +396,8 @@ export default function Auction() {
             </div>
           </div>
         )}
+
+        {auction.status !== "pending" && <ReleaseOrderLog auctionId={id} />}
       </div>
     </div>
   );
