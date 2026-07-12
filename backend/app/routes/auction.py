@@ -195,6 +195,76 @@ def _next_release_candidate(auction, category, users_map):
     return get_next_player_in_category(candidates, category, users_map)
 
 
+def _users_map_for_auction(auction):
+    user_ids = {p["user_id"] for p in mongo.db.auction_players.find({"auction_id": str(auction["_id"])})}
+    return {str(u["_id"]): u for u in mongo.db.users.find({"_id": {"$in": [ObjectId(i) for i in user_ids]}})}
+
+
+def _claim_release(auction, category, player, users_map):
+    """Atomically claims the right to put `player` up for bidding -- a Mongo
+    compare-and-swap on current_player_id still being None, not a
+    check-then-write. gunicorn runs multiple real worker processes for this
+    app (see gunicorn.conf.py), so two requests racing to release the next
+    player -- e.g. a captain's drop finishing right as the GET-poll safety
+    net below also tries to advance -- is a real, reachable condition, not
+    just a theoretical one. Returns True only if THIS call won the claim;
+    the release-order log is only written by the winner, so a race can
+    never produce two log entries or two claimed players for one release."""
+    released_at = datetime.utcnow()
+    result = mongo.db.auctions.update_one(
+        {"_id": auction["_id"], "current_player_id": None},
+        {"$set": {
+            "current_player_id": str(player["_id"]),
+            "current_player_released_at": released_at,
+            "auto_release_category": category,
+        }},
+    )
+    if result.matched_count == 0:
+        return False
+    user = users_map.get(player["user_id"], {})
+    mongo.db.auction_release_log.insert_one({
+        "auction_id": str(auction["_id"]),
+        "category": category,
+        "player_id": str(player["_id"]),
+        "player_name": user.get("name", "?"),
+        "released_at": released_at,
+    })
+    return True
+
+
+def _maybe_auto_release_next(auction_id):
+    """Self-fetching and fully guarded -- safe to call unconditionally from
+    anywhere a release might need to advance (tail of drop_player, tail of
+    free_pick, lazily from get_auction). No-ops unless the auction is still
+    active, not paused, has no current player, and has an in-progress
+    auto_release_category to continue. Deliberately does NOT jump to a
+    different category on its own -- once a category runs out of
+    candidates, auto_release_category is cleared and admin has to pick the
+    next one manually via release_player, exactly like starting the first
+    player of any category. A player who's the sole survivor in his
+    category after both captains passed (deprioritized, see drop_player)
+    gets auto re-offered here too -- that's intentional, not a bug; it
+    still needs both captains to act again before it resolves, same as
+    today, just without the extra admin click."""
+    auction = _auction_or_404(auction_id)
+    if not auction or auction["status"] != "active" or auction.get("is_paused"):
+        return
+    if auction.get("current_player_id"):
+        return
+    category = auction.get("auto_release_category")
+    if not category:
+        return
+    users_map = _users_map_for_auction(auction)
+    player = _next_release_candidate(auction, category, users_map)
+    if not player:
+        mongo.db.auctions.update_one(
+            {"_id": auction["_id"], "auto_release_category": category, "current_player_id": None},
+            {"$set": {"auto_release_category": None}},
+        )
+        return
+    _claim_release(auction, category, player, users_map)
+
+
 def _apply_timeout_fallback(auction):
     """Once the session's 25-minute cap passes, any group that never got fully
     resolved through bidding gets its remaining players split free — whoever has
@@ -321,6 +391,8 @@ def create_auction():
         "captain_b_id": captain_b_id,
         "status": "pending",
         "current_player_id": None,
+        "auto_release_category": None,
+        "is_paused": False,
         "started_at": None,
         "ends_at": None,
         "target_roster_size": TARGET_ROSTER_SIZE,
@@ -374,7 +446,9 @@ def release_player(auction_id):
     """Admin picks a CATEGORY only — never a specific player. Which player
     within it comes up next is decided automatically by _next_release_candidate,
     so there's no room for admin to release players in an order that favors
-    either captain."""
+    either captain. This is also what starts (or re-points) that category's
+    auto-release chain -- see _maybe_auto_release_next -- so admin only does
+    this once per category, not once per player."""
     auction = _auction_or_404(auction_id)
     if not auction:
         return jsonify({"error": "Auction not found"}), 404
@@ -388,41 +462,14 @@ def release_player(auction_id):
     if category not in AUCTION_GROUPS:
         return jsonify({"error": f"category must be one of {AUCTION_GROUPS}"}), 400
 
-    user_ids = {p["user_id"] for p in mongo.db.auction_players.find({"auction_id": str(auction["_id"])})}
-    users_map = {str(u["_id"]): u for u in mongo.db.users.find({"_id": {"$in": [ObjectId(i) for i in user_ids]}})}
-
+    users_map = _users_map_for_auction(auction)
     player = _next_release_candidate(auction, category, users_map)
     if not player:
         return jsonify({"error": "No players remaining in this category"}), 400
 
-    # current_player_released_at scopes drop_player's "did both captains
-    # pass THIS time" check to actions taken since this exact release --
-    # without it, a player who's the only one left in their category (and
-    # so gets released again after a prior no-bid pass) would carry the
-    # OTHER captain's stale drop record forward from the earlier round,
-    # letting a single fresh drop from just one captain wrongly re-trigger
-    # "both passed" even though the other captain never acted this time.
-    released_at = datetime.utcnow()
-    mongo.db.auctions.update_one(
-        {"_id": auction["_id"]},
-        {"$set": {"current_player_id": str(player["_id"]), "current_player_released_at": released_at}},
-    )
+    if not _claim_release(auction, category, player, users_map):
+        return jsonify({"error": "A player is already up for bidding"}), 400
 
-    # Auditable release-order log — a real, timestamped record of every
-    # release event, independent of the auction doc's current_player_id
-    # (which only ever holds the ONE player up for bidding right now).
-    # order_index/category_index are safe to compute as "count so far" with
-    # no locking: a new release can never be requested while another player
-    # is already current_player (checked above), so releases for one
-    # auction are inherently serialized, never concurrent.
-    user = users_map.get(player["user_id"], {})
-    mongo.db.auction_release_log.insert_one({
-        "auction_id": str(auction["_id"]),
-        "category": category,
-        "player_id": str(player["_id"]),
-        "player_name": user.get("name", "?"),
-        "released_at": datetime.utcnow(),
-    })
     return jsonify({"message": "Player released for bidding", "player_id": str(player["_id"])})
 
 
@@ -462,6 +509,32 @@ def close_auction(auction_id):
     return jsonify({"message": "Auction closed"})
 
 
+@auction_bp.route("/admin/auction/<auction_id>/pause", methods=["POST"])
+@admin_required
+def pause_auction(auction_id):
+    """Halts auto-release only -- bidding on whoever's already current_player
+    is untouched, since pausing mid-bid would be far more disruptive than
+    just holding off on releasing the next one."""
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+    mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"is_paused": True}})
+    return jsonify({"message": "Auto-release paused"})
+
+
+@auction_bp.route("/admin/auction/<auction_id>/resume", methods=["POST"])
+@admin_required
+def resume_auction(auction_id):
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+    mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"is_paused": False}})
+    # Try immediately rather than waiting for the next poll, so admin sees
+    # the next player come up right away instead of up to 2.5s later.
+    _maybe_auto_release_next(auction_id)
+    return jsonify({"message": "Auto-release resumed"})
+
+
 # ── Discovery: "is there an auction I'm part of right now?" ─────────────────────
 # Lets a captain find their auction without needing a manually-shared link/ID —
 # the frontend polls this from the navbar for any logged-in captain.
@@ -492,6 +565,14 @@ def get_auction(auction_id):
     if auction["status"] == "active":
         _apply_timeout_fallback(auction)
         auction = _auction_or_404(auction_id)  # re-fetch in case the fallback just completed it
+        # Order matters: timeout-completion above must always win over
+        # auto-release advancing within the same request, and this doubles
+        # as the self-healing path for a captain refreshing mid-auction --
+        # if some earlier request's auto-release call got dropped by a
+        # network blip, the very next poll from anyone picks it back up.
+        if auction["status"] == "active":
+            _maybe_auto_release_next(auction_id)
+            auction = _auction_or_404(auction_id)
 
     user = get_current_user()
     uid = str(user["_id"])
@@ -596,6 +677,11 @@ def get_auction(auction_id):
                 "id": str(cp["_id"]), "user_id": cp["user_id"],
                 "name": user.get("name", "?"),
                 "category": cp["category"],
+                # Lets the frontend show "Re-offering X — both captains
+                # passed" instead of a plain release, so a sole-survivor
+                # auto-re-release (see _maybe_auto_release_next) reads as
+                # expected behavior rather than a bug.
+                "deprioritized": cp.get("deprioritized", False),
                 "current_high_bid": last_bid["amount"] if last_bid else auction["starting_price"],
                 "current_high_bidder": captain_name(last_bid["captain_id"]) if last_bid else None,
                 "insights": insights,
@@ -631,6 +717,15 @@ def get_auction(auction_id):
         key=lambda p: p["deprioritized"],
     )
 
+    # Purely computed, not a stored flag: players only ever leave
+    # "available" (sold/free_assigned/deprioritized-but-still-available
+    # doesn't count as leaving), never return to it, so this is monotonic --
+    # once true for an active auction it stays true. That's what makes it
+    # safe for admin, both captains, and every poll of any of them to read
+    # independently with no risk of a "who saw it first" race, unlike a
+    # write-on-first-observation flag would have.
+    is_complete = auction["status"] == "active" and len(available_players) == 0
+
     return jsonify({
         "id": auction_id,
         "status": auction["status"],
@@ -645,6 +740,9 @@ def get_auction(auction_id):
         "captain_a": captain_summary(auction["captain_a_id"]),
         "captain_b": captain_summary(auction["captain_b_id"]),
         "bid_feed": bid_feed,
+        "auto_release_category": auction.get("auto_release_category"),
+        "is_paused": auction.get("is_paused", False),
+        "is_complete": is_complete,
     })
 
 
@@ -776,7 +874,9 @@ def drop_player(auction_id):
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
         auction = _auction_or_404(auction_id)
         _check_leftover_award(auction, player["category"])
-        return jsonify({"message": "Sold", "sold_to": other_captain, "sold_price": last_bid["amount"]})
+        response = jsonify({"message": "Sold", "sold_to": other_captain, "sold_price": last_bid["amount"]})
+        _maybe_auto_release_next(auction_id)
+        return response
 
     already_dropped = mongo.db.auction_bids.find_one({
         "auction_id": auction_id, "player_id": player_id, "captain_id": other_captain, "action": "drop", **this_round,
@@ -787,7 +887,9 @@ def drop_player(auction_id):
         # back until every other player in the category has already gone.
         mongo.db.auction_players.update_one({"_id": ObjectId(player_id)}, {"$set": {"deprioritized": True}})
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
-        return jsonify({"message": "Both captains passed — this player becomes the last option in their category"})
+        response = jsonify({"message": "Both captains passed — this player becomes the last option in their category"})
+        _maybe_auto_release_next(auction_id)
+        return response
 
     return jsonify({"message": "Dropped"})
 
@@ -852,5 +954,6 @@ def free_pick(auction_id):
     # transfer to the other captain immediately too, not sit unresolved.
     auction = _auction_or_404(auction_id)
     _check_leftover_award(auction, player["category"])
+    _maybe_auto_release_next(auction_id)
 
     return jsonify({"message": "Player picked for free"})

@@ -54,7 +54,7 @@ export default function AuctionRulesNote({ auction }) {
           <div>
             <p className="font-semibold text-gray-800 mb-1">Procedure</p>
             <ul className="list-disc list-inside space-y-0.5">
-              <li>Admin releases the next player by <strong>category only</strong> — who comes up next within it is picked automatically (by batting/bowling average), never hand-picked.</li>
+              <li>Admin releases the <strong>first</strong> player of each category by hand — who comes up within it is picked automatically (by batting/bowling average), never hand-picked. Every player after that releases itself automatically once the previous one's bidding resolves, until the category runs out.</li>
               <li>If both captains decline a player at the base price, that player becomes the <strong>last option</strong> in their category — offered again only after everyone else in it is resolved.</li>
               <li>The moment a captain's roster fills a category's quota, every remaining player in that category goes to the <strong>other</strong> captain for free.</li>
               <li>If a captain's points hit 0, the opponent can claim any remaining Power/Classic player for free (<strong>Free Pick</strong>) without bidding against them.</li>

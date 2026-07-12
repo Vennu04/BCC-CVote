@@ -24,6 +24,10 @@ def _release(client, headers, auction_id, category):
     return client.post(f"/api/admin/auction/{auction_id}/release", json={"category": category}, headers=headers)
 
 
+def _pause(client, headers, auction_id):
+    return client.post(f"/api/admin/auction/{auction_id}/pause", headers=headers)
+
+
 def _get(client, headers, auction_id):
     return client.get(f"/api/auction/{auction_id}", headers=headers)
 
@@ -125,7 +129,9 @@ def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, 
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     _start(client, admin_headers, auction_id)
 
-    # First release must be the highest average (P1, 30).
+    # First release must be the highest average (P1, 30) -- this is also the
+    # one manual click that starts classic's auto-release chain, so the
+    # second player below needs no explicit /release call of its own.
     r1 = _release(client, admin_headers, auction_id, "classic").get_json()
     p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["player_id"])})
     assert p1_doc["user_id"] == str(setup["voters"][1]["_id"])
@@ -135,9 +141,10 @@ def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, 
     sell1 = client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
     assert sell1.get_json()["sold_to"] == str(setup["captain_a"]["_id"])
 
-    # Second release must be the next-highest average (P2, 20).
-    r2 = _release(client, admin_headers, auction_id, "classic").get_json()
-    p2_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r2["player_id"])})
+    # Auto-release must have already brought up the next-highest average
+    # (P2, 20) on its own -- confirmed via GET, no second /release call.
+    state = _get(client, admin_headers, auction_id).get_json()
+    p2_doc = mongo.db.auction_players.find_one({"_id": ObjectId(state["current_player"]["id"])})
     assert p2_doc["user_id"] == str(setup["voters"][2]["_id"])
 
     # Sell it to captain A too — this is A's 2nd classic player, hitting the
@@ -155,9 +162,13 @@ def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, 
     assert all(p["sold_price"] == 0 for p in leftover)
     assert all(p["sold_to"] == str(setup["captain_b"]["_id"]) for p in leftover)
 
-    # No player should be left "available" — the category is fully resolved.
+    # No player should be left "available" — the category is fully resolved,
+    # and auto-release must have stopped since there's nothing left to release.
     still_available = [p for p in remaining if p["status"] == "available"]
     assert still_available == []
+    final_state = _get(client, admin_headers, auction_id).get_json()
+    assert final_state["current_player"] is None
+    assert final_state["auto_release_category"] is None
 
 
 def test_both_captains_declining_marks_player_deprioritized_and_held_back(client, admin_headers, auth_header, make_auction_setup):
@@ -180,6 +191,12 @@ def test_both_captains_declining_marks_player_deprioritized_and_held_back(client
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     _start(client, admin_headers, auction_id)
+    # This test needs full manual control over each individual release to
+    # verify _next_release_candidate's own ranking/hold-back logic in
+    # isolation -- pausing keeps auto-release from advancing on its own
+    # after each resolve, so every step below still requires (and gets)
+    # its own explicit _release() call, same as before auto-release existed.
+    _pause(client, admin_headers, auction_id)
 
     def _both_pass():
         release = _release(client, admin_headers, auction_id, "power").get_json()

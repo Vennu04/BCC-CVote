@@ -11,7 +11,7 @@ import PlayerInsightsCard from "../../components/PlayerInsightsCard";
 import FairnessBanner from "../../components/FairnessBanner";
 import ReleaseOrderLog from "../../components/ReleaseOrderLog";
 import { useAuction } from "../../hooks/useAuction";
-import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy } from "lucide-react";
+import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2 } from "lucide-react";
 
 const STORAGE_KEY = "bcc_active_auction_id";
 
@@ -58,9 +58,25 @@ export default function AdminAuction() {
   const [creating, setCreating] = useState(false);
   const [starting, setStarting] = useState(false);
   const [releasing, setReleasing] = useState(null);
+  const [pausing, setPausing] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   const [auctionId, setAuctionId] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
   const { auction, loading, refetch } = useAuction(auctionId);
+
+  // One-shot completion toast, gated by localStorage (not component state) so
+  // it survives a refresh/reconnect instead of firing again — is_complete
+  // itself is a stable computed value (see get_auction), so this is purely
+  // about not re-toasting something admin already saw, not about detecting
+  // the transition. The persistent banner below covers the case where the
+  // toast was missed or dismissed.
+  useEffect(() => {
+    if (!auction?.is_complete || !auctionId) return;
+    const key = `bcc_auction_complete_notified_${auctionId}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, "1");
+    toast.success("Live auction complete — ready to close.", { duration: 6000, icon: "🏁" });
+  }, [auction?.is_complete, auctionId]);
 
   useEffect(() => {
     api.get("/admin/captains").then((res) => setCaptains(res.data || [])).catch(() => toast.error("Failed to load captains"));
@@ -147,6 +163,30 @@ export default function AdminAuction() {
       toast.error(err.response?.data?.error || "Failed to release player");
     } finally {
       setReleasing(null);
+    }
+  };
+
+  const handlePause = async () => {
+    setPausing(true);
+    try {
+      await api.post(`/admin/auction/${auctionId}/pause`);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to pause");
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  const handleResume = async () => {
+    setResuming(true);
+    try {
+      await api.post(`/admin/auction/${auctionId}/resume`);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to resume");
+    } finally {
+      setResuming(false);
     }
   };
 
@@ -305,6 +345,12 @@ export default function AdminAuction() {
 
             {auction.status !== "completed" && <FairnessBanner />}
 
+            {auction.is_complete && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm font-medium">
+                <CheckCircle2 size={18} /> Live auction complete — ready to close.
+              </div>
+            )}
+
             {auction.status === "pending" && (
               <div className="card text-center py-6">
                 <p className="text-gray-600 mb-3">Auction created — not started yet.</p>
@@ -321,15 +367,51 @@ export default function AdminAuction() {
 
             {auction.status === "active" && (
               <div className="card">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <h2 className="font-bold text-gray-900">Release a Player</h2>
-                  <button onClick={handleClose} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800">
-                    <StopCircle size={13} /> Force Close
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {auction.auto_release_category && (
+                      auction.is_paused ? (
+                        <button
+                          onClick={handleResume}
+                          disabled={resuming}
+                          className="flex items-center gap-1 text-xs py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50"
+                        >
+                          <PlayCircle size={13} /> {resuming ? "Resuming…" : "Resume Auto-Release"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handlePause}
+                          disabled={pausing}
+                          className="flex items-center gap-1 text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <Pause size={13} /> {pausing ? "Pausing…" : "Pause Auto-Release"}
+                        </button>
+                      )
+                    )}
+                    <button onClick={handleClose} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800">
+                      <StopCircle size={13} /> Force Close
+                    </button>
+                  </div>
                 </div>
+
+                {auction.auto_release_category && (
+                  <p className="text-xs text-gray-500 mb-3">
+                    {auction.is_paused ? (
+                      <>Paused — <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> still has players waiting. Resume to continue automatically.</>
+                    ) : (
+                      <>Auto-releasing <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> — the next player comes up on its own once each one's bidding resolves.</>
+                    )}
+                  </p>
+                )}
+
                 {auction.current_player && (
                   <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
-                    Currently bidding: <strong>{auction.current_player.name}</strong>
+                    {auction.current_player.deprioritized ? (
+                      <>Re-offering <strong>{auction.current_player.name}</strong> — both captains passed on them earlier; everyone else in this category is done.</>
+                    ) : (
+                      <>Currently bidding: <strong>{auction.current_player.name}</strong></>
+                    )}
                   </p>
                 )}
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
