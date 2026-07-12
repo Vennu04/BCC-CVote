@@ -236,16 +236,22 @@ def _maybe_auto_release_next(auction_id):
     """Self-fetching and fully guarded -- safe to call unconditionally from
     anywhere a release might need to advance (tail of drop_player, tail of
     free_pick, lazily from get_auction). No-ops unless the auction is still
-    active, not paused, has no current player, and has an in-progress
-    auto_release_category to continue. Deliberately does NOT jump to a
-    different category on its own -- once a category runs out of
-    candidates, auto_release_category is cleared and admin has to pick the
-    next one manually via release_player, exactly like starting the first
-    player of any category. A player who's the sole survivor in his
-    category after both captains passed (deprioritized, see drop_player)
-    gets auto re-offered here too -- that's intentional, not a bug; it
-    still needs both captains to act again before it resolves, same as
-    today, just without the extra admin click."""
+    active, not paused, and has no current player.
+
+    Admin manually releases only the very first player of the auction --
+    everything after that is automatic, including moving on to the next
+    CATEGORY once the current one runs out, not just the next player within
+    it. The category sequence itself is fixed (AUCTION_GROUPS order), and
+    cycles starting from wherever admin's one manual click happened to
+    begin -- so this works regardless of which category they started with,
+    it doesn't have to be literally first in AUCTION_GROUPS. Once every
+    category is exhausted, auto_release_category clears and this becomes a
+    no-op for the rest of the auction's life (is_complete takes over from
+    there). A player who's the sole survivor in his category after both
+    captains passed (deprioritized, see drop_player) gets auto re-offered
+    here too -- that's intentional, not a bug; it still needs both captains
+    to act again before it resolves, same as today, just without the extra
+    admin click."""
     auction = _auction_or_404(auction_id)
     if not auction or auction["status"] != "active" or auction.get("is_paused"):
         return
@@ -255,13 +261,21 @@ def _maybe_auto_release_next(auction_id):
     if not category:
         return
     users_map = _users_map_for_auction(auction)
-    player = _next_release_candidate(auction, category, users_map)
-    if not player:
-        mongo.db.auctions.update_one(
-            {"_id": auction["_id"], "auto_release_category": category, "current_player_id": None},
-            {"$set": {"auto_release_category": None}},
-        )
-        return
+
+    start_idx = AUCTION_GROUPS.index(category) if category in AUCTION_GROUPS else 0
+    for i in range(len(AUCTION_GROUPS)):
+        cat = AUCTION_GROUPS[(start_idx + i) % len(AUCTION_GROUPS)]
+        player = _next_release_candidate(auction, cat, users_map)
+        if player:
+            _claim_release(auction, cat, player, users_map)
+            return
+
+    # Every category exhausted -- nothing left for auto-release to do.
+    mongo.db.auctions.update_one(
+        {"_id": auction["_id"], "current_player_id": None},
+        {"$set": {"auto_release_category": None}},
+    )
+    return
     _claim_release(auction, category, player, users_map)
 
 

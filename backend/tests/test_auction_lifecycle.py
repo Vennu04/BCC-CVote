@@ -162,13 +162,18 @@ def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, 
     assert all(p["sold_price"] == 0 for p in leftover)
     assert all(p["sold_to"] == str(setup["captain_b"]["_id"]) for p in leftover)
 
-    # No player should be left "available" — the category is fully resolved,
-    # and auto-release must have stopped since there's nothing left to release.
+    # No player should be left "available" in classic — the category is
+    # fully resolved. Auto-release now continues automatically into the
+    # "power" filler category (it's a real category with real candidates,
+    # not empty) rather than stopping -- that's the current expected
+    # behavior, not a bug: admin only ever makes the one manual release
+    # click for the whole auction.
     still_available = [p for p in remaining if p["status"] == "available"]
     assert still_available == []
     final_state = _get(client, admin_headers, auction_id).get_json()
-    assert final_state["current_player"] is None
-    assert final_state["auto_release_category"] is None
+    assert final_state["current_player"] is not None
+    assert final_state["current_player"]["category"] == "power"
+    assert final_state["auto_release_category"] == "power"
 
 
 def test_both_captains_declining_marks_player_deprioritized_and_held_back(client, admin_headers, auth_header, make_auction_setup):

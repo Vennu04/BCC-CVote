@@ -398,9 +398,9 @@ export default function AdminAuction() {
                 {auction.auto_release_category && (
                   <p className="text-xs text-gray-500 mb-3">
                     {auction.is_paused ? (
-                      <>Paused — <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> still has players waiting. Resume to continue automatically.</>
+                      <>Paused — currently on <strong>{GROUP_LABELS[auction.auto_release_category]}</strong>. Resume to continue automatically through the rest of the auction.</>
                     ) : (
-                      <>Auto-releasing <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> — the next player comes up on its own once each one's bidding resolves.</>
+                      <>Auto-releasing <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> — every player comes up on its own as each one's bidding resolves, and the auction moves on to the next category by itself once this one's done. No further clicks needed.</>
                     )}
                   </p>
                 )}
