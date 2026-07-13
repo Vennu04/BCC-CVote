@@ -34,7 +34,9 @@ auction to split available players into two balanced teams.
      [Admin vote management](#admin-vote-management) below.
 4. **Live player auction** — once a match's availability is known, admin runs a live
    points-based auction between two designated captains to split everyone who voted
-   available into two balanced XIs. See [Auction rules](#auction-rules) below.
+   available into two balanced XIs. Admin releases only the very first player by hand;
+   the system auto-releases every player after that and auto-advances across categories
+   on its own, all the way to completion. See [Auction rules](#auction-rules) below.
 5. **Attendance & knockout-eligibility tracking** — real season attendance (matches present
    / total matches, tracked with a simple "+1" per player/captain), independent of the
    voting system. Voters are ranked by attendance %, with a configurable cutoff to
@@ -114,8 +116,13 @@ one of these after every deploy; they're informational only, not app changes.
 - **k3s node**: single EC2 instance (t3.small, 2GB RAM — intentionally kept small; see
   `terraform/main.tf` comments for the memory-budget tradeoffs of what runs on it).
   Runs: k3s control plane, Traefik (ingress), CoreDNS, local-path-provisioner, the app
-  (`bcc-backend`/`bcc-frontend` in the `voting-prod` namespace), and the self-hosted
-  Actions runner.
+  (`bcc-backend`/`bcc-frontend` in the `voting-prod` namespace, **2 replicas each**), and
+  the self-hosted Actions runner. 2 replicas protects against a pod-level crash/OOM/
+  liveness-restart dropping requests mid-auction — it does **not** protect against the
+  underlying EC2 node itself going down, since this is still a single-node cluster.
+  Real node headroom was checked (via `free`/`vmstat`, not just k8s's own resource-request
+  accounting) before doubling replica counts — k3s itself is the dominant memory consumer,
+  not the app pods.
 - **MongoDB**: separate dedicated EC2 instance, not co-located with the app node.
 - **CloudFront**: sits in front of the k3s node's Elastic IP (origin is a hardcoded
   `*.sslip.io` hostname matching the EIP — Traefik's ingress only matches that Host header).
@@ -156,13 +163,29 @@ one of these after every deploy; they're informational only, not app changes.
   auction they'd be participating in themselves.
 - Session cap: 25 minutes from admin clicking Start; any players still unresolved at that
   point are distributed evenly between both captains.
-- **Release order is automatic, not admin's pick** — admin only clicks "Release Next" per
-  category; the next player up is chosen by ranked batting/bowling average, never a manual
-  name pick. This also closes off a social-engineering angle (no way to steer who comes up).
+- **Fully automatic release, one click to start** — admin releases only the very first
+  player of the whole auction by hand; the next player up is always chosen by ranked
+  batting/bowling average, never a manual name pick, and releases itself the instant the
+  previous player's bidding resolves (sold, both-captains-passed, or leftover-award). Once
+  a category runs out, the system auto-advances to the next one on its own too, cycling
+  through **Extra Power All-Rounders → Extra Power Batsmen → Power → Classic** starting
+  wherever admin's one manual click began — no further clicks needed for the rest of the
+  auction. This also closes off a social-engineering angle (no way to steer who comes up).
+  Concurrency-safe via a MongoDB compare-and-swap on the "claim this release" write, since
+  the backend runs real parallel gunicorn workers.
+- **Admin can still pause/resume** the auto-release chain at any point without losing
+  progress — useful for a mid-auction break; nothing auto-releases while paused.
 - **Both-captains-decline queue** — if both captains pass on a player at the 8.5 base price,
   that player becomes the deprioritized last option in their category instead of just
   re-entering the normal pool; they're only revisited once every other player in the
   category is resolved, and are still covered by the quota/leftover-award rules above.
+  Whichever captain's own drop click actually decides something (sold, or both passed)
+  gets an explicit on-screen confirmation of that outcome — a routine drop mid-bidding-war
+  (the other side hasn't acted yet) stays silent, since that one doesn't need confirming.
+- **Completion signal** — a persistent banner (plus a one-time toast) appears for admin the
+  moment every player in the pool has been resolved, computed live from the pool's own
+  state rather than a separate flag, so it can't miss or double-fire depending on which
+  request happens to observe it first.
 - **Live quota-balance preview** — the setup screen shows a per-category breakdown of the
   selected slot's confirmed voters before the auction is even created, flagging odd counts
   (⚠️ won't split evenly) and missing categories, so admin can fix roster tagging in Manage
@@ -294,6 +317,35 @@ begins.
 
 ---
 
+## Performance & reliability
+
+- **2 replicas** for both backend and frontend Deployments (see
+  [Infrastructure](#infrastructure)) — survives a pod-level crash/restart without dropping
+  live-auction requests.
+- **gzip compression** enabled at the nginx origin (`frontend/nginx.conf`) — off by default
+  in the base image, and `gzip_proxied` had to be set explicitly since nginx doesn't
+  compress proxied `/api/` responses by default even with `gzip on`.
+- **Rate limiting on login and password-reset** — 10 attempts per 5 minutes, keyed on the
+  `team_code` being attacked rather than caller IP (this app sits behind CloudFront →
+  Traefik → nginx with no verified trusted-proxy chain, so IP-keying would be unreliable).
+  Backed by MongoDB (`flask-limiter` + the `limits` library's Mongo storage) rather than
+  in-memory, so the count is correctly shared across both replicas × 2 gunicorn workers
+  each instead of getting split 4 ways and never tripping.
+- **MongoDB indexes** on every field the app actually filters/sorts on — consolidated in
+  `backend/app/indexes.py` (single source of truth, also used by `scripts/seed.py`),
+  applied idempotently on every app boot rather than needing a separate migration step.
+- **Route-level code splitting** (`React.lazy` in `App.jsx`) — a captain never downloads
+  the 5 admin pages' code and vice versa; only `Login`/`ResetPassword` stay eagerly loaded.
+- **WebP background images**, quality-tuned to how visible each one actually is (the
+  low-opacity admin dashboard photos are compressed harder than the login page, which is
+  both more visible and the highest-traffic page in the app).
+- **Error tracking (Sentry)**: SDK is wired into both frontend (`Sentry.ErrorBoundary`) and
+  backend (Flask integration) and already deployed, but currently **inert** — no DSN is
+  configured yet. Both sides no-op safely without one. See `frontend/src/utils/sentry.js`
+  and `backend/app/__init__.py`.
+
+---
+
 ## Project structure
 
 ```
@@ -302,6 +354,7 @@ BCC-CVote/
 │   ├── app/
 │   │   ├── __init__.py            # Flask app factory, blueprint registration
 │   │   ├── config.py
+│   │   ├── indexes.py             # single source of truth for Mongo indexes — also used by scripts/seed.py
 │   │   ├── routes/
 │   │   │   ├── auth.py            # /api/auth/* — login, device binding, change-password
 │   │   │   ├── votes.py           # /api/slots, /api/votes/* — self-service voting + named per-slot attendance
@@ -355,11 +408,10 @@ BCC-CVote/
 - **Per-device login lock is currently disabled in prod** (`DEVICE_LOCK_ENABLED=false`)
   while players test across multiple devices — see [Accounts & security](#accounts--security).
   No end date set; check with the team before re-enabling.
-- A stale, superseded branch — `feature/admin-dual-role-voter` — still exists in the repo
-  (as of this writing, still not deleted despite being safe to). It duplicates work already
-  shipped directly to `main` (admin accounts flagged `is_player` can vote as themselves — see
-  [Accounts & security](#accounts--security)) and is well behind `main`. Safe to delete; do
-  not merge it.
+- **Sentry error tracking is wired but inert** — no DSN configured yet (see
+  [Performance & reliability](#performance--reliability)). Finishing it needs no more code,
+  just a `VITE_SENTRY_DSN` GitHub Actions secret and a `SENTRY_DSN` key in the
+  `bcc-cvote-secret` K8s secret.
 - cert-manager, external-secrets, and monitoring exporters are scaled to 0 (see
   [Infrastructure](#infrastructure)) — not a permanent decision yet.
 - The k3s node's control-plane process alone uses ~770MB of the node's 2GB RAM at idle —
@@ -371,8 +423,6 @@ BCC-CVote/
   matches/*` routes) is retired from the frontend but not removed from the backend — see the
   note in [Attendance & knockout eligibility](#attendance--knockout-eligibility). Low
   priority; not causing any issue, just unused code.
-- The `captains.jpg` dashboard background image is now unused (Manage Captains was merged
-  into Manage Players, which uses `players.jpg`) — harmless, just an orphaned asset.
 - No Playwright (or other browser-automation) dependency committed to the project — some
   features have been visually verified with a throwaway local Playwright install, but there's
   no repeatable e2e suite in CI. Backend has a real pytest suite (`backend/tests/`).
