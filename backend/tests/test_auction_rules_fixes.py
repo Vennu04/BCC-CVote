@@ -26,16 +26,15 @@ def test_both_captains_passing_marks_player_deprioritized(client, admin_headers,
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
+    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)  # auto-releases the first player
 
-    release = client.post(f"/api/admin/auction/{auction_id}/release",
-                           json={"category": "classic"}, headers=admin_headers).get_json()
+    release = client.get(f"/api/auction/{auction_id}", headers=admin_headers).get_json()["current_player"]
 
     client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
     res = client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
     assert "last option" in res.get_json()["message"]
 
-    updated = mongo.db.auction_players.find_one({"_id": ObjectId(release["player_id"])})
+    updated = mongo.db.auction_players.find_one({"_id": ObjectId(release["id"])})
     assert updated["deprioritized"] is True
     assert updated["status"] == "available"  # still releasable, just held back
 
@@ -45,13 +44,11 @@ def test_deprioritized_player_sorts_last_in_available_players(client, admin_head
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
+    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)  # auto-releases the first player
 
-    # Admin only picks the category — the specific player comes back in the
-    # release response, since it's chosen automatically (see release_player).
-    release = client.post(f"/api/admin/auction/{auction_id}/release",
-                           json={"category": "classic"}, headers=admin_headers).get_json()
-    released_player_id = release["player_id"]
+    # No manual /release call needed -- Start already released the first
+    # player, chosen automatically (see start_auction/release_player).
+    released_player_id = client.get(f"/api/auction/{auction_id}", headers=admin_headers).get_json()["current_player"]["id"]
     client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
     client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
 

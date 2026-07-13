@@ -7,6 +7,8 @@
 4. A captain can drop/pass a player at the base price (no bid placed at all
    yet) in any category, not just some — already-working behavior, tested
    explicitly here as a go-live regression guard."""
+from bson import ObjectId
+
 from app import mongo
 
 
@@ -90,12 +92,23 @@ def test_captain_can_drop_at_base_price_with_no_bid_in_any_category(
     ] + [("classic", None, None)] * 14)  # pad to hit the 22-player minimum
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
+    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)  # auto-releases extra_power_allrounder's first player
+    # Full manual control for the rest of this loop -- auto-release would
+    # otherwise keep claiming whatever's next the instant each slot frees up,
+    # fighting the loop's own explicit per-category /release calls below.
+    client.post(f"/api/admin/auction/{auction_id}/pause", headers=admin_headers)
 
-    for category in ("extra_power_allrounder", "extra_power_batsman", "power", "classic"):
-        client.post(f"/api/admin/auction/{auction_id}/release",
-                    json={"category": category}, headers=admin_headers)
+    for i, category in enumerate(("extra_power_allrounder", "extra_power_batsman", "power", "classic")):
+        if i > 0:  # Start's own auto-release already covers the first category
+            client.post(f"/api/admin/auction/{auction_id}/release",
+                        json={"category": category}, headers=admin_headers)
         # No bid placed at all — straight to drop, at the 8.5 base price.
         res = client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
         assert res.status_code == 200
         assert res.get_json()["message"] == "Dropped"
+        # A lone single-captain drop with no bid never resolves the player by
+        # itself (both captains have to act for that) -- free the slot
+        # directly so the next loop iteration can release a fresh category.
+        # This test is only about the "Dropped" response itself, not the
+        # full both-captains-pass resolution flow (covered elsewhere).
+        mongo.db.auctions.update_one({"_id": ObjectId(auction_id)}, {"$set": {"current_player_id": None}})

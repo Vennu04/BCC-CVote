@@ -238,13 +238,18 @@ def _maybe_auto_release_next(auction_id):
     free_pick, lazily from get_auction). No-ops unless the auction is still
     active, not paused, and has no current player.
 
-    Admin manually releases only the very first player of the auction --
-    everything after that is automatic, including moving on to the next
-    CATEGORY once the current one runs out, not just the next player within
-    it. The category sequence itself is fixed (AUCTION_GROUPS order), and
-    cycles starting from wherever admin's one manual click happened to
-    begin -- so this works regardless of which category they started with,
-    it doesn't have to be literally first in AUCTION_GROUPS. Once every
+    Admin's only manual step is clicking Start -- even the very first player
+    releases itself automatically (start_auction calls this immediately
+    after setting the auction active). Everything from there is automatic,
+    including moving on to the next CATEGORY once the current one runs out,
+    not just the next player within it. The category sequence itself is
+    fixed (AUCTION_GROUPS order), always starting at AUCTION_GROUPS[0] now
+    that start_auction sets it rather than admin's own choice -- but this
+    still cycles/wraps from whatever auto_release_category currently holds
+    (not hardcoded to index 0 in the loop itself), so a manual "Release
+    Next" override on a different category while paused, or any other
+    future path that sets a non-default starting category, still works
+    correctly too. Once every
     category is exhausted, auto_release_category clears and this becomes a
     no-op for the rest of the auction's life (is_complete takes over from
     there). A player who's the sole survivor in his category after both
@@ -414,6 +419,8 @@ def create_auction():
         "current_player_id": None,
         "auto_release_category": None,
         "is_paused": False,
+        "captain_a_joined_at": None,
+        "captain_b_joined_at": None,
         "started_at": None,
         "ends_at": None,
         "target_roster_size": TARGET_ROSTER_SIZE,
@@ -456,8 +463,20 @@ def start_auction(auction_id):
     ends_at = now + timedelta(minutes=SESSION_MINUTES)
     mongo.db.auctions.update_one(
         {"_id": auction["_id"]},
-        {"$set": {"status": "active", "started_at": now, "ends_at": ends_at}},
+        {"$set": {"status": "active", "started_at": now, "ends_at": ends_at,
+                   # Always the canonical first category -- admin no longer
+                   # picks a starting category by hand (that was the whole
+                   # point of the one manual click this replaces), so there's
+                   # no "wherever admin started" to preserve here anymore.
+                   "auto_release_category": AUCTION_GROUPS[0]}},
     )
+    # Release the very first player immediately, in the same request, rather
+    # than waiting for the next poll -- admin's one Start click is now the
+    # only click needed for the entire auction. _maybe_auto_release_next
+    # already handles an empty first category by scanning forward through
+    # the rest of AUCTION_GROUPS, so this is safe even if nobody voted into
+    # extra_power_allrounder for this particular slot.
+    _maybe_auto_release_next(auction_id)
     return jsonify({"message": "Auction started", "ends_at": format_ist(ends_at), "ends_at_iso": to_iso_utc(ends_at)})
 
 
@@ -609,6 +628,20 @@ def get_auction(auction_id):
     is_participant = uid in (auction["captain_a_id"], auction["captain_b_id"])
     if not is_participant and user["role"] != "admin":
         return jsonify({"error": "Access denied"}), 403
+
+    # Records the first time each captain's own JWT hits this endpoint --
+    # naturally happens the moment they click "Join Auction" and the page
+    # loads. Set once (never cleared), so admin can see "both captains are
+    # here" before deciding to hit Start, without needing a heartbeat or
+    # presence system for something this simple.
+    if is_participant:
+        joined_field = "captain_a_joined_at" if uid == auction["captain_a_id"] else "captain_b_joined_at"
+        if not auction.get(joined_field):
+            mongo.db.auctions.update_one(
+                {"_id": auction["_id"], joined_field: None},
+                {"$set": {joined_field: datetime.utcnow()}},
+            )
+            auction[joined_field] = datetime.utcnow()
 
     players = list(mongo.db.auction_players.find({"auction_id": auction_id}))
     players_by_id = {str(p["_id"]): p for p in players}
@@ -773,6 +806,8 @@ def get_auction(auction_id):
         "auto_release_category": auction.get("auto_release_category"),
         "is_paused": auction.get("is_paused", False),
         "is_complete": is_complete,
+        "captain_a_joined": bool(auction.get("captain_a_joined_at")),
+        "captain_b_joined": bool(auction.get("captain_b_joined_at")),
     })
 
 

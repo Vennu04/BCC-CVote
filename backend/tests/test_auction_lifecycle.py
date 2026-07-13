@@ -69,15 +69,34 @@ def test_create_auction_rejects_when_no_one_voted_available(client, admin_header
 
 # ── Release contract (req #2 — category only, never a specific player) ──────
 
-def test_release_endpoint_only_accepts_a_category_no_player_selection(client, admin_headers, make_auction_setup):
+def test_release_endpoint_only_accepts_a_category_no_player_selection(client, admin_headers, auth_header, make_auction_setup):
     # 2 meaningful (scored) players + 20 unscored fillers to hit the 22-player
     # minimum — fillers sort after any scored player (see _next_release_candidate),
     # so they can't interfere with the "highest score released first" assertion.
     # classic ranks on (battingAverage - bowlingAverage); bowling_average held
     # equal (10) for both scored players so batting average alone still decides.
     setup = make_auction_setup([("classic", 10, 10), ("classic", 20, 10)] + [("classic", None, None)] * 20)
+    a_headers = auth_header(setup["captain_a"])
+    b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases the highest-average player -- no manual click needed
+
+    # The higher-average player (20) must come first automatically, with no
+    # admin choice involved at all.
+    highest_avg_voter = setup["voters"][1]
+    auto_released = _get(client, admin_headers, auction_id).get_json()["current_player"]
+    released_doc = mongo.db.auction_players.find_one({"_id": ObjectId(auto_released["id"])})
+    assert released_doc["user_id"] == str(highest_avg_voter["_id"])
+
+    # Pause before resolving it -- otherwise auto-release immediately claims
+    # the next filler the instant this one sells, and the slot's never free
+    # for the manual /release call below to actually exercise. Resolve, then
+    # confirm the *manual* endpoint -- still there as an override later in
+    # the auction -- also ignores any player_id in the request body, same as
+    # the automatic path always has.
+    client.post(f"/api/admin/auction/{auction_id}/pause", headers=admin_headers)
+    client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.0}, headers=a_headers)
+    client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
 
     bogus_player_id = str(setup["voters"][0]["_id"])
     res = client.post(
@@ -86,18 +105,16 @@ def test_release_endpoint_only_accepts_a_category_no_player_selection(client, ad
         headers=admin_headers,
     )
     assert res.status_code == 200
-    released = res.get_json()["player_id"]
-    # The higher-average player (20) must come first regardless of the
-    # (unsupported, ignored) player_id in the request body.
-    highest_avg_voter = setup["voters"][1]
-    released_doc = mongo.db.auction_players.find_one({"_id": ObjectId(released)})
-    assert released_doc["user_id"] == str(highest_avg_voter["_id"])
 
 
 def test_release_rejects_invalid_category(client, admin_headers, make_auction_setup):
     setup = make_auction_setup([("classic", None, None)] * 22)
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     _start(client, admin_headers, auction_id)
+    # Start's own auto-release already occupies current_player_id -- clear it
+    # directly so this test actually exercises category validation, not the
+    # (equally real, but different) "a player's already up" rejection.
+    mongo.db.auctions.update_one({"_id": ObjectId(auction_id)}, {"$set": {"current_player_id": None}})
     res = client.post(f"/api/admin/auction/{auction_id}/release", json={"category": "not-a-real-category"}, headers=admin_headers)
     assert res.status_code == 400
 
@@ -105,8 +122,7 @@ def test_release_rejects_invalid_category(client, admin_headers, make_auction_se
 def test_cannot_release_while_a_player_is_already_up(client, admin_headers, make_auction_setup):
     setup = make_auction_setup([("classic", None, None)] * 22)
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "classic")
+    _start(client, admin_headers, auction_id)  # auto-releases the first player -- already occupies the slot
     res = _release(client, admin_headers, auction_id, "classic")
     assert res.status_code == 400
 
@@ -127,13 +143,28 @@ def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, 
     b_headers = auth_header(setup["captain_b"])
 
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
 
-    # First release must be the highest average (P1, 30) -- this is also the
-    # one manual click that starts classic's auto-release chain, so the
-    # second player below needs no explicit /release call of its own.
-    r1 = _release(client, admin_headers, auction_id, "classic").get_json()
-    p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["player_id"])})
+    # power comes before classic in AUCTION_GROUPS, so Start's now-automatic
+    # first release would otherwise land on a power filler instead of
+    # classic. Pre-resolve the (unscored, interchangeable, only-here-to-pad-
+    # the-pool) power fillers directly, before Start ever runs its scan, so
+    # it correctly finds classic as the only category with real candidates
+    # left -- this test's actual focus.
+    power_docs = list(mongo.db.auction_players.find({"auction_id": auction_id, "category": "power"}))
+    for i, p in enumerate(power_docs):
+        target = setup["captain_a"]["_id"] if i % 2 == 0 else setup["captain_b"]["_id"]
+        mongo.db.auction_players.update_one(
+            {"_id": p["_id"]},
+            {"$set": {"status": "sold", "sold_to": str(target), "sold_price": 9.0, "assigned_via": "bid"}},
+        )
+
+    _start(client, admin_headers, auction_id)  # auto-releases classic's highest average -- no manual click needed
+
+    # First release must be the highest average (P1, 30) -- automatic, with
+    # no admin category choice involved, so the second player below needs no
+    # explicit /release call of its own either.
+    r1 = _get(client, admin_headers, auction_id).get_json()["current_player"]
+    p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["id"])})
     assert p1_doc["user_id"] == str(setup["voters"][1]["_id"])
 
     # Captain A bids the minimum (base 8.5 + 0.5), captain B drops → sold to A.
@@ -163,17 +194,14 @@ def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, 
     assert all(p["sold_to"] == str(setup["captain_b"]["_id"]) for p in leftover)
 
     # No player should be left "available" in classic — the category is
-    # fully resolved. Auto-release now continues automatically into the
-    # "power" filler category (it's a real category with real candidates,
-    # not empty) rather than stopping -- that's the current expected
-    # behavior, not a bug: admin only ever makes the one manual release
-    # click for the whole auction.
+    # fully resolved. power was already fully pre-resolved before Start even
+    # ran, so there's nothing left anywhere in the pool -- the whole auction
+    # is complete now, entirely without a single manual /release call.
     still_available = [p for p in remaining if p["status"] == "available"]
     assert still_available == []
     final_state = _get(client, admin_headers, auction_id).get_json()
-    assert final_state["current_player"] is not None
-    assert final_state["current_player"]["category"] == "power"
-    assert final_state["auto_release_category"] == "power"
+    assert final_state["current_player"] is None
+    assert final_state["is_complete"] is True
 
 
 def test_both_captains_declining_marks_player_deprioritized_and_held_back(client, admin_headers, auth_header, make_auction_setup):
@@ -195,26 +223,37 @@ def test_both_captains_declining_marks_player_deprioritized_and_held_back(client
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases power's P1 -- already occupies the slot
     # This test needs full manual control over each individual release to
     # verify _next_release_candidate's own ranking/hold-back logic in
     # isolation -- pausing keeps auto-release from advancing on its own
-    # after each resolve, so every step below still requires (and gets)
-    # its own explicit _release() call, same as before auto-release existed.
+    # after each resolve, so every step below (past the one Start already
+    # did for free) still requires (and gets) its own explicit _release()
+    # call, same as before auto-release existed.
     _pause(client, admin_headers, auction_id)
 
+    # Start's own auto-release already claimed the first player -- only the
+    # SECOND call onward needs an explicit manual /release.
+    first_call = {"used": False}
+
+    def _current_or_release():
+        if not first_call["used"]:
+            first_call["used"] = True
+            return _get(client, admin_headers, auction_id).get_json()["current_player"]["id"]
+        return _release(client, admin_headers, auction_id, "power").get_json()["player_id"]
+
     def _both_pass():
-        release = _release(client, admin_headers, auction_id, "power").get_json()
+        release_id = _current_or_release()
         client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
         passed = client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
         assert "last option" in passed.get_json()["message"]
-        return release["player_id"]
+        return release_id
 
     def _sell(to_headers, other_headers):
-        release = _release(client, admin_headers, auction_id, "power").get_json()
+        release_id = _current_or_release()
         client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.0}, headers=to_headers)
         client.post(f"/api/auction/{auction_id}/drop", headers=other_headers)
-        return release["player_id"]
+        return release_id
 
     deprioritized_ids = {_both_pass(), _both_pass()}
     for pid in deprioritized_ids:
@@ -244,8 +283,7 @@ def test_bid_below_minimum_is_rejected(client, admin_headers, auth_header, make_
     setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "classic")
+    _start(client, admin_headers, auction_id)  # auto-releases the only category present -- no manual click needed
 
     res = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 8.5}, headers=a_headers)
     assert res.status_code == 400
@@ -255,8 +293,7 @@ def test_bid_must_be_in_half_point_increments(client, admin_headers, auth_header
     setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "classic")
+    _start(client, admin_headers, auction_id)  # auto-releases the only category present -- no manual click needed
 
     res = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.3}, headers=a_headers)
     assert res.status_code == 400
@@ -266,8 +303,7 @@ def test_captain_cannot_outbid_themselves(client, admin_headers, auth_header, ma
     setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "classic")
+    _start(client, admin_headers, auction_id)  # auto-releases the only category present -- no manual click needed
 
     client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.0}, headers=a_headers)
     res = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.5}, headers=a_headers)
@@ -279,8 +315,7 @@ def test_bidder_with_highest_bid_cannot_drop(client, admin_headers, auth_header,
     setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "classic")
+    _start(client, admin_headers, auction_id)  # auto-releases the only category present -- no manual click needed
 
     client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.0}, headers=a_headers)
     res = client.post(f"/api/auction/{auction_id}/drop", headers=a_headers)
@@ -333,8 +368,7 @@ def test_completed_auction_hides_prices_and_bid_feed(client, admin_headers, auth
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "classic")
+    _start(client, admin_headers, auction_id)  # auto-releases the only category present -- no manual click needed
     client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.0}, headers=a_headers)
     client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
 

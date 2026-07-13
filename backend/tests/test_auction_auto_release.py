@@ -1,13 +1,12 @@
-"""Integration tests against the live HTTP API for auto-release: admin
-manually releases only the very first player of the whole auction, then the
-system advances through every remaining player on its own once each one's
-bidding resolves (sold or unsold) -- including moving on to the NEXT
-CATEGORY automatically once the current one runs out, in the fixed
-AUCTION_GROUPS sequence, cycling from wherever admin's one manual click
-happened to start (see release_player's and _maybe_auto_release_next's
-docstrings in app/routes/auction.py). Also covers the computed
-auction.is_complete signal and the concurrency-safety (CAS) guarantee
-behind both.
+"""Integration tests against the live HTTP API for auto-release: admin's
+only manual step is clicking Start -- even the first player releases itself
+automatically -- and the system advances through every remaining player on
+its own once each one's bidding resolves (sold or unsold), including moving
+on to the NEXT CATEGORY automatically once the current one runs out, in the
+fixed AUCTION_GROUPS sequence starting at index 0 (see start_auction's and
+_maybe_auto_release_next's docstrings in app/routes/auction.py). Also
+covers the computed auction.is_complete signal and the concurrency-safety
+(CAS) guarantee behind both.
 
 Budget/quota edge cases (spec section 4) are regression tests only --
 free_pick()/_check_leftover_award() already implement single-captain
@@ -93,16 +92,23 @@ def _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers
     raise AssertionError(f"did not reach completion within {max_steps} steps")
 
 
-# ── 1. First release still requires a manual admin click ────────────────────
+# ── 1. Start releases the first player automatically -- zero manual clicks ──
 
-def test_first_player_release_still_requires_manual_admin_action(client, admin_headers, make_auction_setup):
+def test_starting_the_auction_auto_releases_the_first_player_with_no_manual_click(client, admin_headers, make_auction_setup):
     setup = make_auction_setup([("power", None, None)] * 20)
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
+
+    pre_start = _get(client, admin_headers, auction_id).get_json()
+    assert pre_start["current_player"] is None
+    assert pre_start["auto_release_category"] is None
+
     _start(client, admin_headers, auction_id)
 
     state = _get(client, admin_headers, auction_id).get_json()
-    assert state["current_player"] is None
-    assert state["auto_release_category"] is None
+    assert state["current_player"] is not None
+    assert state["auto_release_category"] == "power"
+    log = client.get(f"/api/auction/{auction_id}/release-log", headers=admin_headers).get_json()
+    assert len(log["entries"]) == 1
 
 
 # ── 2/3. Auto-release fires after sold and after unsold ──────────────────────
@@ -120,10 +126,10 @@ def test_auto_release_fires_after_player_resolves_as_sold(client, admin_headers,
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases P1, no manual /release needed
 
-    r1 = _release(client, admin_headers, auction_id, "power").get_json()
-    p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["player_id"])})
+    r1 = _get(client, admin_headers, auction_id).get_json()
+    p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["current_player"]["id"])})
     assert p1_doc["user_id"] == str(setup["voters"][0]["_id"])
 
     sell1 = _sell(client, auction_id, a_headers, b_headers)
@@ -149,10 +155,10 @@ def test_auto_release_fires_after_player_resolves_as_unsold_no_bids(client, admi
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases P1, no manual /release needed
 
-    r1 = _release(client, admin_headers, auction_id, "power").get_json()
-    p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["player_id"])})
+    r1 = _get(client, admin_headers, auction_id).get_json()
+    p1_doc = mongo.db.auction_players.find_one({"_id": ObjectId(r1["current_player"]["id"])})
     assert p1_doc["user_id"] == str(setup["voters"][0]["_id"])
 
     passed = _both_pass(client, auction_id, a_headers, b_headers)
@@ -169,19 +175,19 @@ def test_auto_release_fires_after_player_resolves_as_unsold_no_bids(client, admi
 # ── 4. Auto-release advances to the next category automatically ─────────────
 
 def test_auto_release_advances_to_next_category_in_fixed_order(client, admin_headers, auth_header, make_auction_setup):
-    # 4 players per category (quota 2) so neither category fully resolves
-    # on its first sale alone -- real room to observe within-category
-    # chaining before the cross-category jump happens.
+    # power(4, quota 2) so it doesn't fully resolve on its first sale alone --
+    # real room to observe within-category chaining before the cross-category
+    # jump happens. No extra_power players at all, so power -- not
+    # extra_power_allrounder -- is what Start auto-releases into; the rest of
+    # the pool is classic filler just to clear MIN_AUCTION_POOL_SIZE (20).
     setup = make_auction_setup(
-        [("power", None, None)] * 4 + [("classic", None, None)] * 4
-        + [("extra_power_allrounder", None, None)] * 12
+        [("power", None, None)] * 4 + [("classic", None, None)] * 16
     )
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases power's P1
 
-    _release(client, admin_headers, auction_id, "power")
     _sell(client, auction_id, a_headers, b_headers)
 
     # Power's 2nd player must come up next -- still within power.
@@ -209,17 +215,12 @@ def test_auto_release_advances_to_next_category_in_fixed_order(client, admin_hea
     assert after_power["current_player"]["category"] == "classic"
     assert after_power["auto_release_category"] == "classic"
 
-    # Drive the rest to completion too -- no manual release call anywhere
-    # after the very first one for power. The 12-player
-    # extra_power_allrounder filler is a real category with real
-    # candidates, so once power and classic are both done, auto-release
-    # correctly keeps going into it too rather than stopping early.
-    # power's own 4 players were already resolved above (manually, before
-    # this helper), so only classic + the filler category remain for
+    # Drive the rest to completion too -- no manual release call anywhere in
+    # this whole test, not even the first one. power's own 4 players were
+    # already resolved above, so only classic remains for
     # _drive_to_completion to pick up from here.
     resolved = _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers)
-    assert all(cat in ("classic", "extra_power_allrounder") for cat, _ in resolved)
-    assert {cat for cat, _ in resolved} == {"classic", "extra_power_allrounder"}
+    assert {cat for cat, _ in resolved} == {"classic"}
 
     final_state = _get(client, admin_headers, auction_id).get_json()
     assert final_state["is_complete"] is True
@@ -242,10 +243,7 @@ def test_auto_release_visits_categories_in_the_exact_AUCTION_GROUPS_order(client
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-
-    # The ONE and only manual release call for the entire auction.
-    _release(client, admin_headers, auction_id, "extra_power_allrounder")
+    _start(client, admin_headers, auction_id)  # auto-releases extra_power_allrounder's first player -- zero manual clicks
 
     resolved = _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers)
 
@@ -266,8 +264,7 @@ def test_auto_release_visits_categories_in_the_exact_AUCTION_GROUPS_order(client
 def test_whole_auction_timeout_takes_precedence_over_pending_auto_release(client, admin_headers, make_auction_setup):
     setup = make_auction_setup([("power", None, None)] * 20)
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "power")
+    _start(client, admin_headers, auction_id)  # auto-releases P1
 
     log_before = client.get(f"/api/auction/{auction_id}/release-log", headers=admin_headers).get_json()
     assert len(log_before["entries"]) == 1
@@ -299,8 +296,7 @@ def test_force_close_on_an_active_auction_distributes_remaining_players_same_as_
     gets the same fair outcome as one that just ran out the clock."""
     setup = make_auction_setup([("power", None, None)] * 20)
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "power")
+    _start(client, admin_headers, auction_id)  # auto-releases P1
 
     assert _close(client, admin_headers, auction_id).status_code == 200
 
@@ -341,9 +337,8 @@ def test_admin_pause_halts_auto_release_and_resume_continues_it(client, admin_he
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases P1
 
-    _release(client, admin_headers, auction_id, "power")
     assert _pause(client, admin_headers, auction_id).status_code == 200
     _sell(client, auction_id, a_headers, b_headers)
 
@@ -370,16 +365,16 @@ def test_no_completion_signal_while_pool_still_has_players_elsewhere(client, adm
     # continues into "classic" (the next category in AUCTION_GROUPS order
     # that's actually present in this pool) -- but the auction as a WHOLE
     # is still not done, since classic's own players haven't resolved yet.
+    # No extra_power players at all, so power -- not extra_power_allrounder
+    # -- is what Start auto-releases into first.
     setup = make_auction_setup(
-        [("power", None, None)] * 2 + [("classic", None, None)] * 2
-        + [("extra_power_allrounder", None, None)] * 16
+        [("power", None, None)] * 2 + [("classic", None, None)] * 18
     )
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases power's only-quota-1 player
 
-    _release(client, admin_headers, auction_id, "power")
     _sell(client, auction_id, a_headers, b_headers)
 
     power_available = mongo.db.auction_players.count_documents(
@@ -396,11 +391,10 @@ def test_completion_signal_fires_and_stays_stable_when_both_captains_finish(clie
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases power's P1
 
-    # ONE manual release -- power resolves (1 sold, 1 leftover-awarded), then
-    # auto-release continues straight into classic with no second /release call.
-    _release(client, admin_headers, auction_id, "power")
+    # power resolves (1 sold, 1 leftover-awarded), then auto-release
+    # continues straight into classic -- zero manual /release calls anywhere.
     _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers)
 
     counts_before = (
@@ -430,9 +424,8 @@ def test_repeated_polling_never_skips_duplicates_or_re_releases_a_player(client,
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases P1
 
-    _release(client, admin_headers, auction_id, "power")
     _sell(client, auction_id, a_headers, b_headers)  # drop_player's own tail already auto-releases P2
 
     first_state = _get(client, admin_headers, auction_id).get_json()
@@ -449,22 +442,27 @@ def test_repeated_polling_never_skips_duplicates_or_re_releases_a_player(client,
 # ── 10a/10b. Budget/quota edge cases -- regression only, not new logic ──────
 
 def test_single_captain_budget_exhaustion_does_not_affect_the_other_captain(client, admin_headers, auth_header, make_auction_setup):
-    setup = make_auction_setup([("classic", None, None)] * 2 + [("power", None, None)] * 20)
+    # All classic (no power/extra_power) so there's only one live category to
+    # reason about: Start auto-releases one classic player as current, and a
+    # SEPARATE classic player (excluded via _id != current) gets directly
+    # drained in the DB to simulate captain_a having already spent their full
+    # purse earlier in the auction -- independent of whoever's live right now.
+    setup = make_auction_setup([("classic", None, None)] * 22)
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases a classic player as current
 
-    # Drain captain_a's full 17-point purse directly, independent of classic
-    # -- simulates them having already spent everything earlier in the auction.
-    drained_marker = mongo.db.auction_players.find_one({"auction_id": auction_id, "category": "power"})
+    current_id = _get(client, admin_headers, auction_id).get_json()["current_player"]["id"]
+    drained_marker = mongo.db.auction_players.find_one({
+        "auction_id": auction_id, "category": "classic", "_id": {"$ne": ObjectId(current_id)},
+    })
     mongo.db.auction_players.update_one(
         {"_id": drained_marker["_id"]},
         {"$set": {"status": "sold", "sold_to": str(setup["captain_a"]["_id"]),
                   "sold_price": 25.5, "assigned_via": "bid"}},  # 25.5 - 8.5 base = 17 pts spent
     )
 
-    _release(client, admin_headers, auction_id, "classic")
     state = _get(client, admin_headers, auction_id).get_json()
     assert state["captain_a"]["points_remaining"] == 0
     assert state["captain_b"]["points_remaining"] == 17  # fully unaffected
@@ -483,9 +481,8 @@ def test_quota_completion_with_points_remaining_still_triggers_free_pick_and_com
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases power's P1
 
-    _release(client, admin_headers, auction_id, "power")
     _sell(client, auction_id, a_headers, b_headers, amount=9.0)  # cheap win, quota (1) hit with plenty of points left
 
     state = _get(client, admin_headers, auction_id).get_json()
@@ -520,11 +517,8 @@ def test_copy_export_returns_complete_data_after_auto_release_driven_completion(
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    _start(client, admin_headers, auction_id)
+    _start(client, admin_headers, auction_id)  # auto-releases the first player -- zero manual clicks anywhere
 
-    # ONE manual release for the whole auction -- everything else, across
-    # all 4 categories, is auto-driven.
-    _release(client, admin_headers, auction_id, "power")
     _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers)
 
     assert _get(client, admin_headers, auction_id).get_json()["is_complete"] is True
@@ -584,8 +578,7 @@ def test_captains_from_different_categories_full_auto_run(client, admin_headers,
     assert counts["classic"] == 8
     auction_id = res.get_json()["auction_id"]
 
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "extra_power_allrounder")
+    _start(client, admin_headers, auction_id)  # auto-releases extra_power_allrounder's first player
     _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers)
 
     final_state = _get(client, admin_headers, auction_id).get_json()
@@ -635,8 +628,7 @@ def test_both_captains_from_the_same_category_still_splits_evenly(client, admin_
     a_headers = auth_header(captain_a)
     b_headers = auth_header(captain_b)
 
-    _start(client, admin_headers, auction_id)
-    _release(client, admin_headers, auction_id, "power")  # the one manual click
+    _start(client, admin_headers, auction_id)  # auto-releases power's P1 -- zero manual clicks
     resolved = _drive_to_completion(client, admin_headers, auction_id, a_headers, b_headers)
     assert {cat for cat, _ in resolved} == {"power", "classic"}
 

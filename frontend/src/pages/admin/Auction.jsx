@@ -75,8 +75,23 @@ export default function AdminAuction() {
     const key = `bcc_auction_complete_notified_${auctionId}`;
     if (localStorage.getItem(key)) return;
     localStorage.setItem(key, "1");
-    toast.success("Live auction complete — ready to close.", { duration: 6000, icon: "🏁" });
+    toast.success("Live auction complete — every player's sold. Close it, then copy the teams for WhatsApp.", { duration: 7000, icon: "🏁" });
   }, [auction?.is_complete, auctionId]);
+
+  // Same one-shot pattern as the completion toast above — fires once, the
+  // moment BOTH captains have loaded the auction page at least once, so
+  // admin isn't stuck guessing whether it's actually safe to hit Start yet.
+  // The persistent readout in the pending-state card below covers the case
+  // where this toast was missed, same relationship as the completion banner
+  // has with its own toast.
+  useEffect(() => {
+    if (!auction || auction.status !== "pending" || !auctionId) return;
+    if (!auction.captain_a_joined || !auction.captain_b_joined) return;
+    const key = `bcc_auction_both_joined_notified_${auctionId}`;
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, "1");
+    toast.success("Both captains have joined — ready to start.", { duration: 6000, icon: "🤝" });
+  }, [auction, auctionId]);
 
   useEffect(() => {
     api.get("/admin/captains").then((res) => setCaptains(res.data || [])).catch(() => toast.error("Failed to load captains"));
@@ -347,13 +362,31 @@ export default function AdminAuction() {
 
             {auction.is_complete && (
               <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm font-medium">
-                <CheckCircle2 size={18} /> Live auction complete — ready to close.
+                <CheckCircle2 size={18} /> Live auction complete — close it below, then copy the teams for WhatsApp.
               </div>
             )}
 
             {auction.status === "pending" && (
               <div className="card text-center py-6">
-                <p className="text-gray-600 mb-3">Auction created — not started yet.</p>
+                <p className="text-gray-600 mb-1">Auction created — not started yet.</p>
+                <p className="text-sm mb-4">
+                  {auction.captain_a_joined && auction.captain_b_joined ? (
+                    <span className="text-green-700 font-medium">✅ Both captains have joined — ready to start.</span>
+                  ) : (
+                    <span className="text-gray-500">Waiting for both captains to open "Join Auction" from their navbar…</span>
+                  )}
+                </p>
+                <div className="flex items-center justify-center gap-5 mb-4 text-sm">
+                  {[auction.captain_a, auction.captain_b].map((c, i) => {
+                    const joined = i === 0 ? auction.captain_a_joined : auction.captain_b_joined;
+                    return (
+                      <span key={c.captain_id} className={`flex items-center gap-1.5 ${joined ? "text-green-700 font-medium" : "text-gray-400"}`}>
+                        {joined ? <CheckCircle2 size={15} /> : <span className="w-2.5 h-2.5 rounded-full border-2 border-gray-300" />}
+                        {c.name}
+                      </span>
+                    );
+                  })}
+                </div>
                 <div className="flex items-center justify-center gap-3">
                   <button onClick={handleStart} disabled={starting} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
                     <PlayCircle size={16} /> {starting ? "Starting…" : "Start Auction (25 min clock)"}
@@ -362,6 +395,9 @@ export default function AdminAuction() {
                     <StopCircle size={13} /> Cancel
                   </button>
                 </div>
+                <p className="text-xs text-gray-400 mt-3">
+                  You don't have to wait — Start works either way, and releases the first player automatically.
+                </p>
               </div>
             )}
 

@@ -34,9 +34,10 @@ auction to split available players into two balanced teams.
      [Admin vote management](#admin-vote-management) below.
 4. **Live player auction** — once a match's availability is known, admin runs a live
    points-based auction between two designated captains to split everyone who voted
-   available into two balanced XIs. Admin releases only the very first player by hand;
-   the system auto-releases every player after that and auto-advances across categories
-   on its own, all the way to completion. See [Auction rules](#auction-rules) below.
+   available into two balanced XIs. Admin's one Start click is the only manual step in
+   the entire auction — the first player releases automatically, and the system carries
+   every player after that (and every category after that) through to completion on its
+   own. See [Auction rules](#auction-rules) below.
 5. **Attendance & knockout-eligibility tracking** — real season attendance (matches present
    / total matches, tracked with a simple "+1" per player/captain), independent of the
    voting system. Voters are ranked by attendance %, with a configurable cutoff to
@@ -163,16 +164,22 @@ one of these after every deploy; they're informational only, not app changes.
   auction they'd be participating in themselves.
 - Session cap: 25 minutes from admin clicking Start; any players still unresolved at that
   point are distributed evenly between both captains.
-- **Fully automatic release, one click to start** — admin releases only the very first
-  player of the whole auction by hand; the next player up is always chosen by ranked
-  batting/bowling average, never a manual name pick, and releases itself the instant the
-  previous player's bidding resolves (sold, both-captains-passed, or leftover-award). Once
-  a category runs out, the system auto-advances to the next one on its own too, cycling
-  through **Extra Power All-Rounders → Extra Power Batsmen → Power → Classic** starting
-  wherever admin's one manual click began — no further clicks needed for the rest of the
-  auction. This also closes off a social-engineering angle (no way to steer who comes up).
-  Concurrency-safe via a MongoDB compare-and-swap on the "claim this release" write, since
-  the backend runs real parallel gunicorn workers.
+- **Fully automatic release, one click for the whole auction** — admin's only manual
+  step is clicking **Start**; the very first player releases itself automatically in that
+  same click, always chosen by ranked batting/bowling average, never a manual name pick,
+  and every player after that releases itself the instant the previous one's bidding
+  resolves (sold, both-captains-passed, or leftover-award). Once a category runs out, the
+  system auto-advances to the next one on its own too, cycling in a fixed order — **Extra
+  Power All-Rounders → Extra Power Batsmen → Power → Classic** — no further clicks needed
+  for the rest of the auction. This also closes off a social-engineering angle (no way to
+  steer who comes up). Concurrency-safe via a MongoDB compare-and-swap on the "claim this
+  release" write, since the backend runs real parallel gunicorn workers.
+- **"Both captains joined" status, before admin even starts** — the setup screen tracks
+  the first time each captain's own login loads the auction page (naturally happens when
+  they click "Join Auction"), shows a live ✅/pending readout per captain, and fires a
+  one-time toast the moment both are in — so admin isn't guessing whether it's the right
+  moment to hit Start. Not a hard gate — Start still works regardless, releasing the first
+  player either way.
 - **Admin can still pause/resume** the auto-release chain at any point without losing
   progress — useful for a mid-auction break; nothing auto-releases while paused.
 - **Both-captains-decline queue** — if both captains pass on a player at the 8.5 base price,

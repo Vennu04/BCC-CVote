@@ -28,21 +28,18 @@ def test_captain_total_spend_never_exceeds_budget_across_multiple_players(
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
 
-    # Admin only ever releases by category — the specific player is picked
-    # automatically (see release_player) — which one doesn't matter here
-    # since every player in this pool is otherwise identical.
-
-    # Player 1: captain A wins at extra=10 (bid 18.5). Remaining budget: 17-10=7.
-    client.post(f"/api/admin/auction/{auction_id}/release", json={"category": "power"}, headers=admin_headers)
+    # Start already auto-released Player 1 -- which one doesn't matter here
+    # since every player in this pool is otherwise identical. Captain A wins
+    # at extra=10 (bid 18.5). Remaining budget: 17-10=7.
     client.post(f"/api/auction/{auction_id}/bid", json={"amount": 18.5}, headers=a_headers)
     client.post(f"/api/auction/{auction_id}/drop", headers=b_headers)
 
     mid_state = client.get(f"/api/auction/{auction_id}", headers=admin_headers).get_json()
     assert mid_state["captain_a"]["points_remaining"] == 7
 
-    # Player 2: captain A tries to bid extra=10 again (18.5) — only 7 remain,
-    # so this must be rejected outright, not silently allowed to overspend.
-    client.post(f"/api/admin/auction/{auction_id}/release", json={"category": "power"}, headers=admin_headers)
+    # Player 2 auto-released the instant Player 1 sold -- captain A tries to
+    # bid extra=10 again (18.5) -- only 7 remain, so this must be rejected
+    # outright, not silently allowed to overspend.
     overbid = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 18.5}, headers=a_headers)
     assert overbid.status_code == 400
     assert "remaining" in overbid.get_json()["error"]
@@ -76,10 +73,7 @@ def test_bid_rejected_the_instant_it_would_exceed_remaining_budget(
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
-    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)
-
-    client.post(f"/api/admin/auction/{auction_id}/release",
-                json={"category": "classic"}, headers=admin_headers)
+    client.post(f"/api/admin/auction/{auction_id}/start", headers=admin_headers)  # auto-releases the first player
 
     # A single bid asking for more than the full 17-point budget as extra
     # (base 8.5 + extra 17.5 = 26) must be rejected outright.
