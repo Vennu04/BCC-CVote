@@ -158,6 +158,19 @@ export default function Auction() {
     return mine?.points_remaining ?? null;
   }, [auction, user]);
 
+  // Real live-auction data: captains who currently hold the highest bid on a
+  // player occasionally still clicked Drop anyway (reconsidering, or just
+  // going for the wrong button under time pressure) and got rejected --
+  // correct behavior server-side (conceding a bid you're winning isn't
+  // allowed), but confusing without knowing why. Hiding Drop for whoever's
+  // already leading heads that off before it happens, instead of just
+  // explaining the rejection after the fact.
+  const iAmCurrentLeader = useMemo(() => {
+    if (!auction?.current_player || !user) return false;
+    const mine = auction.captain_a?.captain_id === user.id ? auction.captain_a : auction.captain_b;
+    return !!mine && auction.current_player.current_high_bidder === mine.name;
+  }, [auction, user]);
+
   // The 17-point purse only ever pays for the extra amount above the 8.5
   // base — the base itself is never drawn from it — so the highest TOTAL
   // bid a captain can actually afford is base + however much extra they
@@ -330,13 +343,19 @@ export default function Auction() {
                     >
                       {bidding ? "Bidding…" : "Place Bid"}
                     </button>
-                    <button
-                      className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
-                      disabled={dropping}
-                      onClick={dropCurrentPlayer}
-                    >
-                      <ThumbsDown size={14} /> {dropping ? "…" : "Drop"}
-                    </button>
+                    {iAmCurrentLeader ? (
+                      <span className="text-xs text-pitch-700 font-medium">
+                        You have the highest bid — can't drop while you're leading.
+                      </span>
+                    ) : (
+                      <button
+                        className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                        disabled={dropping}
+                        onClick={dropCurrentPlayer}
+                      >
+                        <ThumbsDown size={14} /> {dropping ? "…" : "Drop"}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">

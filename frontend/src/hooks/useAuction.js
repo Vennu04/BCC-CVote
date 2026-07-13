@@ -38,9 +38,17 @@ export function useAuction(auctionId) {
   }, [auctionId, fetchAuction]);
 
   const placeBid = async (amount) => {
+    // Same lesson as dropCurrentPlayer below: a successful bid used to give
+    // zero confirmation beyond the on-screen bid amount quietly updating.
+    // Real live-auction feedback: a captain who bids, doesn't notice that
+    // subtle change, and clicks "Place Bid" again gets rejected with "You
+    // already have the highest bid" -- correct behavior (can't bid against
+    // yourself), but reads as the button not working the first time, when
+    // it actually did. A toast on success makes that unmistakable.
     setBidding(true);
     try {
       await api.post(`/auction/${auctionId}/bid`, { amount });
+      toast.success(`Bid placed: ${amount}`, { duration: 3000 });
       await fetchAuction();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to place bid");
@@ -51,16 +59,17 @@ export function useAuction(auctionId) {
 
   const dropCurrentPlayer = async () => {
     // Still no confirm() prompt -- "not interested" stays a single instant
-    // click. But a plain "Dropped" (someone else's bid is still standing,
-    // nothing decided yet) is the ONLY outcome that stays silent now. Any
-    // outcome that actually DECIDES something -- sold, or both captains
-    // passed and the player's now held back -- gets a toast, so whoever
-    // just clicked isn't left staring at an unchanged screen wondering if
-    // it registered. (Real live-auction feedback: this exact silence, the
-    // very first time two real captains hit "both pass at base price," read
-    // as "the drop button doesn't work" even though the backend had
-    // resolved it correctly every time -- the click worked, nothing told
-    // them so.)
+    // click. Every outcome now gets *some* acknowledgment -- including the
+    // plain "Dropped" case, which earlier today was left silent on the
+    // theory that "someone else's bid is still standing" needed no
+    // confirming. Real live-auction data proved that wrong: the backend
+    // only ever returns plain "Dropped" when NO ONE has bid on this player
+    // yet (the moment either side bids, or the other captain has already
+    // passed, this hits a different branch below) -- meaning it's always
+    // the "you passed, now waiting on the other captain" state, and with
+    // nothing else on screen changing, real captains clicked Drop 2-6 times
+    // in a row on the exact same still-current player, not realizing their
+    // first click had already registered.
     setDropping(true);
     try {
       const res = await api.post(`/auction/${auctionId}/drop`);
@@ -70,7 +79,9 @@ export function useAuction(auctionId) {
         // captain — you can only ever see this response for a player you
         // just passed on, never one you were winning.
         toast("Sold to the other captain", { duration: 5000 });
-      } else if (message && message !== "Dropped") {
+      } else if (message === "Dropped") {
+        toast("Passed — waiting on the other captain", { duration: 4000, icon: "⏳" });
+      } else if (message) {
         toast(message, { duration: 5000 });
       }
       await fetchAuction();
