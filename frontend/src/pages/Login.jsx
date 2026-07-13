@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "../components/ProtectedRoute";
 import { COMPANY_NAME } from "../config/appMeta";
 import toast from "react-hot-toast";
-import loginBackground from "../assets/branding/login-background.jpg";
+import loginBackground from "../assets/branding/login-background.webp";
 import venuhyaIcon from "../assets/branding/venuhya-icon.png";
 
 export default function Login() {

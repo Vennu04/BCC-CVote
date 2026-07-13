@@ -9,7 +9,7 @@ import { LoadingState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateDisplay } from "../../utils/formatDate";
-import windowPhoto from "../../assets/dashboard-backgrounds/window.jpg";
+import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };

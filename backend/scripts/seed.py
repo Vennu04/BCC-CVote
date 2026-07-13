@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 from pymongo import MongoClient
+from app.indexes import ensure_indexes
 
 MONGO_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/bcc_cvote")
 client = MongoClient(MONGO_URI)
@@ -88,12 +89,9 @@ def seed():
     else:
         print("  ⏭️  Sample captains already exist — skipping")
 
-    # Indexes
-    db.users.create_index("team_code", unique=True)
-    db.votes.create_index([("captain_id", 1), ("slot_id", 1), ("window_id", 1)])
-    db.voting_windows.create_index([("slot_id", 1), ("is_active", 1)])
-    db.weather_cache.create_index([("slot_id", 1), ("target_date", 1)], unique=True)
-    db.password_resets.create_index([("target_user_id", 1), ("reset_at", -1)])
+    # Indexes — shared with app/indexes.py (which also runs this on every
+    # app boot now) so the two can't drift into conflicting specs again.
+    ensure_indexes(db)
     print("  ✅ Indexes ensured")
     print("🏏 Seed complete!")
 

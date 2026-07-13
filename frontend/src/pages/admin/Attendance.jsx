@@ -6,7 +6,7 @@ import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
-import attendancePhoto from "../../assets/dashboard-backgrounds/attendance.jpg";
+import attendancePhoto from "../../assets/dashboard-backgrounds/attendance.webp";
 import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp, UserCheck } from "lucide-react";
 
 // Mirrors the same role-aware endpoint pattern used on Manage Players —

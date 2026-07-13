@@ -7,7 +7,7 @@ import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
 import YetToVotePanel from "../../components/YetToVotePanel";
 import { LoadingState } from "../../components/LoadingState";
-import adminPhoto from "../../assets/dashboard-backgrounds/admin.jpg";
+import adminPhoto from "../../assets/dashboard-backgrounds/admin.webp";
 import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "lucide-react";
 
 // Live vote counts matter most on this page (the Thu-Fri voting window is

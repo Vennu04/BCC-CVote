@@ -8,6 +8,7 @@ from flask_pymongo import PyMongo
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from .config import config_map
+from .indexes import ensure_indexes
 
 mongo = PyMongo()
 jwt = JWTManager()
@@ -44,6 +45,9 @@ def create_app(config_name: str = None) -> Flask:
     mongo.init_app(app)
     jwt.init_app(app)
     limiter.init_app(app)
+
+    if app.config["ENSURE_INDEXES"]:
+        ensure_indexes(mongo.db)
 
     # JWT error handlers
     @jwt.invalid_token_loader

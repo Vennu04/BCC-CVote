@@ -3,7 +3,7 @@ import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
-import auctionPhoto from "../../assets/dashboard-backgrounds/auction.jpg";
+import auctionPhoto from "../../assets/dashboard-backgrounds/auction.webp";
 import AuctionRulesNote from "../../components/AuctionRulesNote";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
 import CountdownBadge from "../../components/CountdownBadge";

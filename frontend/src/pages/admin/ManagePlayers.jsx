@@ -6,7 +6,7 @@ import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
-import playersPhoto from "../../assets/dashboard-backgrounds/players.jpg";
+import playersPhoto from "../../assets/dashboard-backgrounds/players.webp";
 import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp, Search } from "lucide-react";
 
 const AUCTION_CATEGORY_OPTIONS = [

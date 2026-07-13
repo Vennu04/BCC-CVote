@@ -11,6 +11,7 @@ class Config:
     JWT_HEADER_TYPE = "Bearer"
     MONGO_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/bcc_cvote")
     SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+    ENSURE_INDEXES = True
     # Reuse the same Mongo connection for rate-limit counters — the backend
     # runs 2 replicas x 2 gunicorn sync workers, so in-memory storage would
     # let a team_code's real attempt count be split up to 4 ways and never
@@ -62,6 +63,10 @@ class TestingConfig(Config):
     # Tests hit /login repeatedly against the same team_code by design —
     # rate limiting would make the suite's pass/fail depend on run order.
     RATELIMIT_ENABLED = False
+    # The `app` fixture calls create_app() once per test (100+ times a run);
+    # indexes are idempotent but that's still 100+ needless round-trips for
+    # a correctness property tests don't depend on either way.
+    ENSURE_INDEXES = False
 
 
 config_map = {
