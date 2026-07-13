@@ -8,10 +8,18 @@ metadata:
     component: backend
     environment: production
 spec:
-  # 1 replica — t3.micro (1GB RAM) free-tier node doesn't have headroom for
-  # redundant replicas alongside ArgoCD/Traefik/CoreDNS. Bump this (and node
-  # size) if usage grows beyond the free tier.
-  replicas: 1
+  # 2 replicas — node is a t3.small (2GB RAM; an earlier comment here said
+  # t3.micro/1GB, which was stale). RollingUpdate with maxSurge/maxUnavailable
+  # below already makes routine deploys zero-downtime even at 1 replica; what
+  # 2 replicas actually buys is surviving a pod-level crash/OOM/liveness
+  # restart without dropping requests mid-auction. Checked real node headroom
+  # before bumping this (2026-07-13): k3s itself is the dominant memory
+  # consumer (~826Mi, fixed regardless of app replica count), k8s requests
+  # were only 17% allocated, ~525Mi genuinely available, swap dormant (0
+  # active si/so, load avg 0.13) — comfortable room for one more small pod.
+  # This is still a single-node cluster, so this does NOT protect against the
+  # underlying EC2 instance itself going down.
+  replicas: 2
   selector:
     matchLabels:
       app: bcc-cvote
@@ -63,6 +71,12 @@ spec:
                 secretKeyRef:
                   name: bcc-cvote-secret
                   key: OPENWEATHER_API_KEY
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: bcc-cvote-secret
+                  key: SENTRY_DSN
+                  optional: true
           resources:
             requests:
               cpu: 100m

@@ -2,6 +2,7 @@ flask==3.0.3
 flask-jwt-extended==4.6.0
 flask-pymongo==2.3.0
 flask-cors==4.0.2
+flask-limiter==3.8.0
 pymongo[srv]==4.7.2
 werkzeug==3.0.3
 gunicorn==22.0.0
@@ -9,3 +10,4 @@ pytz==2024.1
 python-dotenv==1.0.1
 openpyxl==3.1.5
 requests==2.32.3
+sentry-sdk[flask]==2.13.0

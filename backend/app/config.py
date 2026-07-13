@@ -10,6 +10,13 @@ class Config:
     JWT_HEADER_NAME = "Authorization"
     JWT_HEADER_TYPE = "Bearer"
     MONGO_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/bcc_cvote")
+    SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+    # Reuse the same Mongo connection for rate-limit counters — the backend
+    # runs 2 replicas x 2 gunicorn sync workers, so in-memory storage would
+    # let a team_code's real attempt count be split up to 4 ways and never
+    # actually trip the limit. Mongo storage is shared across all of them.
+    RATELIMIT_STORAGE_URI = MONGO_URI
+    RATELIMIT_SWALLOW_ERRORS = True  # a storage hiccup should never 500 a login
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
     # Temporary escape hatch — flip to "false" (via bcc-cvote-config configmap
     # in prod) to let captains/players log in from any device without being
@@ -52,6 +59,9 @@ class TestingConfig(Config):
         Config.MONGO_URI.rsplit("/", 1)[0] + "/bcc_cvote_test",
     )
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+    # Tests hit /login repeatedly against the same team_code by design —
+    # rate limiting would make the suite's pass/fail depend on run order.
+    RATELIMIT_ENABLED = False
 
 
 config_map = {

@@ -67,6 +67,7 @@ jobs:
         run: |
           docker build \
             --build-arg VITE_API_URL="" \
+            --build-arg VITE_SENTRY_DSN="${{ secrets.VITE_SENTRY_DSN }}" \
             -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
             -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest \
             .

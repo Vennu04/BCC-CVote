@@ -10,6 +10,7 @@
     "lint": "eslint src --ext .js,.jsx"
   },
   "dependencies": {
+    "@sentry/react": "^8.55.2",
     "axios": "^1.7.2",
     "lucide-react": "^0.394.0",
     "react": "^18.3.1",

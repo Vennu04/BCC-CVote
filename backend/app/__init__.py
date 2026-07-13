@@ -1,12 +1,22 @@
 import os
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
 from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_pymongo import PyMongo
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from .config import config_map
 
 mongo = PyMongo()
 jwt = JWTManager()
+# Default key is remote IP; login/reset-password override this per-route to
+# key on team_code instead (see routes/auth.py) — CloudFront/Traefik/nginx
+# sit in front of this app and remote_addr isn't verified against a trusted
+# proxy chain here, so IP-keying alone would be unreliable for the one place
+# it actually matters (brute-forcing a specific account).
+limiter = Limiter(key_func=get_remote_address)
 
 
 def create_app(config_name: str = None) -> Flask:
@@ -16,12 +26,24 @@ def create_app(config_name: str = None) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_map.get(config_name, config_map["default"]))
 
+    # No-ops if SENTRY_DSN is unset (local/dev without the secret configured).
+    # send_default_pii stays off (the default) — this app's request bodies
+    # carry passwords/team codes, and Sentry shouldn't ever see those.
+    if app.config["SENTRY_DSN"]:
+        sentry_sdk.init(
+            dsn=app.config["SENTRY_DSN"],
+            environment=config_name,
+            integrations=[FlaskIntegration()],
+            traces_sample_rate=0,
+        )
+
     # CORS — allow frontend origin
     CORS(app, resources={r"/api/*": {"origins": app.config["FRONTEND_URL"]}},
          supports_credentials=True)
 
     mongo.init_app(app)
     jwt.init_app(app)
+    limiter.init_app(app)
 
     # JWT error handlers
     @jwt.invalid_token_loader

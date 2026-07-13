@@ -1,11 +1,22 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash, generate_password_hash
-from .. import mongo
+from .. import mongo, limiter
 from ..utils.auth import get_current_user
 from ..utils.passwords import validate_password
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _team_code_rate_limit_key():
+    # Keyed on the account being attacked, not the caller's IP — see the note
+    # by the Limiter definition in app/__init__.py. Falls back to remote
+    # address only for a malformed request with no team_code at all, so that
+    # case still counts against *something* rather than bypassing the limit.
+    data = request.get_json(silent=True) or {}
+    team_code = (data.get("team_code") or "").strip().upper()
+    return team_code or get_remote_address()
 
 
 def _user_summary(user):
@@ -33,6 +44,7 @@ def _user_summary(user):
 
 
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit("10 per 5 minutes", key_func=_team_code_rate_limit_key)
 def login():
     data = request.get_json(silent=True) or {}
     team_code = (data.get("team_code") or "").strip().upper()
@@ -116,6 +128,7 @@ def change_password():
 
 
 @auth_bp.route("/reset-password", methods=["POST"])
+@limiter.limit("10 per 5 minutes", key_func=_team_code_rate_limit_key)
 def reset_password_public():
     """Same self-service 'change password with current password' flow as
     /change-password, just reachable straight from the login screen without
