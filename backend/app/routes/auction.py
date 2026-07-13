@@ -19,7 +19,7 @@ STARTING_PRICE = 8.5
 TARGET_ROSTER_SIZE = 11
 SESSION_MINUTES = 25
 MIN_AUCTION_POOL_SIZE = 20  # a side can field 10, per admin's call — no longer requiring a full XI
-MAX_ROSTER_SIZE_PER_SIDE = 15
+MAX_ROSTER_SIZE_PER_SIDE = 14  # 14+14 = 28 max auctioned players total, captains excluded
 
 # Release order within a category is driven by batting/bowling stats, not admin
 # choice (admin can only pick WHICH CATEGORY to release from next, never which
@@ -394,7 +394,7 @@ def create_auction():
         }), 400
 
     # It's a cricket match — each side needs at least a playing XI, and (per
-    # admin's rule) no more than 15 to keep squads a sane size. Both are
+    # admin's rule) no more than 14 to keep squads a sane size. Both are
     # driven by the pool size itself, not the 17-point budget, which is
     # unrelated and unchanged either way.
     if len(voters) < MIN_AUCTION_POOL_SIZE:

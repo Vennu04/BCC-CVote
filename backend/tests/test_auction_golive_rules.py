@@ -1,9 +1,9 @@
 """Go-live checklist items for the auction feature:
 1. An admin linked to one of the two chosen captains (conflict of interest)
    cannot create that auction — someone else from the admin team must.
-2. Auction creation rejects pools that would give either side more than 15
+2. Auction creation rejects pools that would give either side more than 14
    players — orthogonal to the unchanged 17-point-per-captain budget.
-3. Auction creation requires at least 22 total voters (11 a side).
+3. Auction creation requires at least 20 total voters (10 a side).
 4. A captain can drop/pass a player at the base price (no bid placed at all
    yet) in any category, not just some — already-working behavior, tested
    explicitly here as a go-live regression guard."""
@@ -50,22 +50,22 @@ def test_plain_admin_with_no_link_is_unaffected(client, admin_headers, make_auct
     assert res.status_code == 201
 
 
-def test_auction_rejects_pool_giving_either_side_more_than_15_players(
+def test_auction_rejects_pool_giving_either_side_more_than_14_players(
     client, admin_headers, make_auction_setup
 ):
-    # 32 classic players -> quota 16 per side, one over the 15 cap.
-    setup = make_auction_setup([("classic", None, None)] * 32)
-    res = _create(client, admin_headers, setup)
-    assert res.status_code == 400
-    assert "15" in res.get_json()["error"]
-
-
-def test_auction_allows_exactly_15_players_per_side(client, admin_headers, make_auction_setup):
-    # 30 classic players -> quota 15 per side, right at the cap.
+    # 30 classic players -> quota 15 per side, one over the 14 cap.
     setup = make_auction_setup([("classic", None, None)] * 30)
     res = _create(client, admin_headers, setup)
+    assert res.status_code == 400
+    assert "14" in res.get_json()["error"]
+
+
+def test_auction_allows_exactly_14_players_per_side(client, admin_headers, make_auction_setup):
+    # 28 classic players -> quota 14 per side, right at the cap.
+    setup = make_auction_setup([("classic", None, None)] * 28)
+    res = _create(client, admin_headers, setup)
     assert res.status_code == 201
-    assert res.get_json()["group_counts"]["classic"] == 30
+    assert res.get_json()["group_counts"]["classic"] == 28
 
 
 def test_auction_rejects_pool_smaller_than_22(client, admin_headers, make_auction_setup):

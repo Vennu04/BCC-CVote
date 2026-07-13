@@ -158,6 +158,12 @@ one of these after every deploy; they're informational only, not app changes.
 - **Minimum pool size**: at least **20** players must have voted available for the selected
   slot (10 per side) before an auction can be created — deliberately not a full-XI
   requirement, per admin's call.
+- **Maximum pool size**: no more than **14 per side** in the auctioned pool (28 total) — the
+  captain themselves is separate from this cap, so each side's real final headcount is 14
+  auctioned players + their own captain = 15. Per-category quota is always dynamic
+  (`category_total // 2`, recomputed live from that slot's actual confirmed voters) — the
+  numbers shown on the setup screen (e.g. "Classic: 7 per captain") are whatever that
+  formula outputs for the current pool, never a fixed constant per category.
 - Captains are never part of their own auctioned pool, even if they voted available for
   that match. If a captain also has admin capability (see
   [Accounts & security](#accounts--security)), they're additionally blocked from running an
