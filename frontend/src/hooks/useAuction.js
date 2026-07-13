@@ -50,13 +50,29 @@ export function useAuction(auctionId) {
   };
 
   const dropCurrentPlayer = async () => {
-    // Deliberately no confirm() prompt and no success toast — a live auction
-    // moves fast, and "not interested" should be a single instant click, not
-    // a two-step action. Failures still surface (e.g. "you have the highest
-    // bid"), since that's a real correction the captain needs to see.
+    // Still no confirm() prompt -- "not interested" stays a single instant
+    // click. But a plain "Dropped" (someone else's bid is still standing,
+    // nothing decided yet) is the ONLY outcome that stays silent now. Any
+    // outcome that actually DECIDES something -- sold, or both captains
+    // passed and the player's now held back -- gets a toast, so whoever
+    // just clicked isn't left staring at an unchanged screen wondering if
+    // it registered. (Real live-auction feedback: this exact silence, the
+    // very first time two real captains hit "both pass at base price," read
+    // as "the drop button doesn't work" even though the backend had
+    // resolved it correctly every time -- the click worked, nothing told
+    // them so.)
     setDropping(true);
     try {
-      await api.post(`/auction/${auctionId}/drop`);
+      const res = await api.post(`/auction/${auctionId}/drop`);
+      const message = res.data?.message;
+      if (message === "Sold") {
+        // From the dropper's own POV "Sold" always means the other
+        // captain — you can only ever see this response for a player you
+        // just passed on, never one you were winning.
+        toast("Sold to the other captain", { duration: 5000 });
+      } else if (message && message !== "Dropped") {
+        toast(message, { duration: 5000 });
+      }
       await fetchAuction();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to drop");
