@@ -48,6 +48,10 @@ def _get(client, headers, auction_id):
     return client.get(f"/api/auction/{auction_id}", headers=headers)
 
 
+def _close(client, headers, auction_id):
+    return client.post(f"/api/admin/auction/{auction_id}/close", headers=headers)
+
+
 def _sell(client, auction_id, to_headers, other_headers, amount=9.0):
     """Resolve the current player as sold: to_headers bids, other_headers drops."""
     client.post(f"/api/auction/{auction_id}/bid", json={"amount": amount}, headers=to_headers)
@@ -282,6 +286,46 @@ def test_whole_auction_timeout_takes_precedence_over_pending_auto_release(client
     # Auto-release must not have sneaked in one more release in this same request.
     log_after = client.get(f"/api/auction/{auction_id}/release-log", headers=admin_headers).get_json()
     assert len(log_after["entries"]) == 1
+
+
+def test_force_close_on_an_active_auction_distributes_remaining_players_same_as_timeout_would(
+    client, admin_headers, make_auction_setup
+):
+    """Force Close used to just mark status='completed' with zero regard for
+    whoever hadn't come up yet -- they'd sit at status 'available' forever,
+    invisible to both captains, even though the auction showed as done. This
+    confirms close_auction now runs the same even-split fallback the
+    25-minute timeout already used, so an admin cutting an auction short
+    gets the same fair outcome as one that just ran out the clock."""
+    setup = make_auction_setup([("power", None, None)] * 20)
+    auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
+    _start(client, admin_headers, auction_id)
+    _release(client, admin_headers, auction_id, "power")
+
+    assert _close(client, admin_headers, auction_id).status_code == 200
+
+    state = _get(client, admin_headers, auction_id).get_json()
+    assert state["status"] == "completed"
+    assert state["captain_a"]["roster_count"] + state["captain_b"]["roster_count"] == 20
+    assert mongo.db.auction_players.count_documents(
+        {"auction_id": auction_id, "status": "available"}
+    ) == 0
+
+
+def test_cancelling_a_pending_auction_does_not_distribute_anything(client, admin_headers, make_auction_setup):
+    """The same /close endpoint also cancels a not-yet-started auction (the
+    admin UI's "Cancel" button). Nothing's been released yet, so this must
+    NOT run the new distribute-remaining-players fallback -- that would
+    wrongly hand the entire roster to two captains for an auction that
+    never actually ran."""
+    setup = make_auction_setup([("power", None, None)] * 20)
+    auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
+
+    assert _close(client, admin_headers, auction_id).status_code == 200
+
+    assert mongo.db.auction_players.count_documents(
+        {"auction_id": auction_id, "status": "available"}
+    ) == 20
 
 
 # ── 6. Manual pause halts auto-release; resume continues it ─────────────────

@@ -275,18 +275,16 @@ def _maybe_auto_release_next(auction_id):
         {"_id": auction["_id"], "current_player_id": None},
         {"$set": {"auto_release_category": None}},
     )
-    return
-    _claim_release(auction, category, player, users_map)
 
 
-def _apply_timeout_fallback(auction):
-    """Once the session's 25-minute cap passes, any group that never got fully
-    resolved through bidding gets its remaining players split free — whoever has
-    fewer in that specific group so far gets the next one, alternating (captain_a
-    wins ties) — so both captains still end up with equal counts per group."""
+def _distribute_remaining_players_evenly(auction):
+    """Splits every still-'available' player free, alternating so both captains
+    end up even per group — whoever has fewer in that specific group so far
+    gets the next one (captain_a wins ties). Shared by the 25-minute session
+    timeout and admin's manual Force Close: an active auction ending early for
+    either reason should resolve the same way, not silently orphan whoever
+    hadn't come up yet at status 'available' forever."""
     now = datetime.utcnow()
-    if auction["status"] != "active" or not auction.get("ends_at") or now <= auction["ends_at"]:
-        return
     for group in AUCTION_GROUPS:
         remaining = list(mongo.db.auction_players.find({
             "auction_id": str(auction["_id"]), "category": group, "status": "available",
@@ -305,6 +303,15 @@ def _apply_timeout_fallback(auction):
                 "captain_id": target, "action": "leftover_free", "amount": 0,
                 "created_at": now,
             })
+
+
+def _apply_timeout_fallback(auction):
+    """Once the session's 25-minute cap passes, any group that never got fully
+    resolved through bidding gets its remaining players split free."""
+    now = datetime.utcnow()
+    if auction["status"] != "active" or not auction.get("ends_at") or now <= auction["ends_at"]:
+        return
+    _distribute_remaining_players_evenly(auction)
     mongo.db.auctions.update_one(
         {"_id": auction["_id"]},
         {"$set": {"status": "completed", "current_player_id": None}},
@@ -515,6 +522,15 @@ def close_auction(auction_id):
     auction = _auction_or_404(auction_id)
     if not auction:
         return jsonify({"error": "Auction not found"}), 404
+
+    # An active auction being force-closed early should resolve exactly like a
+    # natural timeout would -- split whoever's left evenly -- rather than
+    # silently orphaning them at "available" forever. A still-pending auction
+    # (admin cancelling before it ever started) has nothing to distribute --
+    # nobody's been released yet -- and this would otherwise wrongly hand the
+    # entire roster to two captains for an auction that never actually ran.
+    if auction["status"] == "active":
+        _distribute_remaining_players_evenly(auction)
 
     mongo.db.auctions.update_one(
         {"_id": auction["_id"]},
