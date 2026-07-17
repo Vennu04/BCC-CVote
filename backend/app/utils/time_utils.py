@@ -86,6 +86,32 @@ def get_upcoming_weekend_dates() -> dict:
 _TIME_OF_DAY_DEFAULT_HOUR = {"Morning": 7, "Evening": 15}
 
 
+def effective_match_date_str(slot: dict):
+    """
+    The calendar date (YYYY-MM-DD string) this slot's match actually falls
+    on this week, or None if it can't be determined.
+
+    Ad-hoc slots always carry an explicit match_date. Recurring slots carry
+    no persisted date by default -- it's whichever upcoming Sat/Sun the
+    slot's `day` names -- but admin can set a one-off `date_override` for
+    the current week via POST /admin/slots/<id>/date. The override carries
+    a `week_of` snapshot of the natural date at the time it was set, so it
+    self-expires the moment the natural weekend rolls over to the next one,
+    with no cleanup job needed.
+    """
+    if slot.get("is_adhoc"):
+        return slot.get("match_date")
+
+    dates = get_match_weekend_dates()
+    natural = dates.get(slot.get("day", "").lower())
+    natural_str = natural.isoformat() if natural else None
+
+    override = slot.get("date_override")
+    if override and natural_str and override.get("week_of") == natural_str:
+        return override.get("date")
+    return natural_str
+
+
 def match_datetime_for_slot(slot: dict):
     """
     Best-effort calendar date + kickoff time for a slot, as a naive UTC
@@ -95,19 +121,17 @@ def match_datetime_for_slot(slot: dict):
     Recurring Saturday/Sunday slots carry no explicit match_date (they're a
     standing weekly label, not tied to one calendar date) -- their date is
     whichever upcoming Sat/Sun the slot's `day` names, via
-    get_match_weekend_dates(). Ad-hoc slots always carry an explicit
-    match_date instead, which takes priority when present.
+    get_match_weekend_dates(), or an admin's date_override for this week.
+    Ad-hoc slots always carry an explicit match_date instead.
     """
-    if slot.get("match_date"):
+    date_str = effective_match_date_str(slot)
+    if date_str:
         try:
-            match_date = datetime.strptime(slot["match_date"], "%Y-%m-%d").date()
+            match_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except (ValueError, TypeError):
             return None
     else:
-        dates = get_match_weekend_dates()
-        match_date = dates.get(slot.get("day", "").lower())
-        if not match_date:
-            return None
+        return None
 
     hour, minute = _TIME_OF_DAY_DEFAULT_HOUR.get(slot.get("time_of_day"), 9), 0
     raw_time = slot.get("match_time")

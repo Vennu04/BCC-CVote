@@ -11,6 +11,7 @@ from .. import mongo
 from ..utils.auth import admin_required, get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot,
+    effective_match_date_str, get_match_weekend_dates,
 )
 from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
@@ -159,6 +160,8 @@ def _slot_to_dict(slot):
         "time_of_day": slot["time_of_day"],
         "match_time": slot.get("match_time", ""),
         "match_date": slot.get("match_date"),
+        "resolved_match_date": effective_match_date_str(slot),
+        "date_override": slot.get("date_override"),
         "description": slot.get("description", ""),
         "is_adhoc": slot.get("is_adhoc", False),
     }
@@ -170,12 +173,15 @@ def _get_active_window(slot_id):
 
 def _window_info(window):
     if not window:
-        return {"id": None, "is_open": False, "opens_at": None, "closes_at": None}
+        return {"id": None, "is_open": False, "opens_at": None, "closes_at": None,
+                "is_cancelled": False, "cancel_reason": None}
     return {
         "id": str(window["_id"]),
         "is_open": is_voting_window_open(window["opens_at"], window["closes_at"]),
         "opens_at": format_ist(window["opens_at"]),
         "closes_at": format_ist(window["closes_at"]),
+        "is_cancelled": bool(window.get("is_cancelled")),
+        "cancel_reason": window.get("cancel_reason"),
     }
 
 
@@ -1052,6 +1058,45 @@ def remove_slot(slot_id):
     return jsonify({"message": "Ad-hoc match removed"})
 
 
+# One-off date override for a recurring slot's current week -- e.g. the usual
+# Saturday Morning match moves to a different actual date this week. Only
+# applies to the 4 fixed slots; ad-hoc slots already have their own explicit
+# match_date from add_slot and shouldn't have two competing date fields.
+@admin_bp.route("/slots/<slot_id>/date", methods=["POST"])
+@admin_required
+def set_slot_date_override(slot_id):
+    slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
+    if not slot:
+        return jsonify({"error": "Slot not found"}), 404
+    if slot.get("is_adhoc"):
+        return jsonify({"error": "Ad-hoc matches already have an explicit date — edit isn't needed here"}), 400
+
+    data = request.get_json(silent=True) or {}
+    match_date = data.get("match_date")
+
+    if match_date is None:
+        mongo.db.match_slots.update_one({"_id": slot["_id"]}, {"$unset": {"date_override": ""}})
+        updated = mongo.db.match_slots.find_one({"_id": slot["_id"]})
+        return jsonify({"message": "Date override cleared", "slot": _slot_to_dict(updated)})
+
+    match_date = str(match_date).strip()
+    try:
+        datetime.fromisoformat(match_date)
+    except ValueError:
+        return jsonify({"error": "match_date must be an ISO date, e.g. 2026-08-15"}), 400
+
+    natural = get_match_weekend_dates().get(slot.get("day", "").lower())
+    if not natural:
+        return jsonify({"error": f"Can't resolve the natural weekend date for day={slot.get('day')!r}"}), 400
+
+    mongo.db.match_slots.update_one(
+        {"_id": slot["_id"]},
+        {"$set": {"date_override": {"date": match_date, "week_of": natural.isoformat()}}},
+    )
+    updated = mongo.db.match_slots.find_one({"_id": slot["_id"]})
+    return jsonify({"message": "Date override set", "slot": _slot_to_dict(updated)})
+
+
 # ── Voting window management (per match slot) ──────────────────────────────────
 
 @admin_bp.route("/window", methods=["GET"])
@@ -1137,6 +1182,42 @@ def close_window_early():
         {"$set": {"closes_at": now, "closed_early": True}}
     )
     return jsonify({"message": "Voting window closed early"})
+
+
+# Cancel this week's match outright (e.g. not enough players) -- distinct
+# from "Close Early", which only stops voting; a cancelled match is called
+# off. Scoped to the current window only, not the recurring slot, so next
+# week's fresh window (from set_window) starts uncancelled automatically --
+# no separate "uncancel" endpoint needed.
+@admin_bp.route("/window/cancel", methods=["POST"])
+@admin_required
+def cancel_window():
+    data = request.get_json(silent=True) or {}
+    slot_id = data.get("slot_id")
+    reason = (data.get("reason") or "").strip()
+    if not slot_id:
+        return jsonify({"error": "slot_id is required"}), 400
+    if not reason:
+        return jsonify({"error": "A cancellation reason is required"}), 400
+
+    window = _get_active_window(slot_id)
+    if not window:
+        return jsonify({"error": "No active window to cancel for this slot"}), 404
+    if window.get("is_cancelled"):
+        return jsonify({"error": "This match is already cancelled"}), 400
+
+    in_progress_auction = mongo.db.auctions.find_one({
+        "window_id": str(window["_id"]), "status": {"$in": ["pending", "active"]},
+    })
+    if in_progress_auction:
+        return jsonify({"error": "An auction is already in progress for this match — close it first"}), 409
+
+    now = datetime.utcnow()
+    mongo.db.voting_windows.update_one(
+        {"_id": window["_id"]},
+        {"$set": {"is_cancelled": True, "cancel_reason": reason, "cancelled_at": now, "closes_at": now}}
+    )
+    return jsonify({"message": "Match cancelled"})
 
 
 # ── Export ─────────────────────────────────────────────────────────────────────

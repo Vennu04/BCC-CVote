@@ -357,6 +357,8 @@ def create_auction():
     window = _get_active_window(slot_id)
     if not window:
         return jsonify({"error": "No active voting window for this slot"}), 400
+    if window.get("is_cancelled"):
+        return jsonify({"error": "This match's voting window was cancelled — pick a different slot"}), 400
 
     available_votes = list(mongo.db.votes.find({
         "slot_id": slot_id, "window_id": str(window["_id"]), "availability": "available",
@@ -419,6 +421,7 @@ def create_auction():
         "current_player_id": None,
         "auto_release_category": None,
         "is_paused": False,
+        "is_test": False,
         "captain_a_joined_at": None,
         "captain_b_joined_at": None,
         "started_at": None,
@@ -447,6 +450,96 @@ def create_auction():
         "message": "Auction created",
         "auction_id": auction_id,
         "group_counts": counts_by_group,
+    }), 201
+
+
+# Practice run of the live-auction UI so captains can rehearse bidding/dropping/
+# free-picking before the real thing — reuses every other auction route
+# unmodified (start/release/bid/drop/free-pick/pause/resume/close/get all
+# operate purely on auction_id, never re-deriving from votes/match_slots), so
+# only creation needs its own path. Deliberately skips every real-vote/window/
+# parity/pool-size/category gate in create_auction() above: admin just picks
+# whoever they want for a quick rehearsal. slot_id/window_id are left None
+# (safe — read only inside create_auction itself) and is_test:True marks it
+# so my_active_auction() excludes it from the real "Join Auction" flow.
+@auction_bp.route("/admin/auction/practice", methods=["POST"])
+@admin_required
+def create_practice_auction():
+    data = request.get_json(silent=True) or {}
+    captain_a_id = data.get("captain_a_id")
+    captain_b_id = data.get("captain_b_id")
+    player_ids = list(dict.fromkeys(data.get("player_ids") or []))  # dedupe, keep order
+
+    if not captain_a_id or not captain_b_id:
+        return jsonify({"error": "captain_a_id and captain_b_id are required"}), 400
+    if captain_a_id == captain_b_id:
+        return jsonify({"error": "captain_a_id and captain_b_id must be different"}), 400
+
+    acting_admin = get_current_user()
+    linked_captain_id = acting_admin.get("linked_captain_id") if acting_admin else None
+    if linked_captain_id and linked_captain_id in (captain_a_id, captain_b_id):
+        return jsonify({
+            "error": "You're linked to one of the chosen captains — someone else from the admin team must run this auction"
+        }), 403
+
+    for cid in (captain_a_id, captain_b_id):
+        captain_user = mongo.db.users.find_one({"_id": ObjectId(cid), "role": "captain", "is_active": True})
+        if not captain_user:
+            return jsonify({"error": f"{cid} is not an active captain"}), 400
+
+    if len(player_ids) < 2:
+        return jsonify({"error": "Pick at least 2 players for a practice auction"}), 400
+    if any(pid in (captain_a_id, captain_b_id) for pid in player_ids):
+        return jsonify({"error": "The two captains can't also be players in their own practice auction"}), 400
+
+    players = list(mongo.db.users.find({"_id": {"$in": [ObjectId(pid) for pid in player_ids]}, "is_active": True}))
+    found_ids = {str(p["_id"]) for p in players}
+    missing = [pid for pid in player_ids if pid not in found_ids]
+    if missing:
+        return jsonify({"error": f"These player ids weren't found or aren't active: {', '.join(missing)}"}), 400
+
+    auction_doc = {
+        "slot_id": None,
+        "window_id": None,
+        "captain_a_id": captain_a_id,
+        "captain_b_id": captain_b_id,
+        "status": "pending",
+        "current_player_id": None,
+        "auto_release_category": None,
+        "is_paused": False,
+        "is_test": True,
+        "captain_a_joined_at": None,
+        "captain_b_joined_at": None,
+        "started_at": None,
+        "ends_at": None,
+        "target_roster_size": TARGET_ROSTER_SIZE,
+        "points_budget": POINTS_BUDGET,
+        "starting_price": STARTING_PRICE,
+        "created_at": datetime.utcnow(),
+    }
+    result = mongo.db.auctions.insert_one(auction_doc)
+    auction_id = str(result.inserted_id)
+
+    for i, p in enumerate(players):
+        # Real players usually already have an auction_category; anyone who
+        # doesn't (fine for a quick rehearsal) gets round-robined across the
+        # 4 groups so the category UI still has something sensible to show.
+        category = p.get("auction_category") or AUCTION_GROUPS[i % len(AUCTION_GROUPS)]
+        mongo.db.auction_players.insert_one({
+            "auction_id": auction_id,
+            "user_id": str(p["_id"]),
+            "category": category,
+            "status": "available",
+            "sold_to": None,
+            "sold_price": None,
+            "assigned_via": None,
+            "deprioritized": False,
+        })
+
+    return jsonify({
+        "message": "Practice auction created",
+        "auction_id": auction_id,
+        "is_test": True,
     }), 201
 
 
@@ -595,6 +688,7 @@ def my_active_auction():
     uid = str(user["_id"])
     auction = mongo.db.auctions.find_one({
         "status": {"$in": ["pending", "active"]},
+        "is_test": {"$ne": True},
         "$or": [{"captain_a_id": uid}, {"captain_b_id": uid}],
     }, sort=[("created_at", -1)])
     if not auction:
@@ -792,6 +886,7 @@ def get_auction(auction_id):
     return jsonify({
         "id": auction_id,
         "status": auction["status"],
+        "is_test": auction.get("is_test", False),
         "ends_at": format_ist(auction["ends_at"]) if auction.get("ends_at") else None,
         "ends_at_iso": to_iso_utc(auction.get("ends_at")),
         "points_budget": auction["points_budget"],

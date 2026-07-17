@@ -11,7 +11,7 @@ import PlayerInsightsCard from "../../components/PlayerInsightsCard";
 import FairnessBanner from "../../components/FairnessBanner";
 import ReleaseOrderLog from "../../components/ReleaseOrderLog";
 import { useAuction } from "../../hooks/useAuction";
-import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2 } from "lucide-react";
+import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2 } from "lucide-react";
 
 const STORAGE_KEY = "bcc_active_auction_id";
 
@@ -39,13 +39,15 @@ function buildWhatsAppSummary(auction) {
     return lines.join("\n").trim();
   };
 
-  return [
+  const lines = [
     "🏏 *BCC-CVote Auction Results*",
     "",
     teamBlock("Team A", auction.captain_a),
     "",
     teamBlock("Team B", auction.captain_b),
-  ].join("\n");
+  ];
+  if (auction.is_test) lines.unshift("🧪 TEST DATA — DO NOT SHARE AS A REAL RESULT", "");
+  return lines.join("\n");
 }
 
 export default function AdminAuction() {
@@ -56,6 +58,10 @@ export default function AdminAuction() {
   const [captainAId, setCaptainAId] = useState("");
   const [captainBId, setCaptainBId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [practiceCaptainAId, setPracticeCaptainAId] = useState("");
+  const [practiceCaptainBId, setPracticeCaptainBId] = useState("");
+  const [practicePlayerIds, setPracticePlayerIds] = useState(new Set());
+  const [creatingPractice, setCreatingPractice] = useState(false);
   const [starting, setStarting] = useState(false);
   const [releasing, setReleasing] = useState(null);
   const [pausing, setPausing] = useState(false);
@@ -134,6 +140,24 @@ export default function AdminAuction() {
     [captainAId, captainBId]
   );
 
+  // Practice auctions don't need real votes/categories — any active voter
+  // (captain or player) is a fair pick for a rehearsal pool, minus whoever's
+  // running the draft this time.
+  const practicePlayerCandidates = useMemo(
+    () => voteMatrix
+      .map((row) => row.captain)
+      .filter((c) => c.id !== practiceCaptainAId && c.id !== practiceCaptainBId),
+    [voteMatrix, practiceCaptainAId, practiceCaptainBId]
+  );
+
+  const togglePracticePlayer = (id) => {
+    setPracticePlayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!selectedSlotId || !captainAId || !captainBId) return;
@@ -150,6 +174,36 @@ export default function AdminAuction() {
       toast.error(err.response?.data?.error || "Failed to create auction");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleCreatePractice = async (e) => {
+    e.preventDefault();
+    if (!practiceCaptainAId || !practiceCaptainBId) return;
+    if (practiceCaptainAId === practiceCaptainBId) { toast.error("Pick two different captains"); return; }
+    if (practicePlayerIds.size < 2) { toast.error("Pick at least 2 players for the rehearsal"); return; }
+    setCreatingPractice(true);
+    try {
+      const res = await api.post("/admin/auction/practice", {
+        captain_a_id: practiceCaptainAId, captain_b_id: practiceCaptainBId,
+        player_ids: Array.from(practicePlayerIds),
+      });
+      toast.success("Practice auction created — copy the link below for the two captains");
+      localStorage.setItem(STORAGE_KEY, res.data.auction_id);
+      setAuctionId(res.data.auction_id);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to create practice auction");
+    } finally {
+      setCreatingPractice(false);
+    }
+  };
+
+  const handleCopyPracticeLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/auction/${auctionId}`);
+      toast.success("Link copied — send it to the two captains");
+    } catch {
+      toast.error("Couldn't copy — your browser may be blocking clipboard access");
     }
   };
 
@@ -242,6 +296,9 @@ export default function AdminAuction() {
     setSelectedSlotId("");
     setCaptainAId("");
     setCaptainBId("");
+    setPracticeCaptainAId("");
+    setPracticeCaptainBId("");
+    setPracticePlayerIds(new Set());
   };
 
   return (
@@ -352,10 +409,93 @@ export default function AdminAuction() {
           </div>
         )}
 
+        {!auctionId && (
+          <div className="card border-2 border-amber-200">
+            <div className="flex items-center gap-2 mb-1">
+              <FlaskConical size={16} className="text-amber-600" />
+              <h2 className="font-bold text-gray-900">Practice Auction (Rehearsal)</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              Let two captains try out the live-bidding screen with any players you pick — no real votes,
+              budgets, or player stats are touched. Won't show up in anyone's "Join Auction" badge; you'll
+              get a link to share manually once it's created.
+            </p>
+            <form onSubmit={handleCreatePractice} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Captain A</label>
+                  <select className="input-field" value={practiceCaptainAId} onChange={(e) => setPracticeCaptainAId(e.target.value)} required>
+                    <option value="">Select a team…</option>
+                    {captains.map((c) => (
+                      <option key={c.id} value={c.id} disabled={c.id === practiceCaptainBId}>
+                        {c.name}{c.team_name ? ` — ${c.team_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Captain B</label>
+                  <select className="input-field" value={practiceCaptainBId} onChange={(e) => setPracticeCaptainBId(e.target.value)} required>
+                    <option value="">Select a team…</option>
+                    {captains.map((c) => (
+                      <option key={c.id} value={c.id} disabled={c.id === practiceCaptainAId}>
+                        {c.name}{c.team_name ? ` — ${c.team_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Players ({practicePlayerIds.size} picked — pick at least 2, ideally 2+ per category for realistic bidding)
+                </label>
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+                  {practicePlayerCandidates.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={practicePlayerIds.has(p.id)}
+                        onChange={() => togglePracticePlayer(p.id)}
+                      />
+                      <span className="text-gray-800">{p.name}</span>
+                      {p.auction_category && (
+                        <span className="text-xs text-gray-400">{GROUP_LABELS[p.auction_category] || p.auction_category}</span>
+                      )}
+                    </label>
+                  ))}
+                  {practicePlayerCandidates.length === 0 && (
+                    <p className="text-xs text-gray-400 px-3 py-2">No other captains/players to pick from yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <button type="submit" disabled={creatingPractice} className="btn-secondary text-sm py-2 px-4">
+                {creatingPractice ? "Creating…" : "Create Practice Auction"}
+              </button>
+            </form>
+          </div>
+        )}
+
         {auctionId && loading && <p className="text-gray-500 text-sm">Loading…</p>}
 
         {auctionId && auction && (
           <>
+            {auction.is_test && (
+              <div className="flex items-center justify-between gap-3 flex-wrap bg-amber-100 border-2 border-amber-400 text-amber-900 rounded-lg px-4 py-2.5 text-sm font-semibold">
+                <span className="flex items-center gap-2">
+                  <FlaskConical size={16} /> PRACTICE AUCTION — no real votes, budgets, or player stats are affected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyPracticeLink}
+                  className="flex items-center gap-1.5 text-xs font-medium bg-white border border-amber-300 rounded-lg px-3 py-1.5 hover:bg-amber-50"
+                >
+                  <Link2 size={13} /> Copy Practice Link
+                </button>
+              </div>
+            )}
+
             <AuctionRulesNote auction={auction} />
 
             {auction.status !== "completed" && <FairnessBanner />}

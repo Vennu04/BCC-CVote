@@ -24,7 +24,14 @@ def next_match_context():
     binary, not tri-state.
     """
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}))
-    slot, _ = get_next_match_slot(slots)
+    # A slot whose current window was cancelled ("not enough players") isn't
+    # a real upcoming match this week -- skip it so "next match" falls
+    # through to whichever slot is actually still on.
+    candidate_slots = [
+        s for s in slots
+        if not (w := _get_active_window(str(s["_id"]))) or not w.get("is_cancelled")
+    ]
+    slot, _ = get_next_match_slot(candidate_slots)
     if not slot:
         return None, {}
     window = _get_active_window(str(slot["_id"]))

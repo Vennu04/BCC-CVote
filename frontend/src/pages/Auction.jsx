@@ -9,7 +9,7 @@ import FairnessBanner from "../components/FairnessBanner";
 import ReleaseOrderLog from "../components/ReleaseOrderLog";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
-import { Gavel, ThumbsDown, Trophy, Gift } from "lucide-react";
+import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical } from "lucide-react";
 
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
@@ -261,6 +261,12 @@ export default function Auction() {
           </div>
           <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at_iso : null} />
         </div>
+
+        {auction.is_test && (
+          <div className="flex items-center gap-2 bg-amber-100 border-2 border-amber-400 text-amber-900 rounded-lg px-4 py-2.5 text-sm font-semibold">
+            <FlaskConical size={16} /> PRACTICE AUCTION — no real votes, budgets, or player stats are affected
+          </div>
+        )}
 
         <AuctionRulesNote auction={auction} />
 

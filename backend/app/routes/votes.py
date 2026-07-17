@@ -9,7 +9,7 @@ from ..utils.auth import get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, seconds_until_close,
     format_ist, now_ist, suggested_window_for_slot,
-    can_revoke_vote, revoke_deadline_for_window
+    can_revoke_vote, revoke_deadline_for_window, effective_match_date_str
 )
 from ..services.weather import get_forecast_for_slot
 
@@ -28,7 +28,8 @@ def _get_active_window(slot_id):
 def _window_info(window, slot=None):
     if not window:
         return {"is_open": False, "opens_at": None, "closes_at": None, "seconds_remaining": 0,
-                "can_revoke": False, "revoke_deadline": None}
+                "can_revoke": False, "revoke_deadline": None,
+                "is_cancelled": False, "cancel_reason": None}
     is_open = is_voting_window_open(window["opens_at"], window["closes_at"])
     info = {
         "is_open": is_open,
@@ -37,6 +38,8 @@ def _window_info(window, slot=None):
         "seconds_remaining": seconds_until_close(window["closes_at"]) if is_open else 0,
         "can_revoke": False,
         "revoke_deadline": None,
+        "is_cancelled": bool(window.get("is_cancelled")),
+        "cancel_reason": window.get("cancel_reason"),
     }
     if slot:
         info["can_revoke"] = can_revoke_vote(window, slot)
@@ -54,6 +57,8 @@ def _serialize_slot(slot):
         "match_time": slot.get("match_time", ""),
         "description": slot.get("description", ""),
         "match_date": slot.get("match_date"),
+        "resolved_match_date": effective_match_date_str(slot),
+        "date_override": slot.get("date_override"),
         "is_adhoc": slot.get("is_adhoc", False),
         "label": f"{slot['day']} {slot.get('match_time', slot['time_of_day'])}",
     }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import VoteButton from "./VoteButton";
 import WeatherForecast from "./WeatherForecast";
 import { useCountdown } from "../hooks/useCountdown";
+import { formatDateDisplay } from "../utils/formatDate";
 import { Sun, Sunset, Clock, Lock, AlertTriangle, Users, ChevronDown, ChevronUp } from "lucide-react";
 
 const DAY_COLORS = {
@@ -16,6 +17,15 @@ const TIME_ICONS = {
 
 function WindowStatus({ windowInfo }) {
   const { hours, minutes, expired } = useCountdown(windowInfo?.seconds_remaining);
+
+  if (windowInfo?.is_cancelled) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-100 rounded-full px-2.5 py-1">
+        <AlertTriangle size={11} />
+        <span>Match Cancelled{windowInfo.cancel_reason ? ` — ${windowInfo.cancel_reason}` : ""}</span>
+      </div>
+    );
+  }
 
   if (!windowInfo?.is_open) {
     return (
@@ -51,7 +61,9 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
         <div className="flex items-center gap-3">
           {TIME_ICONS[slot.time_of_day]}
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              {slot.day}{slot.resolved_match_date ? ` · ${formatDateDisplay(slot.resolved_match_date)}` : ""}
+            </p>
             <p className="font-bold text-gray-900 text-lg leading-tight">{slot.match_time || slot.time_of_day}</p>
             <p className="text-xs text-gray-500">{slot.time_of_day} Match</p>
           </div>

@@ -10,7 +10,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateDisplay } from "../../utils/formatDate";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
-import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2 } from "lucide-react";
+import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Pencil, RotateCcw, Ban } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
 
@@ -29,6 +29,12 @@ export default function VotingWindow() {
   const [savingSlot, setSavingSlot] = useState(null);
   const [newSlot, setNewSlot] = useState(EMPTY_NEW_SLOT);
   const [addingSlot, setAddingSlot] = useState(false);
+  const [editingDateSlot, setEditingDateSlot] = useState(null); // slot_id currently showing the date-override input
+  const [dateEdits, setDateEdits] = useState({}); // slot_id -> pending date value
+  const [savingDateSlot, setSavingDateSlot] = useState(null);
+  const [cancelingSlot, setCancelingSlot] = useState(null); // slot_id currently showing the cancel-reason input
+  const [cancelReasons, setCancelReasons] = useState({}); // slot_id -> pending reason
+  const [savingCancelSlot, setSavingCancelSlot] = useState(null);
   const { confirmProps, requestConfirm } = useConfirm();
 
   const fetchWindows = async () => {
@@ -115,6 +121,25 @@ export default function VotingWindow() {
     });
   };
 
+  const handleCancelMatch = async (slotId) => {
+    const reason = (cancelReasons[slotId] || "").trim();
+    if (!reason) {
+      toast.error("A cancellation reason is required");
+      return;
+    }
+    setSavingCancelSlot(slotId);
+    try {
+      await api.post("/admin/window/cancel", { slot_id: slotId, reason });
+      toast.success("Match cancelled");
+      setCancelingSlot(null);
+      fetchWindows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to cancel match");
+    } finally {
+      setSavingCancelSlot(null);
+    }
+  };
+
   const handleAddSlot = async (e) => {
     e.preventDefault();
     if (!newSlot.match_date || !newSlot.day) return;
@@ -141,6 +166,35 @@ export default function VotingWindow() {
         toast.error(err.response?.data?.error || "Failed to remove match");
       }
     });
+  };
+
+  const handleSaveDateOverride = async (slotId) => {
+    const match_date = dateEdits[slotId];
+    if (!match_date) return;
+    setSavingDateSlot(slotId);
+    try {
+      await api.post(`/admin/slots/${slotId}/date`, { match_date });
+      toast.success("Match date updated ✅");
+      setEditingDateSlot(null);
+      await fetchWindows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update date");
+    } finally {
+      setSavingDateSlot(null);
+    }
+  };
+
+  const handleResetDateOverride = async (slotId) => {
+    setSavingDateSlot(slotId);
+    try {
+      await api.post(`/admin/slots/${slotId}/date`, { match_date: null });
+      toast.success("Date override cleared");
+      await fetchWindows();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to clear date override");
+    } finally {
+      setSavingDateSlot(null);
+    }
   };
 
   return (
@@ -235,16 +289,78 @@ export default function VotingWindow() {
                           <div>
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
                             <h2 className="font-bold text-gray-900">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
+                            {!slot.is_adhoc && (
+                              <div className="mt-1">
+                                {editingDateSlot === slot.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="date"
+                                      className="input-field text-sm py-1"
+                                      value={dateEdits[slot.id] ?? slot.resolved_match_date ?? ""}
+                                      onChange={(e) => setDateEdits({ ...dateEdits, [slot.id]: e.target.value })}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveDateOverride(slot.id)}
+                                      disabled={savingDateSlot === slot.id}
+                                      className="text-xs font-medium text-pitch-600 hover:text-pitch-700"
+                                    >
+                                      {savingDateSlot === slot.id ? "Saving…" : "Save"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingDateSlot(null)}
+                                      className="text-xs text-gray-500 hover:text-gray-700"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <span>{formatDateDisplay(slot.resolved_match_date)}</span>
+                                    {slot.date_override && (
+                                      <span className="text-xs font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">overridden</span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingDateSlot(slot.id)}
+                                      title="Change date for this week"
+                                      className="text-gray-400 hover:text-pitch-600"
+                                    >
+                                      <Pencil size={12} />
+                                    </button>
+                                    {slot.date_override && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResetDateOverride(slot.id)}
+                                        disabled={savingDateSlot === slot.id}
+                                        title="Reset to natural weekend date"
+                                        className="text-gray-400 hover:text-red-600"
+                                      >
+                                        <RotateCcw size={12} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {win && (
                             <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${
-                              win.is_open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                              win.is_cancelled ? "bg-red-100 text-red-700" : win.is_open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                             }`}>
                               <Clock size={12} />
-                              {win.is_open ? "OPEN" : "CLOSED"} — {win.opens_at} to {win.closes_at}
+                              {win.is_cancelled ? "CANCELLED" : win.is_open ? "OPEN" : "CLOSED"} — {win.opens_at} to {win.closes_at}
                             </span>
                           )}
                         </div>
+
+                        {win?.is_cancelled && (
+                          <div className="mb-3 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                            <Ban size={14} />
+                            <span>Cancelled — {win.cancel_reason}</span>
+                          </div>
+                        )}
 
                         {suggested && (
                           <p className="text-xs text-gray-500 mb-3">
@@ -294,6 +410,15 @@ export default function VotingWindow() {
                                 <XCircle size={14} /> Close Early
                               </button>
                             )}
+                            {win && !win.is_cancelled && (
+                              <button
+                                type="button"
+                                onClick={() => setCancelingSlot(cancelingSlot === slot.id ? null : slot.id)}
+                                className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                              >
+                                <Ban size={14} /> Cancel Match
+                              </button>
+                            )}
                             {slot.is_adhoc && (
                               <button
                                 type="button"
@@ -305,6 +430,33 @@ export default function VotingWindow() {
                             )}
                           </div>
                         </form>
+
+                        {cancelingSlot === slot.id && (
+                          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+                            <input
+                              type="text"
+                              className="input-field flex-1 text-sm"
+                              placeholder="Reason, e.g. Not enough players"
+                              value={cancelReasons[slot.id] || ""}
+                              onChange={(e) => setCancelReasons({ ...cancelReasons, [slot.id]: e.target.value })}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleCancelMatch(slot.id)}
+                              disabled={savingCancelSlot === slot.id}
+                              className="text-sm py-2 px-4 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {savingCancelSlot === slot.id ? "Cancelling…" : "Confirm Cancel"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCancelingSlot(null)}
+                              className="text-sm py-2 px-4 text-gray-500 hover:text-gray-700"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
