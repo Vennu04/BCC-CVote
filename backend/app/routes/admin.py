@@ -11,7 +11,8 @@ from .. import mongo
 from ..utils.auth import admin_required, get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot,
-    effective_match_date_str, get_match_weekend_dates,
+    effective_match_date_str, get_match_weekend_dates, match_datetime_for_slot, to_iso_utc,
+    utc_to_ist,
 )
 from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
@@ -183,6 +184,24 @@ def _window_info(window):
         "is_cancelled": bool(window.get("is_cancelled")),
         "cancel_reason": window.get("cancel_reason"),
     }
+
+
+# Window Dashboard status label -- deliberately not folded into _window_info()
+# above, since that helper is also called by dashboard() on every 10s poll
+# and doesn't need the extra auctions lookup this requires. Cancelled always
+# wins even over a completed auction (an explicit admin cancellation is the
+# more authoritative signal); "auction_completed" only applies once voting
+# has actually closed, not while it's still open.
+def _window_status(window, window_info, linked_auction):
+    if window_info["is_cancelled"]:
+        return "cancelled"
+    if now_ist() < utc_to_ist(window["opens_at"]):
+        return "scheduled"
+    if window_info["is_open"]:
+        return "open"
+    if linked_auction and linked_auction.get("status") == "completed":
+        return "auction_completed"
+    return "closed"
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────
@@ -1106,13 +1125,33 @@ def get_window():
     windows = []
     for slot in slots:
         sid = str(slot["_id"])
+
+        # Once a match's actual start time has passed, it drops off the
+        # Window Dashboard entirely -- mainly matters for ad-hoc slots with a
+        # fixed one-time date; recurring slots self-correct weekly via
+        # get_match_weekend_dates() and only ever hit this at the moment of
+        # rollover. Undeterminable (None) fails open -- never hide something
+        # we can't confirm has actually passed.
+        match_start = match_datetime_for_slot(slot)
+        if match_start and datetime.utcnow() > match_start:
+            continue
+
         window = _get_active_window(sid)
         suggested = suggested_window_for_slot(slot)
         slot_dict = _slot_to_dict(slot)
         slot_dict["weather"] = get_forecast_for_slot(slot)
+        slot_dict["match_starts_at_iso"] = to_iso_utc(match_start) if match_start else None
+
+        window_info = _window_info(window) if window else None
+        if window_info:
+            linked_auction = mongo.db.auctions.find_one(
+                {"window_id": str(window["_id"])}, sort=[("created_at", -1)]
+            )
+            window_info["status"] = _window_status(window, window_info, linked_auction)
+
         windows.append({
             "slot": slot_dict,
-            "window": _window_info(window) if window else None,
+            "window": window_info,
             "suggested": {
                 "opens_at": suggested["opens_at_display"],
                 "closes_at": suggested["closes_at_display"],

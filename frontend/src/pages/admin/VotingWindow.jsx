@@ -9,10 +9,22 @@ import { LoadingState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateDisplay } from "../../utils/formatDate";
+import MatchStartCountdown from "../../components/MatchStartCountdown";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Pencil, RotateCcw, Ban } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
+
+// Backend-computed status (see admin.py's _window_status) -> display chip.
+// Cancelled reuses the existing red reason banner below the header instead
+// of duplicating the reason text in the chip itself.
+const STATUS_STYLES = {
+  scheduled: { label: "NOT OPEN YET", className: "bg-gray-100 text-gray-600" },
+  open: { label: "OPEN", className: "bg-green-100 text-green-700" },
+  closed: { label: "CLOSED", className: "bg-gray-100 text-gray-600" },
+  auction_completed: { label: "LIVE AUCTION COMPLETED", className: "bg-blue-100 text-blue-700" },
+  cancelled: { label: "CANCELLED", className: "bg-red-100 text-red-700" },
+};
 
 // Confirmed-players turnout needs to update as votes come in without a manual
 // refresh — 5s is frequent enough for admin to watch it live while deciding
@@ -345,14 +357,15 @@ export default function VotingWindow() {
                               </div>
                             )}
                           </div>
-                          {win && (
-                            <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${
-                              win.is_cancelled ? "bg-red-100 text-red-700" : win.is_open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
-                            }`}>
-                              <Clock size={12} />
-                              {win.is_cancelled ? "CANCELLED" : win.is_open ? "OPEN" : "CLOSED"} — {win.opens_at} to {win.closes_at}
-                            </span>
-                          )}
+                          <div className="flex flex-col items-end gap-1.5">
+                            {win?.status && (
+                              <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
+                                <Clock size={12} />
+                                {STATUS_STYLES[win.status]?.label || win.status} — {win.opens_at} to {win.closes_at}
+                              </span>
+                            )}
+                            <MatchStartCountdown startsAtIso={slot.match_starts_at_iso} />
+                          </div>
                         </div>
 
                         {win?.is_cancelled && (
