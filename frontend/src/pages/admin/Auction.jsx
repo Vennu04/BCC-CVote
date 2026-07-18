@@ -158,6 +158,23 @@ export default function AdminAuction() {
     });
   };
 
+  // A player checked before a captain dropdown changes to that same person
+  // would otherwise sit in practicePlayerIds forever, invisible (filtered out
+  // of practicePlayerCandidates above) but still submitted — the backend
+  // correctly rejects that as "can't also be players in their own practice
+  // auction". Drop them from the selection the moment they become a captain,
+  // so the checkbox list and what actually gets submitted never disagree.
+  useEffect(() => {
+    if (!practiceCaptainAId && !practiceCaptainBId) return;
+    setPracticePlayerIds((prev) => {
+      if (!prev.has(practiceCaptainAId) && !prev.has(practiceCaptainBId)) return prev;
+      const next = new Set(prev);
+      next.delete(practiceCaptainAId);
+      next.delete(practiceCaptainBId);
+      return next;
+    });
+  }, [practiceCaptainAId, practiceCaptainBId]);
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!selectedSlotId || !captainAId || !captainBId) return;
@@ -186,7 +203,9 @@ export default function AdminAuction() {
     try {
       const res = await api.post("/admin/auction/practice", {
         captain_a_id: practiceCaptainAId, captain_b_id: practiceCaptainBId,
-        player_ids: Array.from(practicePlayerIds),
+        player_ids: Array.from(practicePlayerIds).filter(
+          (id) => id !== practiceCaptainAId && id !== practiceCaptainBId
+        ),
       });
       toast.success("Practice auction created — copy the link below for the two captains");
       localStorage.setItem(STORAGE_KEY, res.data.auction_id);
@@ -512,6 +531,10 @@ export default function AdminAuction() {
                 <p className="text-sm mb-4">
                   {auction.captain_a_joined && auction.captain_b_joined ? (
                     <span className="text-green-700 font-medium">✅ Both captains have joined — ready to start.</span>
+                  ) : auction.is_test ? (
+                    <span className="text-amber-700">
+                      Practice auctions don't show up in the navbar — use "Copy Practice Link" above and send it to both captains directly.
+                    </span>
                   ) : (
                     <span className="text-gray-500">Waiting for both captains to open "Join Auction" from their navbar…</span>
                   )}
