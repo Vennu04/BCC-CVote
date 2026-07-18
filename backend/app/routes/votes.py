@@ -25,6 +25,19 @@ def _get_active_window(slot_id):
     return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
 
 
+# Practice/rehearsal slots (e.g. the permanent "Test auction Window for live
+# Demo") are marked is_test on the match_slot itself, mirroring how practice
+# auctions are marked on the auction doc. Captains and admins still need to
+# see them to rehearse the live-auction flow; normal players (real role
+# "player", no admin capability) don't need a fake match cluttering their
+# real weekend voting list, so it's filtered out for them here alone.
+def _visible_slots(user):
+    query = {"is_active": {"$ne": False}}
+    if user["role"] == "player" and not user.get("is_admin"):
+        query["is_test"] = {"$ne": True}
+    return list(mongo.db.match_slots.find(query).sort("slot_number", 1))
+
+
 def _window_info(window, slot=None):
     if not window:
         return {"is_open": False, "opens_at": None, "closes_at": None, "seconds_remaining": 0,
@@ -69,7 +82,8 @@ def _serialize_slot(slot):
 @votes_bp.route("/slots", methods=["GET"])
 @jwt_required()
 def get_slots():
-    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
+    user = get_current_user()
+    slots = _visible_slots(user)
     return jsonify([_serialize_slot(s) for s in slots])
 
 
@@ -78,7 +92,8 @@ def get_slots():
 @votes_bp.route("/votes/status", methods=["GET"])
 @jwt_required()
 def voting_status():
-    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
+    user = get_current_user()
+    slots = _visible_slots(user)
     result = []
     for slot in slots:
         window = _get_active_window(str(slot["_id"]))
@@ -93,7 +108,7 @@ def voting_status():
 def my_votes():
     user = get_current_user()
     uid = str(user["_id"])
-    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
+    slots = _visible_slots(user)
     voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}))
     voter_names = {str(v["_id"]): v["name"] for v in voters}
 
@@ -145,6 +160,8 @@ def submit_vote():
         return jsonify({"error": "Slot not found"}), 404
     if slot.get("is_active") is False:
         return jsonify({"error": "This match has been removed"}), 400
+    if slot.get("is_test") and user["role"] == "player" and not user.get("is_admin"):
+        return jsonify({"error": "This is a practice/rehearsal slot — only captains and admins vote here"}), 403
 
     window = _get_active_window(slot_id)
     if not window:
@@ -201,7 +218,7 @@ def revoke_vote(slot_id):
 @jwt_required()
 def not_available_week():
     user = get_current_user()
-    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}))
+    slots = _visible_slots(user)
     now = datetime.utcnow()
 
     updated, skipped = 0, 0
@@ -238,7 +255,7 @@ def vote_summary():
     user = get_current_user()
     uid = str(user["_id"])
 
-    slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
+    slots = _visible_slots(user)
     voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}))
     total_captains = len(voters)
     voter_names = {str(v["_id"]): v["name"] for v in voters}
