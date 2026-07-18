@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "../components/ProtectedRoute";
 import { COMPANY_NAME } from "../config/appMeta";
@@ -10,8 +10,6 @@ import venuhyaIcon from "../assets/branding/venuhya-icon.png";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const from = location.state?.from?.pathname;
 
   const [form, setForm] = useState({ team_code: "", password: "" });
   const [loading, setLoading] = useState(false);
@@ -24,7 +22,12 @@ export default function Login() {
     try {
       const user = await login(form.team_code.trim().toUpperCase(), form.password);
       toast.success(`Welcome, ${user.name}! 🏏`);
-      navigate(from || homePathFor(user), { replace: true });
+      // Always land on the voter's own dashboard, never wherever they happened
+      // to be sitting before their session went stale (e.g. a bookmarked or
+      // PWA-reopened /results page) -- that's what silently drops captains/
+      // players onto Results after a routine re-login instead of their actual
+      // voting screen, which reads as "the app only shows Results".
+      navigate(homePathFor(user), { replace: true });
     } catch (err) {
       const msg = err.response?.data?.error || "Login failed. Check your credentials.";
       setError(msg);
