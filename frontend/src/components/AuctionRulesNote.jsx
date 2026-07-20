@@ -37,7 +37,7 @@ export default function AuctionRulesNote({ auction }) {
             <ul className="list-disc list-inside space-y-0.5">
               <li>Every player starts at a base price of <strong>{auction.starting_price} pts</strong> — the base itself is never drawn from anyone's purse.</li>
               <li>Each captain has a <strong>{auction.points_budget}-point</strong> purse that only pays for the <em>extra</em> amount bid above the base.</li>
-              <li>Bids go up in increments of 0.5, starting at base + 0.5.</li>
+              <li>The opening bid can be the base price itself (no extra) — after that, each new bid must beat the current one by at least 0.5.</li>
             </ul>
           </div>
 

@@ -937,9 +937,11 @@ def place_bid(auction_id):
     if not player or player["status"] != "available":
         return jsonify({"error": "This player is no longer available"}), 400
 
+    # Every bid = 8.5 base + extra (0-17). The base is never drawn from the
+    # purse, so a captain with 0 points left can still open (or take) a
+    # player at exactly the base price — the "no points left" case only
+    # actually bites once extra > 0, checked below via remaining_points.
     remaining_points = _captain_points_remaining(auction, captain_id)
-    if remaining_points < 0.5:
-        return jsonify({"error": "You have no points left to bid with"}), 400
 
     last_bid = mongo.db.auction_bids.find_one(
         {"auction_id": auction_id, "player_id": auction["current_player_id"], "action": "bid"},
@@ -951,12 +953,12 @@ def place_bid(auction_id):
         if amount <= last_bid["amount"]:
             return jsonify({"error": f"Bid must be higher than the current bid of {last_bid['amount']}"}), 400
     else:
-        # Every bid = 8.5 base + extra (0.5-17). The base is never drawn from
-        # the purse, so the opening bid on a fresh player must be at least
-        # base + 0.5 — not just the base itself.
-        min_total = auction["starting_price"] + 0.5
+        # The opening bid on a fresh player can be the base price itself —
+        # a captain can claim a player at 8.5 with no extra if the other
+        # captain doesn't outbid them.
+        min_total = auction["starting_price"]
         if amount < min_total:
-            return jsonify({"error": f"Bid must be at least {min_total} (base {auction['starting_price']} + minimum 0.5 extra)"}), 400
+            return jsonify({"error": f"Bid must be at least the {min_total} base price"}), 400
 
     extra = round(amount - auction["starting_price"], 1)
     if extra > remaining_points:

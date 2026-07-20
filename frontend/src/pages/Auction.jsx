@@ -193,10 +193,14 @@ export default function Auction() {
   useEffect(() => {
     if (auction?.current_player) {
       const floor = auction.current_player.current_high_bid;
-      const suggested = myMaxBid != null ? Math.min(floor + 0.5, myMaxBid) : floor + 0.5;
+      // Nobody's bid on this player yet -- the floor itself (the base
+      // price) is a valid opening bid, unlike raising an existing bid,
+      // which must clear it by at least 0.5.
+      const minValid = auction.current_player.current_high_bidder ? floor + 0.5 : floor;
+      const suggested = myMaxBid != null ? Math.min(minValid, myMaxBid) : minValid;
       setAmount(String(suggested));
     }
-  }, [auction?.current_player?.id, auction?.current_player?.current_high_bid, myMaxBid]);
+  }, [auction?.current_player?.id, auction?.current_player?.current_high_bid, auction?.current_player?.current_high_bidder, myMaxBid]);
 
   // Notify both captains of the updated points balance after every bid/
   // free-pick/leftover-award — not just the silently-refreshing numbers on
