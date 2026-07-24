@@ -207,7 +207,7 @@ export default function AdminAuction() {
           (id) => id !== practiceCaptainAId && id !== practiceCaptainBId
         ),
       });
-      toast.success("Practice auction created — copy the link below for the two captains");
+      toast.success("Practice auction created — both captains will see \"Join Auction\" in their navbar");
       localStorage.setItem(STORAGE_KEY, res.data.auction_id);
       setAuctionId(res.data.auction_id);
     } catch (err) {
@@ -436,8 +436,8 @@ export default function AdminAuction() {
             </div>
             <p className="text-xs text-gray-500 mb-3">
               Let two captains try out the live-bidding screen with any players you pick — no real votes,
-              budgets, or player stats are touched. Won't show up in anyone's "Join Auction" badge; you'll
-              get a link to share manually once it's created.
+              budgets, or player stats are touched. Same "Join Auction" navbar badge as a real auction, so
+              captains rehearse the exact flow they'll use live — you can also copy a direct link below.
             </p>
             <form onSubmit={handleCreatePractice} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

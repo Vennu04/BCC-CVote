@@ -460,8 +460,10 @@ def create_auction():
 # only creation needs its own path. Deliberately skips every real-vote/window/
 # parity/pool-size/category gate in create_auction() above: admin just picks
 # whoever they want for a quick rehearsal. slot_id/window_id are left None
-# (safe — read only inside create_auction itself) and is_test:True marks it
-# so my_active_auction() excludes it from the real "Join Auction" flow.
+# (safe — read only inside create_auction itself). is_test:True no longer
+# hides this from my_active_auction() — captains get the same "Join Auction"
+# navbar badge for a rehearsal as for a real auction, deliberately, so they
+# practice the exact discovery flow they'll use live.
 @auction_bp.route("/admin/auction/practice", methods=["POST"])
 @admin_required
 def create_practice_auction():
@@ -688,7 +690,6 @@ def my_active_auction():
     uid = str(user["_id"])
     auction = mongo.db.auctions.find_one({
         "status": {"$in": ["pending", "active"]},
-        "is_test": {"$ne": True},
         "$or": [{"captain_a_id": uid}, {"captain_b_id": uid}],
     }, sort=[("created_at", -1)])
     if not auction:
