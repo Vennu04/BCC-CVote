@@ -164,8 +164,16 @@ jobs:
       KUBECONFIG: /home/ubuntu/.kube/deployer-config
 
     steps:
+      # fetch-depth: 0 (full history, not the default 1-commit shallow clone)
+      # -- the "Sync develop to match main" step at the end needs enough
+      # local history to actually verify that push is a real fast-forward;
+      # a shallow clone has no ancestor commits at all, so git can't tell a
+      # genuine fast-forward apart from a divergent history and rejects it
+      # every time, even when main and develop share the exact same lineage.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # ── Update image tags in manifests ───────────────────────────────────
       - name: Update image tags in manifests
