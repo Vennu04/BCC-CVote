@@ -146,8 +146,17 @@ jobs:
     # polls GitHub outbound over 443 (already open); no SG changes needed.
     runs-on: [self-hosted, bcc-cvote-prod]
 
+    # Registers this run as a real GitHub Deployment (repo's Environments tab,
+    # a "View deployment" link on the commit/PR, in_progress -> success/failure
+    # tracked automatically) -- purely a tracking/visibility layer, changes
+    # nothing about where or how the job actually runs.
+    environment:
+      name: production
+      url: ${{ env.CLOUDFRONT_URL }}
+
     permissions:
       contents: write
+      deployments: write
 
     env:
       # Scoped ServiceAccount kubeconfig (voting-prod namespace only) —
@@ -231,3 +240,15 @@ jobs:
             git commit -m "chore: deploy ${{ needs.build-and-push.outputs.image_tag }} to prod [skip ci]"
             git push
           fi
+
+      # ── Keep develop in sync with main ───────────────────────────────────
+      # develop has no separate deploy target of its own (this app has a
+      # single prod environment) -- its only job is to mirror main so it
+      # never goes stale again. A plain (non-force) push: since nothing else
+      # ever commits to develop directly, main always fast-forwards it
+      # cleanly; if that assumption is ever wrong (something diverged
+      # develop out of band) this fails loudly instead of silently
+      # overwriting whatever's there.
+      - name: Sync develop to match main
+        if: success()
+        run: git push origin HEAD:develop
