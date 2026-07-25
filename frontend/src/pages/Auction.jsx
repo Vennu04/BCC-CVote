@@ -9,7 +9,11 @@ import FairnessBanner from "../components/FairnessBanner";
 import ReleaseOrderLog from "../components/ReleaseOrderLog";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
-import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical } from "lucide-react";
+import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap } from "lucide-react";
+import {
+  playTurnAlertSound, vibrateTurnAlert, flashTabTitle,
+  notificationsSupported, requestTurnNotificationPermission, showTurnNotification,
+} from "../utils/turnAlert";
 
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
@@ -234,6 +238,53 @@ export default function Auction() {
     }
   }, [auction?.bid_feed, isParticipant]);
 
+  // "Your turn" alerting -- added after real live-auction data showed
+  // captains going quiet for minutes at a time on a player they weren't
+  // currently leading, even with the tab open, stalling the whole round for
+  // the other captain. Fires once per distinct (player, leader) state, not
+  // on every poll tick, so it doesn't nag on top of an already-seen alert.
+  const [needsMyTurn, setNeedsMyTurn] = useState(false);
+  const [notifPermission, setNotifPermission] = useState(
+    notificationsSupported() ? Notification.permission : "unsupported"
+  );
+  const lastAlertedKeyRef = useRef(null);
+
+  useEffect(() => {
+    if (!isParticipant || auction?.status !== "active" || !auction?.current_player) {
+      setNeedsMyTurn(false);
+      return;
+    }
+    const key = auction.current_player.id + ":" + (auction.current_player.current_high_bidder || "none");
+    if (iAmCurrentLeader) {
+      setNeedsMyTurn(false);
+      lastAlertedKeyRef.current = key;
+      return;
+    }
+    setNeedsMyTurn(true);
+    if (lastAlertedKeyRef.current !== key) {
+      lastAlertedKeyRef.current = key;
+      playTurnAlertSound();
+      vibrateTurnAlert();
+      showTurnNotification(
+        auction.current_player.current_high_bidder
+          ? `${auction.current_player.current_high_bidder} bid ${auction.current_player.current_high_bid} on ${auction.current_player.name} — your move.`
+          : `${auction.current_player.name} is up — bid or drop.`
+      );
+    }
+  }, [auction?.current_player?.id, auction?.current_player?.current_high_bidder, auction?.current_player?.current_high_bid, auction?.status, isParticipant, iAmCurrentLeader]);
+
+  // Flashes the tab title only while actually waiting on you, so switching
+  // away to check WhatsApp still shows it at a glance when you look back.
+  useEffect(() => {
+    if (!needsMyTurn) return;
+    return flashTabTitle("⚡ YOUR TURN!");
+  }, [needsMyTurn]);
+
+  const handleEnableNotifications = async () => {
+    const result = await requestTurnNotificationPermission();
+    setNotifPermission(result);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-cricket-cream">
@@ -265,6 +316,25 @@ export default function Auction() {
           </div>
           <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at_iso : null} />
         </div>
+
+        {needsMyTurn && (
+          <div className="flex items-center gap-2 bg-amber-400 border-2 border-amber-500 text-amber-950 rounded-lg px-4 py-3 text-sm font-bold animate-pulse">
+            <Zap size={18} className="shrink-0" />
+            {auction.current_player?.current_high_bidder
+              ? `${auction.current_player.current_high_bidder} just bid ${auction.current_player.current_high_bid} on ${auction.current_player?.name} — your move!`
+              : `${auction.current_player?.name} is up — bid or drop now!`}
+          </div>
+        )}
+
+        {isParticipant && notifPermission === "default" && (
+          <button
+            type="button"
+            onClick={handleEnableNotifications}
+            className="flex items-center gap-2 text-xs font-medium text-pitch-700 border border-pitch-300 rounded-lg px-3 py-2 hover:bg-pitch-50 w-fit"
+          >
+            <Bell size={14} /> Enable turn alerts (notifies you even if you switch apps)
+          </button>
+        )}
 
         {auction.is_test && (
           <div className="flex items-center gap-2 bg-amber-100 border-2 border-amber-400 text-amber-900 rounded-lg px-4 py-2.5 text-sm font-semibold">
