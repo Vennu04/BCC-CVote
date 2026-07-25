@@ -360,6 +360,16 @@ def create_auction():
     if window.get("is_cancelled"):
         return jsonify({"error": "This match's voting window was cancelled — pick a different slot"}), 400
 
+    # One auction per window, no matter its status — a completed auction's
+    # results shouldn't be silently supersedable by clicking Create Auction
+    # again, and a pending/active one already owns this window's draft.
+    existing_auction = mongo.db.auctions.find_one({"window_id": str(window["_id"])})
+    if existing_auction:
+        return jsonify({
+            "error": f"An auction already exists for this window (status: {existing_auction['status']}) — "
+                     f"nothing else can be created for it"
+        }), 400
+
     available_votes = list(mongo.db.votes.find({
         "slot_id": slot_id, "window_id": str(window["_id"]), "availability": "available",
     }))

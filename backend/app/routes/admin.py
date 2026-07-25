@@ -250,6 +250,11 @@ def dashboard():
         window_info = _window_info(slot_windows[sid])
         if window_info["is_open"]:
             open_count += 1
+        if slot_windows[sid]:
+            linked_auction = mongo.db.auctions.find_one(
+                {"window_id": str(slot_windows[sid]["_id"])}, sort=[("created_at", -1)]
+            )
+            window_info["status"] = _window_status(slot_windows[sid], window_info, linked_auction)
         slot_summary.append({
             "slot_id": sid,
             "slot_number": slot["slot_number"],

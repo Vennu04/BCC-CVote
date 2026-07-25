@@ -11,20 +11,10 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateDisplay } from "../../utils/formatDate";
 import MatchStartCountdown from "../../components/MatchStartCountdown";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
+import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Pencil, RotateCcw, Ban } from "lucide-react";
 
 const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
-
-// Backend-computed status (see admin.py's _window_status) -> display chip.
-// Cancelled reuses the existing red reason banner below the header instead
-// of duplicating the reason text in the chip itself.
-const STATUS_STYLES = {
-  scheduled: { label: "NOT OPEN YET", className: "bg-gray-100 text-gray-600" },
-  open: { label: "OPEN", className: "bg-green-100 text-green-700" },
-  closed: { label: "CLOSED", className: "bg-gray-100 text-gray-600" },
-  auction_completed: { label: "LIVE AUCTION COMPLETED", className: "bg-blue-100 text-blue-700" },
-  cancelled: { label: "CANCELLED", className: "bg-red-100 text-red-700" },
-};
 
 // Confirmed-players turnout needs to update as votes come in without a manual
 // refresh — 5s is frequent enough for admin to watch it live while deciding
