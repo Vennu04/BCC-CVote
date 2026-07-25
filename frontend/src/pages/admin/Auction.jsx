@@ -61,6 +61,7 @@ export default function AdminAuction() {
   const [practiceCaptainAId, setPracticeCaptainAId] = useState("");
   const [practiceCaptainBId, setPracticeCaptainBId] = useState("");
   const [practicePlayerIds, setPracticePlayerIds] = useState(new Set());
+  const [autoPickPerCategory, setAutoPickPerCategory] = useState(5);
   const [creatingPractice, setCreatingPractice] = useState(false);
   const [starting, setStarting] = useState(false);
   const [releasing, setReleasing] = useState(null);
@@ -156,6 +157,31 @@ export default function AdminAuction() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  };
+
+  // Saves admin from manually checking ~20 boxes every time they just want a
+  // quick rehearsal — picks up to N random candidates per category (default
+  // 5 x 4 = 20) straight from whoever's already loaded, no backend round
+  // trip needed. Replaces the current selection outright rather than adding
+  // to it, so re-clicking re-rolls a fresh mix; the checkboxes below stay
+  // fully live afterward for admin to swap anyone out by hand.
+  const handleAutoPickPlayers = () => {
+    const byCategory = {};
+    practicePlayerCandidates.forEach((p) => {
+      if (!p.auction_category) return; // uncategorized players aren't auto-picked, only hand-pickable
+      (byCategory[p.auction_category] = byCategory[p.auction_category] || []).push(p);
+    });
+    const picked = new Set();
+    Object.values(byCategory).forEach((group) => {
+      const shuffled = [...group].sort(() => Math.random() - 0.5);
+      shuffled.slice(0, autoPickPerCategory).forEach((p) => picked.add(p.id));
+    });
+    if (picked.size === 0) {
+      toast.error("No categorized players available to auto-pick from");
+      return;
+    }
+    setPracticePlayerIds(picked);
+    toast.success(`Auto-picked ${picked.size} players`);
   };
 
   // A player checked before a captain dropdown changes to that same person
@@ -466,9 +492,30 @@ export default function AdminAuction() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Players ({practicePlayerIds.size} picked — pick at least 2, ideally 2+ per category for realistic bidding)
-                </label>
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Players ({practicePlayerIds.size} picked — pick at least 2, ideally 2+ per category for realistic bidding)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      className="input-field text-xs py-1 px-2 w-14"
+                      value={autoPickPerCategory}
+                      onChange={(e) => setAutoPickPerCategory(Math.max(1, Number(e.target.value) || 1))}
+                      title="Players per category"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAutoPickPlayers}
+                      disabled={!practiceCaptainAId || !practiceCaptainBId}
+                      className="text-xs font-medium text-pitch-600 border border-pitch-300 rounded-lg px-2.5 py-1 hover:bg-pitch-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      🎲 Auto-pick per category
+                    </button>
+                  </div>
+                </div>
                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y">
                   {practicePlayerCandidates.map((p) => (
                     <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50">
