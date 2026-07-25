@@ -11,6 +11,7 @@ import PlayerInsightsCard from "../../components/PlayerInsightsCard";
 import FairnessBanner from "../../components/FairnessBanner";
 import ReleaseOrderLog from "../../components/ReleaseOrderLog";
 import { useAuction } from "../../hooks/useAuction";
+import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2 } from "lucide-react";
 
 const STORAGE_KEY = "bcc_active_auction_id";
@@ -374,7 +375,7 @@ export default function AdminAuction() {
               in each category before setting up the auction below.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {slots.map(({ slot }) => (
+              {slots.map(({ slot, window: win }) => (
                 <button
                   key={slot.id}
                   type="button"
@@ -383,7 +384,14 @@ export default function AdminAuction() {
                     selectedSlotId === slot.id ? "border-pitch-400 bg-pitch-50" : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
                 >
-                  <p className="text-xs font-semibold text-gray-700 mb-2">{slot.day} {slot.match_time || slot.time_of_day}</p>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-xs font-semibold text-gray-700">{slot.day} {slot.match_time || slot.time_of_day}</p>
+                    {win?.status && (
+                      <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
+                        {STATUS_STYLES[win.status]?.label || win.status}
+                      </span>
+                    )}
+                  </div>
                   <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} compact />
                 </button>
               ))}
@@ -401,8 +409,11 @@ export default function AdminAuction() {
                   setSelectedSlotId(e.target.value); setCaptainAId(""); setCaptainBId("");
                 }} required>
                   <option value="">Select a slot…</option>
-                  {slots.map(({ slot }) => (
-                    <option key={slot.id} value={slot.id}>{slot.day} {slot.match_time || slot.time_of_day}</option>
+                  {slots.map(({ slot, window: win }) => (
+                    <option key={slot.id} value={slot.id}>
+                      {slot.day} {slot.match_time || slot.time_of_day}
+                      {win?.status === "auction_completed" ? " — LIVE AUCTION COMPLETED" : ""}
+                    </option>
                   ))}
                 </select>
               </div>

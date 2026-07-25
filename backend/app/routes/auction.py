@@ -310,6 +310,32 @@ def _distribute_remaining_players_evenly(auction):
             })
 
 
+def _close_linked_window_on_completion(auction):
+    """Once a real (non-test) auction reaches "completed", its voting window
+    must never again read as merely "open" -- without this, a window whose
+    closes_at still spans the rest of the weekend keeps showing an "OPEN"
+    badge indefinitely after the auction it was for has already finished,
+    which is exactly what happened live twice before this existed (see
+    RUNBOOKS-equivalent memory). Practice/test auctions have no window_id at
+    all, so this naturally no-ops for them without an explicit is_test check
+    being strictly required -- checked anyway for clarity. Idempotent via
+    closed_early, safe to call unconditionally every time an auction
+    completes, including the "cancelled before it ever started" path through
+    close_auction() -- create_auction()'s own one-auction-per-window check
+    already blocks reusing this window regardless, so closing it here too is
+    just keeping the displayed status consistent with that reality, not an
+    extra restriction on top of it."""
+    if auction.get("is_test") or not auction.get("window_id"):
+        return
+    window = mongo.db.voting_windows.find_one({"_id": ObjectId(auction["window_id"])})
+    if not window or window.get("closed_early"):
+        return
+    mongo.db.voting_windows.update_one(
+        {"_id": window["_id"]},
+        {"$set": {"closes_at": utcnow(), "closed_early": True}},
+    )
+
+
 def _apply_timeout_fallback(auction):
     """Once the session's 25-minute cap passes, any group that never got fully
     resolved through bidding gets its remaining players split free."""
@@ -321,6 +347,7 @@ def _apply_timeout_fallback(auction):
         {"_id": auction["_id"]},
         {"$set": {"status": "completed", "current_player_id": None}},
     )
+    _close_linked_window_on_completion(auction)
 
 
 # ── Admin: setup + control ──────────────────────────────────────────────────────
@@ -660,6 +687,7 @@ def close_auction(auction_id):
         {"_id": auction["_id"]},
         {"$set": {"status": "completed", "current_player_id": None}},
     )
+    _close_linked_window_on_completion(auction)
     return jsonify({"message": "Auction closed"})
 
 

@@ -309,6 +309,45 @@ def test_force_close_on_an_active_auction_distributes_remaining_players_same_as_
     ) == 0
 
 
+def test_force_close_also_closes_the_auctions_linked_voting_window(client, admin_headers, make_auction_setup):
+    """A completed auction's window used to keep reading as "OPEN" for the
+    rest of its full opens_at/closes_at span, hiding the fact that the
+    auction was actually done -- this happened live twice on the same real
+    window before the fix. close_auction() must now also close the window
+    itself (closed_early + closes_at moved to now), same as clicking "Close
+    Early" on the Voting Window page would."""
+    setup = make_auction_setup([("power", None, None)] * 20)
+    auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
+    _start(client, admin_headers, auction_id)
+
+    window_before = mongo.db.voting_windows.find_one({"_id": ObjectId(setup["window_id"])})
+    assert window_before.get("closed_early") is not True
+
+    assert _close(client, admin_headers, auction_id).status_code == 200
+
+    window_after = mongo.db.voting_windows.find_one({"_id": ObjectId(setup["window_id"])})
+    assert window_after["closed_early"] is True
+    assert window_after["closes_at"] <= utcnow()
+
+
+def test_timeout_completion_also_closes_the_linked_window(client, admin_headers, make_auction_setup):
+    """Same fix, the other completion path -- an auction that runs out its
+    25-minute clock (rather than being force-closed) must close its window
+    too, not just an admin-initiated close."""
+    setup = make_auction_setup([("power", None, None)] * 20)
+    auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
+    _start(client, admin_headers, auction_id)
+
+    mongo.db.auctions.update_one(
+        {"_id": ObjectId(auction_id)}, {"$set": {"ends_at": utcnow() - timedelta(minutes=1)}}
+    )
+    state = _get(client, admin_headers, auction_id).get_json()  # triggers _apply_timeout_fallback
+    assert state["status"] == "completed"
+
+    window_after = mongo.db.voting_windows.find_one({"_id": ObjectId(setup["window_id"])})
+    assert window_after["closed_early"] is True
+
+
 def test_cancelling_a_pending_auction_does_not_distribute_anything(client, admin_headers, make_auction_setup):
     """The same /close endpoint also cancels a not-yet-started auction (the
     admin UI's "Cancel" button). Nothing's been released yet, so this must
