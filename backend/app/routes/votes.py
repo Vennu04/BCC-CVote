@@ -4,12 +4,12 @@ from bson import ObjectId
 from datetime import datetime
 import pytz
 
-from .. import mongo
+from .. import mongo, limiter
 from ..utils.auth import get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, seconds_until_close,
     format_ist, now_ist, suggested_window_for_slot,
-    can_revoke_vote, revoke_deadline_for_window, effective_match_date_str
+    can_revoke_vote, revoke_deadline_for_window, effective_match_date_str, utcnow
 )
 from ..services.weather import get_forecast_for_slot
 
@@ -146,6 +146,7 @@ def my_votes():
 
 @votes_bp.route("/votes", methods=["POST"])
 @jwt_required()
+@limiter.limit("30 per minute")
 def submit_vote():
     user = get_current_user()
     data = request.get_json(silent=True) or {}
@@ -169,7 +170,7 @@ def submit_vote():
     if not is_voting_window_open(window["opens_at"], window["closes_at"]):
         return jsonify({"error": "Voting window is closed for this match"}), 403
 
-    now = datetime.utcnow()
+    now = utcnow()
     filter_q = {
         "captain_id": str(user["_id"]),
         "slot_id": slot_id,
@@ -219,7 +220,7 @@ def revoke_vote(slot_id):
 def not_available_week():
     user = get_current_user()
     slots = _visible_slots(user)
-    now = datetime.utcnow()
+    now = utcnow()
 
     updated, skipped = 0, 0
     for slot in slots:

@@ -27,6 +27,21 @@ def create_app(config_name: str = None) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_map.get(config_name, config_map["default"]))
 
+    # SECRET_KEY/JWT_SECRET_KEY fall back to public, predictable dev defaults
+    # (see config.py) when their env vars are unset -- fine for local dev,
+    # but production silently signing tokens with a known key if the k8s
+    # secret injection ever breaks would be a real, quiet vulnerability
+    # rather than a loud startup failure. Checked against the raw env vars
+    # directly, not app.config, since app.config always has *some* value
+    # (the fallback) regardless of whether the real one was ever set.
+    if config_name == "production":
+        missing = [name for name in ("SECRET_KEY", "JWT_SECRET_KEY") if not os.environ.get(name)]
+        if missing:
+            raise RuntimeError(
+                f"Refusing to start in production without real values for: {', '.join(missing)} "
+                f"-- these are currently falling back to public, predictable dev defaults."
+            )
+
     # No-ops if SENTRY_DSN is unset (local/dev without the secret configured).
     # send_default_pii stays off (the default) — this app's request bodies
     # carry passwords/team codes, and Sentry shouldn't ever see those.

@@ -12,7 +12,7 @@ from ..utils.auth import admin_required, get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot,
     effective_match_date_str, get_match_weekend_dates, match_datetime_for_slot, to_iso_utc,
-    utc_to_ist,
+    utc_to_ist, utcnow,
 )
 from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
@@ -102,7 +102,7 @@ def _reset_password(user_id, role):
         "target_user_id": str(target["_id"]),
         "target_user_name": target["name"],
         "target_role": role,
-        "reset_at": datetime.utcnow(),
+        "reset_at": utcnow(),
     })
     return jsonify({"message": "Password reset", "temp_password": temp_password})
 
@@ -322,7 +322,7 @@ def admin_set_vote():
     })
     old_availability = existing["availability"] if existing else None
 
-    now = datetime.utcnow()
+    now = utcnow()
     mongo.db.votes.update_one(
         {"captain_id": user_id, "slot_id": slot_id, "window_id": str(window["_id"])},
         {
@@ -373,7 +373,7 @@ def admin_clear_vote(slot_id, user_id):
         "action": "clear",
         "old_availability": existing["availability"],
         "new_availability": None,
-        "overridden_at": datetime.utcnow(),
+        "overridden_at": utcnow(),
     })
     return jsonify({"message": f"{target['name']}'s vote cleared"})
 
@@ -411,7 +411,7 @@ def add_captain():
         "matches_played": 0,
         "tournament_status": "not_played",
         "must_change_password": True,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     }
     result = mongo.db.users.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -771,7 +771,7 @@ def apply_suggested_attendance():
 
     acting_admin = get_current_user()
     window_id = str(window["_id"])
-    now = datetime.utcnow()
+    now = utcnow()
     credited_names = []
     for c in to_credit:
         user = mongo.db.users.find_one({"_id": ObjectId(c["id"])})
@@ -837,7 +837,7 @@ def add_league_match():
         "label": label,
         "match_date": match_date,
         "attendee_ids": [],
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     }
     result = mongo.db.league_matches.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -904,7 +904,7 @@ def add_player():
         "is_player": True,
         "is_active": True,
         "must_change_password": True,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     }
     result = mongo.db.users.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -1039,6 +1039,15 @@ def add_slot():
     day = (data.get("day") or "").strip()
     time_of_day = (data.get("time_of_day") or "").strip()
     description = (data.get("description") or "").strip()
+    # Plain 24h "HH:MM" from the frontend's <input type="time"> -- kept
+    # separate from match_time (the display headline) on purpose. Before
+    # this, match_time did double duty as both the parseable start time AND
+    # the free-text headline, so a real "start – end" range could never
+    # both display correctly and parse correctly at the same time (see
+    # match_datetime_for_slot). start_time/end_time are the source of
+    # truth for timing; match_time stays a pure display string.
+    start_time = (data.get("start_time") or "").strip()
+    end_time = (data.get("end_time") or "").strip()
 
     if not match_date or not day or not time_of_day:
         return jsonify({"error": "match_date, day and time_of_day are required"}), 400
@@ -1048,6 +1057,25 @@ def add_slot():
     except ValueError:
         return jsonify({"error": "match_date must be an ISO date, e.g. 2026-08-15"}), 400
 
+    def _to_12h_display(value):
+        try:
+            return datetime.strptime(value, "%H:%M").strftime("%I:%M %p")
+        except ValueError:
+            return value  # unexpected format -- show whatever was sent rather than hard-failing
+
+    start_display = _to_12h_display(start_time) if start_time else ""
+    end_display = _to_12h_display(end_time) if end_time else ""
+    if start_display and end_display:
+        match_time_display = f"{start_display} – {end_display}"
+    elif start_display:
+        match_time_display = start_display
+    else:
+        # No real start time given -- SlotCard.jsx already prefers match_time
+        # over time_of_day for its bold headline, so e.g. "Independence Day
+        # Match" displays instead of just "Morning" for a holiday match with
+        # no specific kickoff time worth parsing.
+        match_time_display = description or time_of_day
+
     last_slot = mongo.db.match_slots.find_one(sort=[("slot_number", -1)])
     next_number = (last_slot["slot_number"] + 1) if last_slot else 1
 
@@ -1055,15 +1083,14 @@ def add_slot():
         "slot_number": next_number,
         "day": day,
         "time_of_day": time_of_day,
-        # SlotCard.jsx already prefers match_time over time_of_day for its bold
-        # headline — reuse that unchanged by feeding the admin's description in
-        # here, so e.g. "Independence Day Match" displays instead of just "Morning".
-        "match_time": description or time_of_day,
+        "match_time": match_time_display,
+        "start_time": start_time or None,
+        "end_time": end_time or None,
         "description": description,
         "match_date": match_date,
         "is_adhoc": True,
         "is_active": True,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     }
     result = mongo.db.match_slots.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -1138,7 +1165,7 @@ def get_window():
         # rollover. Undeterminable (None) fails open -- never hide something
         # we can't confirm has actually passed.
         match_start = match_datetime_for_slot(slot)
-        if match_start and datetime.utcnow() > match_start:
+        if match_start and utcnow() > match_start:
             continue
 
         window = _get_active_window(sid)
@@ -1199,7 +1226,7 @@ def set_window():
         "opens_at": opens_at,
         "closes_at": closes_at,
         "is_active": True,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     })
     return jsonify({
         "message": "Voting window set",
@@ -1220,7 +1247,7 @@ def close_window_early():
     window = _get_active_window(slot_id)
     if not window:
         return jsonify({"error": "No active window to close for this slot"}), 404
-    now = datetime.utcnow()
+    now = utcnow()
     mongo.db.voting_windows.update_one(
         {"_id": window["_id"]},
         {"$set": {"closes_at": now, "closed_early": True}}
@@ -1256,7 +1283,7 @@ def cancel_window():
     if in_progress_auction:
         return jsonify({"error": "An auction is already in progress for this match — close it first"}), 409
 
-    now = datetime.utcnow()
+    now = utcnow()
     mongo.db.voting_windows.update_one(
         {"_id": window["_id"]},
         {"$set": {"is_cancelled": True, "cancel_reason": reason, "cancelled_at": now, "closes_at": now}}
@@ -1289,7 +1316,7 @@ def export_csv():
     response = make_response(csv_data)
     response.headers["Content-Type"] = "text/csv"
     response.headers["Content-Disposition"] = (
-        f"attachment; filename=bcc-cvote-availability-{datetime.utcnow().strftime('%Y%m%d')}.csv"
+        f"attachment; filename=bcc-cvote-availability-{utcnow().strftime('%Y%m%d')}.csv"
     )
     return response
 
@@ -1399,7 +1426,7 @@ def export_excel():
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    filename = f"BCC-Availability-{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"BCC-Availability-{utcnow().strftime('%Y%m%d')}.xlsx"
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True, download_name=filename)
 
@@ -1479,6 +1506,6 @@ def export_available_players():
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    filename = f"BCC-Available-Players-{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"BCC-Available-Players-{utcnow().strftime('%Y%m%d')}.xlsx"
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True, download_name=filename)

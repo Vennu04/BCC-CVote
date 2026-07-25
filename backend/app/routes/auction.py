@@ -3,9 +3,9 @@ from flask_jwt_extended import jwt_required
 from bson import ObjectId
 from datetime import datetime, timedelta
 
-from .. import mongo
+from .. import mongo, limiter
 from ..utils.auth import admin_required, get_current_user
-from ..utils.time_utils import format_ist, to_iso_utc
+from ..utils.time_utils import format_ist, to_iso_utc, utcnow
 from ..services.next_match import next_match_context, next_match_label
 
 auction_bp = Blueprint("auction", __name__)
@@ -99,7 +99,7 @@ def _check_leftover_award(auction, group):
         }))
         if not remaining:
             continue
-        now = datetime.utcnow()
+        now = utcnow()
         remaining_ids = [str(p["_id"]) for p in remaining]
         for p in remaining:
             mongo.db.auction_players.update_one(
@@ -210,7 +210,7 @@ def _claim_release(auction, category, player, users_map):
     just a theoretical one. Returns True only if THIS call won the claim;
     the release-order log is only written by the winner, so a race can
     never produce two log entries or two claimed players for one release."""
-    released_at = datetime.utcnow()
+    released_at = utcnow()
     result = mongo.db.auctions.update_one(
         {"_id": auction["_id"], "current_player_id": None},
         {"$set": {
@@ -289,7 +289,7 @@ def _distribute_remaining_players_evenly(auction):
     timeout and admin's manual Force Close: an active auction ending early for
     either reason should resolve the same way, not silently orphan whoever
     hadn't come up yet at status 'available' forever."""
-    now = datetime.utcnow()
+    now = utcnow()
     for group in AUCTION_GROUPS:
         remaining = list(mongo.db.auction_players.find({
             "auction_id": str(auction["_id"]), "category": group, "status": "available",
@@ -313,7 +313,7 @@ def _distribute_remaining_players_evenly(auction):
 def _apply_timeout_fallback(auction):
     """Once the session's 25-minute cap passes, any group that never got fully
     resolved through bidding gets its remaining players split free."""
-    now = datetime.utcnow()
+    now = utcnow()
     if auction["status"] != "active" or not auction.get("ends_at") or now <= auction["ends_at"]:
         return
     _distribute_remaining_players_evenly(auction)
@@ -439,7 +439,7 @@ def create_auction():
         "target_roster_size": TARGET_ROSTER_SIZE,
         "points_budget": POINTS_BUDGET,
         "starting_price": STARTING_PRICE,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     }
     result = mongo.db.auctions.insert_one(auction_doc)
     auction_id = str(result.inserted_id)
@@ -527,7 +527,7 @@ def create_practice_auction():
         "target_roster_size": TARGET_ROSTER_SIZE,
         "points_budget": POINTS_BUDGET,
         "starting_price": STARTING_PRICE,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     }
     result = mongo.db.auctions.insert_one(auction_doc)
     auction_id = str(result.inserted_id)
@@ -564,7 +564,7 @@ def start_auction(auction_id):
     if auction["status"] != "pending":
         return jsonify({"error": f"Auction is already {auction['status']}"}), 400
 
-    now = datetime.utcnow()
+    now = utcnow()
     ends_at = now + timedelta(minutes=SESSION_MINUTES)
     mongo.db.auctions.update_one(
         {"_id": auction["_id"]},
@@ -744,9 +744,9 @@ def get_auction(auction_id):
         if not auction.get(joined_field):
             mongo.db.auctions.update_one(
                 {"_id": auction["_id"], joined_field: None},
-                {"$set": {joined_field: datetime.utcnow()}},
+                {"$set": {joined_field: utcnow()}},
             )
-            auction[joined_field] = datetime.utcnow()
+            auction[joined_field] = utcnow()
 
     players = list(mongo.db.auction_players.find({"auction_id": auction_id}))
     players_by_id = {str(p["_id"]): p for p in players}
@@ -921,6 +921,12 @@ def get_auction(auction_id):
 
 @auction_bp.route("/auction/<auction_id>/bid", methods=["POST"])
 @jwt_required()
+# Generous on purpose -- a real bidding war between two captains can mean
+# several rapid clicks in a row, and this should never be the thing that
+# gets in the way of that. Just a backstop against a scripted flood, not a
+# tight limit; keyed on IP (the Limiter's default) rather than captain
+# identity to sidestep JWT-context-timing questions entirely.
+@limiter.limit("60 per minute")
 def place_bid(auction_id):
     auction = _auction_or_404(auction_id)
     if not auction:
@@ -986,13 +992,14 @@ def place_bid(auction_id):
     mongo.db.auction_bids.insert_one({
         "auction_id": auction_id, "player_id": auction["current_player_id"],
         "captain_id": captain_id, "action": "bid", "amount": amount,
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
     })
     return jsonify({"message": "Bid placed", "amount": amount})
 
 
 @auction_bp.route("/auction/<auction_id>/drop", methods=["POST"])
 @jwt_required()
+@limiter.limit("60 per minute")
 def drop_player(auction_id):
     auction = _auction_or_404(auction_id)
     if not auction:
@@ -1034,7 +1041,7 @@ def drop_player(auction_id):
 
     mongo.db.auction_bids.insert_one({
         "auction_id": auction_id, "player_id": player_id, "captain_id": captain_id,
-        "action": "drop", "amount": None, "created_at": datetime.utcnow(),
+        "action": "drop", "amount": None, "created_at": utcnow(),
     })
 
     if last_bid and last_bid["captain_id"] == other_captain:
@@ -1069,6 +1076,7 @@ def drop_player(auction_id):
 
 @auction_bp.route("/auction/<auction_id>/free-pick", methods=["POST"])
 @jwt_required()
+@limiter.limit("20 per minute")
 def free_pick(auction_id):
     """
     Once the OTHER captain's purse is fully drained (0 points — they
@@ -1117,7 +1125,7 @@ def free_pick(auction_id):
     )
     mongo.db.auction_bids.insert_one({
         "auction_id": auction_id, "player_id": str(player["_id"]), "captain_id": captain_id,
-        "action": "free_pick", "amount": 0, "created_at": datetime.utcnow(),
+        "action": "free_pick", "amount": 0, "created_at": utcnow(),
     })
     if auction.get("current_player_id") == str(player["_id"]):
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})

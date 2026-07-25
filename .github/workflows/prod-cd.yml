@@ -12,8 +12,48 @@ env:
   CLOUDFRONT_URL: https://d2welg0wjdnhjp.cloudfront.net
 
 jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    # A real mongod, not mocked -- this app's test suite talks to Mongo
+    # directly (see backend/tests/conftest.py), same as every local run of
+    # it this session. Exposed on the default port so TestingConfig's
+    # MONGODB_URI default (mongodb://localhost:27017/...) just works with
+    # no extra wiring.
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Run backend test suite
+        working-directory: backend
+        env:
+          FLASK_ENV: testing
+        run: python -m pytest tests/ -v
+
   build-and-push:
     name: Build, Scan & Push Images
+    needs: backend-tests
     runs-on: ubuntu-latest
 
     permissions:

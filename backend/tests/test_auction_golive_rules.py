@@ -68,15 +68,18 @@ def test_auction_allows_exactly_14_players_per_side(client, admin_headers, make_
     assert res.get_json()["group_counts"]["classic"] == 28
 
 
-def test_auction_rejects_pool_smaller_than_22(client, admin_headers, make_auction_setup):
-    setup = make_auction_setup([("classic", None, None)] * 20)
+def test_auction_rejects_pool_smaller_than_20(client, admin_headers, make_auction_setup):
+    # Must stay even -- an odd count trips the category-balance check first
+    # (see create_auction's validation order) and would mask the pool-size
+    # check this test is actually about.
+    setup = make_auction_setup([("classic", None, None)] * 18)
     res = _create(client, admin_headers, setup)
     assert res.status_code == 400
-    assert "22" in res.get_json()["error"]
+    assert "20" in res.get_json()["error"]
 
 
-def test_auction_allows_exactly_22_players(client, admin_headers, make_auction_setup):
-    setup = make_auction_setup([("classic", None, None)] * 22)
+def test_auction_allows_exactly_20_players(client, admin_headers, make_auction_setup):
+    setup = make_auction_setup([("classic", None, None)] * 20)
     res = _create(client, admin_headers, setup)
     assert res.status_code == 201
 

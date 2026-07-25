@@ -2,14 +2,25 @@ name: Dev CI
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   pull_request:
-    branches: [develop]
+    branches: [develop, main]
 
 jobs:
   security-scan:
     name: Security & Quality Scan
     runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout
@@ -23,7 +34,13 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
+
+      - name: Run backend test suite
+        working-directory: backend
+        env:
+          FLASK_ENV: testing
+        run: python -m pytest tests/ -v
 
       - name: Pip audit (backend)
         working-directory: backend
@@ -42,6 +59,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Run frontend test suite
+        working-directory: frontend
+        run: npm run test
 
       - name: npm audit (frontend)
         working-directory: frontend

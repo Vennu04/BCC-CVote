@@ -285,8 +285,23 @@ def test_bid_below_minimum_is_rejected(client, admin_headers, auth_header, make_
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
     _start(client, admin_headers, auction_id)  # auto-releases the only category present -- no manual click needed
 
-    res = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 8.5}, headers=a_headers)
+    # An opening bid at exactly the 8.5 base price is valid (see
+    # test_opening_bid_at_exact_base_price_is_accepted below) -- only
+    # strictly below it should be rejected.
+    res = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 8.0}, headers=a_headers)
     assert res.status_code == 400
+    assert "at least the 8.5 base price" in res.get_json()["error"]
+
+
+def test_opening_bid_at_exact_base_price_is_accepted(client, admin_headers, auth_header, make_auction_setup):
+    setup = make_auction_setup([("classic", None, None)] * 22)
+    a_headers = auth_header(setup["captain_a"])
+    auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
+    _start(client, admin_headers, auction_id)
+
+    res = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 8.5}, headers=a_headers)
+    assert res.status_code == 200
+    assert res.get_json()["amount"] == 8.5
 
 
 def test_bid_must_be_in_half_point_increments(client, admin_headers, auth_header, make_auction_setup):

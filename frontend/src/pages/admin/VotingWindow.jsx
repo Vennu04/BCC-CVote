@@ -14,7 +14,7 @@ import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Pencil, RotateCcw, Ban } from "lucide-react";
 
-const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", description: "" };
+const EMPTY_NEW_SLOT = { match_date: "", day: "", time_of_day: "Morning", start_time: "", end_time: "", description: "" };
 
 // Confirmed-players turnout needs to update as votes come in without a manual
 // refresh — 5s is frequent enough for admin to watch it live while deciding
@@ -254,11 +254,29 @@ export default function VotingWindow() {
               />
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Start Time (optional)</label>
+              <input
+                type="time"
+                className="input-field"
+                value={newSlot.start_time}
+                onChange={(e) => setNewSlot({ ...newSlot, start_time: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">End Time (optional)</label>
+              <input
+                type="time"
+                className="input-field"
+                value={newSlot.end_time}
+                onChange={(e) => setNewSlot({ ...newSlot, end_time: e.target.value })}
+              />
+            </div>
+            <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Description (optional)</label>
               <input
                 type="text"
                 className="input-field"
-                placeholder="e.g. Independence Day Match"
+                placeholder="e.g. Independence Day Match — only shown if no start time is set"
                 value={newSlot.description}
                 onChange={(e) => setNewSlot({ ...newSlot, description: e.target.value })}
               />

@@ -41,11 +41,12 @@ def test_admin_set_vote_overwrites_existing_vote(client, make_user, make_slot_an
 def test_admin_set_vote_works_after_window_closed(client, make_user, make_slot_and_window, admin_headers):
     """The whole point: admin can still fix a vote after the deadline that
     would block the person's own self-service submit_vote/revoke_vote."""
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+    from app.utils.time_utils import utcnow
     p1 = make_user("player", "PLR1", "plr1")
     slot_id, _ = make_slot_and_window(
-        opens_at=datetime.utcnow() - timedelta(days=3),
-        closes_at=datetime.utcnow() - timedelta(days=2),
+        opens_at=utcnow() - timedelta(days=3),
+        closes_at=utcnow() - timedelta(days=2),
     )
 
     res = client.post("/api/admin/votes", json={
@@ -72,11 +73,11 @@ def test_admin_set_vote_rejects_unknown_slot(client, make_user, admin_headers):
 
 
 def test_admin_set_vote_rejects_slot_with_no_window_configured(client, make_user, admin_headers):
-    from datetime import datetime
+    from app.utils.time_utils import utcnow
     p1 = make_user("player", "PLR1", "plr1")
     slot_id = mongo.db.match_slots.insert_one({
         "slot_number": 9, "day": "Sunday", "time_of_day": "Evening",
-        "is_active": True, "created_at": datetime.utcnow(),
+        "is_active": True, "created_at": utcnow(),
     }).inserted_id
     res = client.post("/api/admin/votes", json={
         "user_id": str(p1["_id"]), "slot_id": str(slot_id), "availability": "available",

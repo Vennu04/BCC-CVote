@@ -1,7 +1,19 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 
 IST = pytz.timezone("Asia/Kolkata")
+
+
+def utcnow() -> datetime:
+    """Naive UTC "now", matching every datetime already stored in this app's
+    Mongo collections (see match_datetime_for_slot's own
+    .astimezone(pytz.utc).replace(tzinfo=None) a few lines down for the same
+    convention). datetime.utcnow() is deprecated, but datetime.now(timezone.utc)
+    is NOT a drop-in replacement on its own -- it's timezone-aware, and
+    comparing an aware datetime against any naive one read back from Mongo
+    raises TypeError. This keeps the naive-UTC convention intact everywhere
+    it's already relied on while dropping the deprecated call."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def now_ist() -> datetime:
@@ -134,7 +146,12 @@ def match_datetime_for_slot(slot: dict):
         return None
 
     hour, minute = _TIME_OF_DAY_DEFAULT_HOUR.get(slot.get("time_of_day"), 9), 0
-    raw_time = slot.get("match_time")
+    # start_time (plain 24h "HH:MM", see admin.py's add_slot) is the clean,
+    # parseable source of truth when present -- preferred over match_time,
+    # which is free-text display only and can be a "start – end" range that
+    # would otherwise fail to parse here. Older ad-hoc slots created before
+    # start_time existed fall back to match_time, same as always.
+    raw_time = slot.get("start_time") or slot.get("match_time")
     if raw_time:
         for fmt in ("%I:%M %p", "%H:%M"):
             try:
@@ -162,7 +179,7 @@ def get_next_match_slot(slots: list):
     dated = [(s, dt) for s, dt in dated if dt is not None]
     if not dated:
         return None, None
-    now = datetime.utcnow()
+    now = utcnow()
     upcoming = [(s, dt) for s, dt in dated if dt >= now]
     pool = upcoming or dated
     return min(pool, key=lambda pair: pair[1])

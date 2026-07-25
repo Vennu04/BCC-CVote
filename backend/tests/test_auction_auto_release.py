@@ -13,10 +13,11 @@ free_pick()/_check_leftover_award() already implement single-captain
 drain and per-category quota completion; nothing new was built for them
 here, this just confirms they still work under the auto-release flow."""
 from bson import ObjectId
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app import mongo
 from app.routes.auction import AUCTION_GROUPS
+from app.utils.time_utils import utcnow
 
 
 def _create(client, headers, setup):
@@ -273,7 +274,7 @@ def test_whole_auction_timeout_takes_precedence_over_pending_auto_release(client
     # as _apply_timeout_fallback expects (naive UTC datetime on ends_at).
     mongo.db.auctions.update_one(
         {"_id": ObjectId(auction_id)},
-        {"$set": {"ends_at": datetime.utcnow() - timedelta(minutes=1)}},
+        {"$set": {"ends_at": utcnow() - timedelta(minutes=1)}},
     )
 
     state = _get(client, admin_headers, auction_id).get_json()
@@ -469,7 +470,7 @@ def test_single_captain_budget_exhaustion_does_not_affect_the_other_captain(clie
 
     rejected = client.post(f"/api/auction/{auction_id}/bid", json={"amount": 9.0}, headers=a_headers)
     assert rejected.status_code == 400
-    assert "no points left" in rejected.get_json()["error"]
+    assert "only have 0.0 remaining" in rejected.get_json()["error"]
 
     # captain_b's own bidding continues completely normally.
     sold = _sell(client, auction_id, b_headers, a_headers)

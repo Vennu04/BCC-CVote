@@ -1,10 +1,11 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import timedelta
 from bson import ObjectId
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import create_access_token
 
 from app import create_app, mongo
+from app.utils.time_utils import utcnow
 
 
 def _wipe_test_db():
@@ -33,7 +34,7 @@ def _insert_user(role, team_code, password, **extra):
         "password_hash": generate_password_hash(password),
         "role": role,
         "is_active": extra.pop("is_active", True),
-        "created_at": datetime.utcnow(),
+        "created_at": utcnow(),
         **extra,
     }
     result = mongo.db.users.insert_one(doc)
@@ -79,15 +80,15 @@ def make_slot_and_window(app):
         slot = {
             "slot_number": 1, "day": "Saturday", "time_of_day": "Morning",
             "match_time": "06:15 AM", "description": "", "is_adhoc": False,
-            "is_active": True, "created_at": datetime.utcnow(),
+            "is_active": True, "created_at": utcnow(),
         }
         slot_id = mongo.db.match_slots.insert_one(slot).inserted_id
         window = {
             "slot_id": str(slot_id),
-            "opens_at": datetime.utcnow() - timedelta(hours=1),
-            "closes_at": datetime.utcnow() + timedelta(hours=1),
+            "opens_at": utcnow() - timedelta(hours=1),
+            "closes_at": utcnow() + timedelta(hours=1),
             "is_active": True,
-            "created_at": datetime.utcnow(),
+            "created_at": utcnow(),
             **window_overrides,
         }
         window_id = mongo.db.voting_windows.insert_one(window).inserted_id
@@ -100,7 +101,7 @@ def make_vote(app):
     def _make(captain_id, slot_id, window_id, availability="available"):
         mongo.db.votes.insert_one({
             "captain_id": str(captain_id), "slot_id": slot_id, "window_id": window_id,
-            "availability": availability, "voted_at": datetime.utcnow(),
+            "availability": availability, "voted_at": utcnow(),
         })
     return _make
 

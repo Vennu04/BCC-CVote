@@ -51,4 +51,9 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: false,
   },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: "./src/test/setup.js",
+  },
 });

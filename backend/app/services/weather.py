@@ -5,7 +5,7 @@ import pytz
 import requests
 
 from .. import mongo
-from ..utils.time_utils import match_datetime_for_slot
+from ..utils.time_utils import match_datetime_for_slot, utcnow
 
 # Fixed match venue for every slot (https://maps.app.goo.gl/8DBCyjCNtk5zQkDKA
 # resolves to Narregudem Grounds) -- same location on every forecast call,
@@ -32,7 +32,7 @@ def _cache_get(slot_id, target_date):
     if not doc:
         return None
     ttl = CACHE_TTL if doc["status"] == "ok" else FAILURE_CACHE_TTL
-    if datetime.utcnow() - doc["fetched_at"] > ttl:
+    if utcnow() - doc["fetched_at"] > ttl:
         return None
     return doc
 
@@ -40,7 +40,7 @@ def _cache_get(slot_id, target_date):
 def _cache_put(slot_id, target_date, status, forecast):
     mongo.db.weather_cache.update_one(
         {"slot_id": slot_id, "target_date": target_date},
-        {"$set": {"status": status, "forecast": forecast, "fetched_at": datetime.utcnow()}},
+        {"$set": {"status": status, "forecast": forecast, "fetched_at": utcnow()}},
         upsert=True,
     )
 
@@ -91,7 +91,7 @@ def get_forecast_for_slot(slot: dict) -> dict:
     if match_dt_utc is None:
         return {"status": "unavailable", "venue": VENUE_NAME}
 
-    if match_dt_utc - datetime.utcnow() > timedelta(days=FORECAST_HORIZON_DAYS):
+    if match_dt_utc - utcnow() > timedelta(days=FORECAST_HORIZON_DAYS):
         return {"status": "too_far", "venue": VENUE_NAME}
 
     target_date = match_dt_utc.date().isoformat()
