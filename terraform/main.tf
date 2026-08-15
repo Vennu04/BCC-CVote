@@ -618,7 +618,7 @@ resource "aws_eip" "k3s" {
 # same host as the static frontend, not a CDN-cacheable site.
 #
 # Origin request policy is AllViewerExceptHostHeader, NOT AllViewer — Traefik's
-# ingress (k8s/prod/ingress.yaml) only matches Host: 13-206-106-36.sslip.io.
+# ingress (k8s/prod/ingress.yaml) only matches Host: 3-108-68-4.sslip.io.
 # AllViewer would forward the viewer's real Host header (the *.cloudfront.net
 # domain), which the ingress doesn't recognize, and every request would 404.
 # Excluding Host lets CloudFront fall back to its default custom-origin
@@ -635,7 +635,7 @@ resource "aws_cloudfront_distribution" "app" {
     # Deliberately not derived from aws_eip.k3s.public_ip: that would chain this
     # resource's dependencies through aws_instance.k3s -> aws_security_group.k3s,
     # dragging pre-existing SG drift into any -target'd plan/apply of this resource.
-    domain_name = "13-206-106-36.sslip.io"
+    domain_name = "3-108-68-4.sslip.io"
     origin_id   = "bcc-cvote-k3s"
 
     custom_origin_config {

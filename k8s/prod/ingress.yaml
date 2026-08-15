@@ -1,4 +1,4 @@
-# Hostname below (13-206-106-36.sslip.io) is derived from this deployment's
+# Hostname below (3-108-68-4.sslip.io) is derived from this deployment's
 # Elastic IP — see `terraform output app_hostname`. Only needs updating if
 # the EIP is ever reallocated (it's static, so in practice this is one-time).
 apiVersion: networking.k8s.io/v1
@@ -13,10 +13,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - 13-206-106-36.sslip.io
+        - 3-108-68-4.sslip.io
       secretName: bcc-cvote-tls
   rules:
-    - host: 13-206-106-36.sslip.io
+    - host: 3-108-68-4.sslip.io
       http:
         paths:
           - path: /api
@@ -47,7 +47,7 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: voting-prod-https-redirect@kubernetescrd
 spec:
   rules:
-    - host: 13-206-106-36.sslip.io
+    - host: 3-108-68-4.sslip.io
       http:
         paths:
           - path: /
