@@ -180,7 +180,32 @@ resource "aws_security_group" "k3s" {
 
   # Grafana/Prometheus now live on their own dedicated instance (see
   # aws_security_group.monitoring below) — that instance's SG is allowed to
-  # scrape node-exporter/kube-state-metrics here, added after both SGs exist.
+  # scrape node-exporter/kube-state-metrics here.
+  #
+  # These two used to be standalone aws_security_group_rule resources.
+  # Mixing those with this resource's own inline ingress {} blocks made this
+  # resource treat itself as authoritative over the whole rule set on every
+  # plan/apply, so a routine unrelated change (e.g. the EIP fix on
+  # 2026-08-15) would silently want to delete both of these — folded inline
+  # here instead so the full rule set always matches config in one place.
+  #
+  # Add this to vfla-monitoring-grafana's prometheus.yml scrape_configs
+  # (see terraform output bcc_cvote_scrape_config for the exact snippet):
+  ingress {
+    description     = "node-exporter NodePort - scraped by vfla-monitoring-grafana"
+    from_port       = 30100
+    to_port         = 30100
+    protocol        = "tcp"
+    security_groups = [var.vfla_monitoring_sg_id]
+  }
+
+  ingress {
+    description     = "kube-state-metrics NodePort - scraped by vfla-monitoring-grafana"
+    from_port       = 30101
+    to_port         = 30101
+    protocol        = "tcp"
+    security_groups = [var.vfla_monitoring_sg_id]
+  }
 
   egress {
     from_port   = 0
@@ -195,29 +220,8 @@ resource "aws_security_group" "k3s" {
 # No dedicated bcc-cvote monitoring instance — consolidated onto the
 # existing vfla-monitoring-grafana instance instead (one Prometheus/Grafana
 # for both projects, not two). This project's Terraform doesn't own that
-# instance, just opens the door for it to reach these exporters.
-#
-# Add this to vfla-monitoring-grafana's prometheus.yml scrape_configs
-# (see terraform output bcc_cvote_scrape_config for the exact snippet):
-resource "aws_security_group_rule" "k3s_allow_vfla_monitoring_scrape" {
-  type                     = "ingress"
-  security_group_id        = aws_security_group.k3s.id
-  source_security_group_id = var.vfla_monitoring_sg_id
-  from_port                = 30100
-  to_port                  = 30100
-  protocol                 = "tcp"
-  description              = "node-exporter NodePort - scraped by vfla-monitoring-grafana"
-}
-
-resource "aws_security_group_rule" "k3s_allow_vfla_monitoring_ksm" {
-  type                     = "ingress"
-  security_group_id        = aws_security_group.k3s.id
-  source_security_group_id = var.vfla_monitoring_sg_id
-  from_port                = 30101
-  to_port                  = 30101
-  protocol                 = "tcp"
-  description              = "kube-state-metrics NodePort - scraped by vfla-monitoring-grafana"
-}
+# instance, just opens the door for it to reach these exporters (see the two
+# ingress {} blocks on aws_security_group.k3s above).
 
 # ── Dedicated MongoDB instance ─────────────────────────────────────────────────
 # Self-hosting as a K3s pod on the app node caused real instability (NodeNotReady
@@ -602,6 +606,16 @@ resource "aws_instance" "k3s" {
   EOF
 
   tags = merge(local.common_tags, { Name = "bcc-cvote-k3s" })
+
+  # data.aws_ami.ubuntu tracks most_recent=true, so a new Canonical AMI
+  # publish would otherwise show up as a forced replacement on every plan —
+  # discovered 2026-08-15 when a routine EIP fix pulled in "must be replaced"
+  # for this resource via -target's dependency closure. This is a stateful
+  # k3s node (not cattle); AMI upgrades should be a deliberate
+  # terraform apply -replace=aws_instance.k3s, never a plan-time surprise.
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 # Static public IP — survives instance stop/start/replace, and is what the
@@ -733,6 +747,12 @@ resource "aws_instance" "mongodb" {
   EOF
 
   tags = merge(local.common_tags, { Name = "bcc-cvote-mongodb" })
+
+  # Same AMI-drift note as aws_instance.k3s above — stateful DB node, AMI
+  # upgrades must be deliberate, never a plan-time surprise.
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 # ── SSM Parameter Store secrets (free — replaces paid Secrets Manager) ────────
