@@ -1,9 +1,9 @@
 import SlotCard from "./SlotCard";
-import { CheckCircle, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle, RefreshCw, XCircle, AlertTriangle } from "lucide-react";
 
 export default function VotingSlots({ voting }) {
   const {
-    rows, loading, submitting, revoking, votedCount,
+    rows, loading, error, submitting, revoking, votedCount,
     fetchVotes, handleVote, handleRevoke, handleNotAvailableWeek,
   } = voting;
 
@@ -14,6 +14,26 @@ export default function VotingSlots({ voting }) {
           <div className="text-4xl mb-2">🏏</div>
           <p className="text-gray-500">Loading slots…</p>
         </div>
+      </div>
+    );
+  }
+
+  // Distinguish "the fetch failed" from "there's genuinely nothing to show" —
+  // both used to render the same empty-state card, which misleadingly read
+  // as "the organizer hasn't set up this weekend's slots" even when it was
+  // actually a network/server error with a one-click fix (retry).
+  if (error && rows.length === 0) {
+    return (
+      <div className="card text-center py-12">
+        <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
+        <p className="text-gray-700 font-medium">Couldn't load your voting slots</p>
+        <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <button
+          onClick={fetchVotes}
+          className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border-2 border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 font-medium transition-colors min-h-[44px]"
+        >
+          <RefreshCw size={14} /> Retry
+        </button>
       </div>
     );
   }
@@ -35,6 +55,11 @@ export default function VotingSlots({ voting }) {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <span className="text-sm text-gray-500">{votedCount} / {rows.length} slots voted</span>
         <div className="flex items-center gap-2">
+          {error && (
+            <span className="flex items-center gap-1 text-xs text-amber-600" title="Showing last known data — refresh failed">
+              <AlertTriangle size={13} /> Refresh failed
+            </span>
+          )}
           <button
             onClick={handleNotAvailableWeek}
             disabled={submitting === "all" || !anyOpen}

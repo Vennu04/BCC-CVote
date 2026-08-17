@@ -7,6 +7,7 @@ const POLL_INTERVAL_MS = 2500;
 export function useAuction(auctionId) {
   const [auction, setAuction] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [bidding, setBidding] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [freePicking, setFreePicking] = useState(null);
@@ -17,10 +18,15 @@ export function useAuction(auctionId) {
     try {
       const res = await api.get(`/auction/${auctionId}`);
       setAuction(res.data);
+      setError(false);
       hasLoadedOnce.current = true;
     } catch (err) {
+      // Only surface a toast/error state for the first (pre-load) failure —
+      // once the auction has loaded once, a single missed poll tick during
+      // live bidding shouldn't interrupt captains with noise every 2.5s.
       if (!hasLoadedOnce.current) {
         toast.error(err.response?.data?.error || "Failed to load auction");
+        setError(true);
       }
     } finally {
       setLoading(false);
@@ -105,5 +111,5 @@ export function useAuction(auctionId) {
     }
   };
 
-  return { auction, loading, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick, refetch: fetchAuction };
+  return { auction, loading, error, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick, refetch: fetchAuction };
 }

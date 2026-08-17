@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 export function useVoting() {
   const [votesData, setVotesData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [submitting, setSubmitting] = useState(null); // slot_id being submitted
   const [revoking, setRevoking] = useState(null); // slot_id being revoked
 
@@ -12,8 +13,10 @@ export function useVoting() {
     try {
       const res = await api.get("/votes/my");
       setVotesData(res.data);
+      setError(false);
     } catch {
       toast.error("Failed to load voting data");
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -73,6 +76,7 @@ export function useVoting() {
   return {
     rows,
     loading,
+    error,
     submitting,
     revoking,
     votedCount,

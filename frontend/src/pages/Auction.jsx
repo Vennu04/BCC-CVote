@@ -9,7 +9,7 @@ import FairnessBanner from "../components/FairnessBanner";
 import ReleaseOrderLog from "../components/ReleaseOrderLog";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
-import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap } from "lucide-react";
+import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap, AlertTriangle } from "lucide-react";
 import {
   playTurnAlertSound, vibrateTurnAlert, flashTabTitle,
   notificationsSupported, requestTurnNotificationPermission, showTurnNotification,
@@ -126,7 +126,7 @@ function CaptainCard({ summary, isYou, startingPrice }) {
 export default function Auction() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { auction, loading, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick } = useAuction(id);
+  const { auction, loading, error, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick, refetch } = useAuction(id);
   const [amount, setAmount] = useState("");
 
   const isParticipant = useMemo(() => {
@@ -290,6 +290,30 @@ export default function Auction() {
       <div className="min-h-screen bg-cricket-cream">
         <Navbar />
         <div className="max-w-3xl mx-auto px-4 py-8 text-gray-500 text-sm">Loading auction…</div>
+      </div>
+    );
+  }
+
+  if (!auction && error) {
+    // Distinct from the genuine "no such auction" case below — this is a
+    // failed fetch (network/server error), not a bad/stale auction link,
+    // and deserves a retry action instead of a dead-end message.
+    return (
+      <div className="min-h-screen bg-cricket-cream">
+        <Navbar />
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <div className="card text-center py-12">
+            <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
+            <p className="text-gray-700 font-medium">Couldn't load this auction</p>
+            <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
+            <button
+              onClick={refetch}
+              className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border-2 border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 font-medium transition-colors min-h-[44px]"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
