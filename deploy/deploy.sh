@@ -27,6 +27,7 @@ MONGODB_URI=$(get_secret /bcc-cvote/prod/mongodb-uri)
 JWT_SECRET_KEY=$(get_secret /bcc-cvote/prod/jwt-secret)
 SECRET_KEY=$(get_secret /bcc-cvote/prod/app-secret)
 OPENWEATHER_API_KEY=$(get_secret /bcc-cvote/prod/openweather-api-key || echo "")
+SENTRY_DSN=$(get_secret /bcc-cvote/prod/sentry-dsn || echo "")
 ECR_REGISTRY=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
 ENVEOF
 chmod 600 .env

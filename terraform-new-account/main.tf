@@ -377,6 +377,19 @@ resource "aws_ssm_parameter" "openweather_api_key" {
   }
 }
 
+# Deliberately NOT a Terraform-managed resource, unlike the other SSM
+# secrets above. Sentry's Python SDK eagerly parses+validates the DSN as a
+# structured URL at app-init time (sentry_sdk.init raises BadDsn on
+# anything non-URL-shaped) - a "PLACEHOLDER" value here isn't inert like
+# the other secrets' placeholders, it crash-loops every gunicorn worker on
+# boot (confirmed live in prod 2026-08-17). SSM SecureString also rejects
+# genuinely empty-string values, so there's no safe placeholder to give it.
+# deploy.sh's `get_secret ... || echo ""` already handles this param not
+# existing at all - create it for real, once, only when a real DSN exists:
+#   aws ssm put-parameter --name /bcc-cvote/prod/sentry-dsn --type SecureString \
+#     --value "<real DSN>" --region ap-south-1 --profile bcc-cvote-new
+# then re-run deploy.sh (no terraform apply / instance replacement needed).
+
 resource "aws_ssm_parameter" "acme_email" {
   name  = "/bcc-cvote/prod/acme-email"
   type  = "String"
