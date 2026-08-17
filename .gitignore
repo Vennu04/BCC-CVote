@@ -23,6 +23,7 @@ terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform.lock.hcl
 terraform/terraform.tfvars
+terraform/tfplan*
 terraform-new-account/.terraform/
 terraform-new-account/*.tfstate
 terraform-new-account/*.tfstate.backup
