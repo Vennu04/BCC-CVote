@@ -5,7 +5,10 @@ LABEL org.opencontainers.image.description="BCC-CVote Backend"
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# upgrade first — the base image's own OS packages (e.g. util-linux) can
+# carry HIGH/CRITICAL CVEs newer than what's baked into the image tag,
+# same reasoning as frontend/Dockerfile's `apk upgrade` step.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
