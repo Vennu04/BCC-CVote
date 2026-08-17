@@ -38,6 +38,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       FRONTEND_URL: https://${APP_HOSTNAME}
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      SENTRY_DSN: ${SENTRY_DSN}
       GUNICORN_WORKERS: 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
