@@ -1,0 +1,192 @@
+name: Prod CD (New Account)
+
+# Runs alongside the existing prod-cd.yml during the migration window — every
+# push to main deploys to BOTH the old K3s stack and this new single-instance
+# stack, so the new account can be validated in parallel before cutover.
+# Once CloudFront is repointed and the old account is decommissioned
+# (see project migration notes), retire prod-cd.yml and this becomes the
+# only prod deploy workflow.
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT_ID: "642195693540"
+  ECR_REGISTRY: 642195693540.dkr.ecr.ap-south-1.amazonaws.com
+  BACKEND_REPO: bcc-cvote-backend
+  FRONTEND_REPO: bcc-cvote-frontend
+  # Direct sslip.io URL until the old account's CloudFront distribution is
+  # repointed at cutover — switch this to the CloudFront URL once that
+  # happens, matching the old workflow's CLOUDFRONT_URL convention.
+  APP_URL: https://13-234-252-190.sslip.io
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+      - name: Run backend test suite
+        working-directory: backend
+        env:
+          FLASK_ENV: testing
+        run: python -m pytest tests/ -v
+
+  build-and-push:
+    name: Build, Scan & Push Images
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.tag.outputs.IMAGE_TAG }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, new account)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Build backend image
+        working-directory: backend
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest \
+            .
+
+      - name: Trivy image scan (backend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Build frontend image
+        working-directory: frontend
+        run: |
+          docker build \
+            --build-arg VITE_API_URL="" \
+            --build-arg VITE_SENTRY_DSN="${{ secrets.VITE_SENTRY_DSN }}" \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest \
+            .
+
+      - name: Trivy image scan (frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push backend to ECR
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
+
+      - name: Push frontend to ECR
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+
+  deploy:
+    name: Deploy (SSM RunCommand)
+    needs: build-and-push
+    # Plain GitHub-hosted runner — no self-hosted runner needed. Deploy is
+    # "tell the instance to pull+restart via SSM", not a Kubernetes API
+    # call, so there's no network-reachability requirement this runner
+    # can't satisfy on its own.
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production-newaccount
+      url: ${{ env.APP_URL }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials (OIDC, new account)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # NEW_INSTANCE_ID is a repo secret because it's stable in practice
+      # (EIP survives instance stop/replace) but NOT guaranteed forever —
+      # if terraform-new-account/main.tf's user_data ever changes,
+      # user_data_replace_on_change=true recreates the instance with a new
+      # ID, and this secret needs a manual update (terraform output
+      # instance_id) before the next deploy.
+      - name: Trigger deploy via SSM RunCommand
+        id: deploy
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.NEW_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["/opt/bcc-cvote/deploy.sh"]' \
+            --region ${{ env.AWS_REGION }} \
+            --query "Command.CommandId" --output text)
+          echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
+
+          for i in $(seq 1 30); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" --instance-id "${{ secrets.NEW_INSTANCE_ID }}" \
+              --region ${{ env.AWS_REGION }} --query Status --output text 2>/dev/null || echo "Pending")
+            [ "$STATUS" != "InProgress" ] && [ "$STATUS" != "Pending" ] && break
+            sleep 10
+          done
+
+          aws ssm get-command-invocation \
+            --command-id "$CMD_ID" --instance-id "${{ secrets.NEW_INSTANCE_ID }}" \
+            --region ${{ env.AWS_REGION }} \
+            --query '[Status,StandardOutputContent,StandardErrorContent]' --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Deploy command finished with status $STATUS"
+            exit 1
+          fi
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 10); do
+            CODE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 "${{ env.APP_URL }}/" || echo "000")
+            if [ "$CODE" = "200" ]; then
+              echo "smoke test passed ($CODE)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::smoke test failed after retries"
+          exit 1

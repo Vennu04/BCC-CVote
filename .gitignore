@@ -23,6 +23,12 @@ terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/.terraform.lock.hcl
 terraform/terraform.tfvars
+terraform-new-account/.terraform/
+terraform-new-account/*.tfstate
+terraform-new-account/*.tfstate.backup
+terraform-new-account/.terraform.lock.hcl
+terraform-new-account/terraform.tfvars
+terraform-new-account/tfplan
 
 # Editor
 .vscode/
