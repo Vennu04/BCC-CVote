@@ -1,0 +1,18 @@
+# Single-instance prod reverse proxy — replaces Traefik + cert-manager.
+# Caddy auto-issues/renews a Let's Encrypt cert for APP_HOSTNAME (an
+# sslip.io hostname derived from this instance's own public IP at deploy
+# time — see deploy.sh) via HTTP-01, same mechanism the old ClusterIssuer
+# used. {$VAR} is Caddy's native env-var substitution, resolved from this
+# container's `environment:` block in docker-compose.prod.yml.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_HOSTNAME} {
+	# frontend's own nginx.conf already proxies /api/ to the backend
+	# service (unchanged from the K8s ingress convention) — Caddy only
+	# needs to know about one upstream.
+	reverse_proxy frontend:80
+
+	encode gzip
+}
