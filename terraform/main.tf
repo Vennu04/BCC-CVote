@@ -627,16 +627,24 @@ resource "aws_eip" "k3s" {
 }
 
 # ── CloudFront — stable, memorable URL to hand out to players ─────────────────
-# Fronts the K3s node's sslip.io endpoint. Caching is disabled entirely: this
-# is a live voting app (JWT-authenticated API calls + POST votes) under the
-# same host as the static frontend, not a CDN-cacheable site.
+# Repointed 2026-08-17 to the new, dedicated free-tier AWS account
+# (642195693540, see terraform-new-account/) as part of the account
+# migration — this distribution itself deliberately stays in THIS (old)
+# account so the URL players already have (this distribution's own
+# cloudfront.net domain) keeps working unchanged; only the origin moved.
+# The old K3s node this used to front is being decommissioned separately.
 #
-# Origin request policy is AllViewerExceptHostHeader, NOT AllViewer — Traefik's
-# ingress (k8s/prod/ingress.yaml) only matches Host: 3-108-68-4.sslip.io.
+# Caching is disabled entirely: this is a live voting app (JWT-authenticated
+# API calls + POST votes) under the same host as the static frontend, not a
+# CDN-cacheable site.
+#
+# Origin request policy is AllViewerExceptHostHeader, NOT AllViewer — the new
+# origin's Caddy (deploy/Caddyfile) only matches Host: 13-234-252-190.sslip.io.
 # AllViewer would forward the viewer's real Host header (the *.cloudfront.net
-# domain), which the ingress doesn't recognize, and every request would 404.
-# Excluding Host lets CloudFront fall back to its default custom-origin
-# behavior of setting Host to the origin's own domain name, which matches.
+# domain), which Caddy doesn't recognize, and every request would fail TLS SNI
+# / hostname matching. Excluding Host lets CloudFront fall back to its default
+# custom-origin behavior of setting Host to the origin's own domain name,
+# which matches.
 resource "aws_cloudfront_distribution" "app" {
   enabled         = true
   is_ipv6_enabled = true
@@ -644,12 +652,12 @@ resource "aws_cloudfront_distribution" "app" {
   price_class     = "PriceClass_All" # traffic is tiny (20 captains); optimize for reach, not cost
 
   origin {
-    # Hardcoded literal, same convention as k8s/prod/ingress.yaml's host field —
-    # only needs updating if the EIP is ever reallocated (static in practice).
-    # Deliberately not derived from aws_eip.k3s.public_ip: that would chain this
-    # resource's dependencies through aws_instance.k3s -> aws_security_group.k3s,
-    # dragging pre-existing SG drift into any -target'd plan/apply of this resource.
-    domain_name = "3-108-68-4.sslip.io"
+    # Hardcoded literal, same convention as before — only needs updating if
+    # the new account's EIP is ever reallocated (static in practice; see
+    # terraform-new-account/main.tf's aws_eip.app). Deliberately not a
+    # cross-account resource reference (this account's Terraform doesn't
+    # manage the new account's instance at all).
+    domain_name = "13-234-252-190.sslip.io"
     origin_id   = "bcc-cvote-k3s"
 
     custom_origin_config {
