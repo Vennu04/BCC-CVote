@@ -82,7 +82,16 @@ resource "aws_iam_role" "github_actions_deploy" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
+          # Both forms are needed: build-and-push has no `environment:`
+          # block, so its OIDC sub is the plain ref form; deploy sets
+          # `environment: production-newaccount` (for the GitHub
+          # Deployments tracking UI), which changes its sub claim to the
+          # environment form instead — confirmed via a real
+          # AssumeRoleWithWebIdentity failure on deploy only.
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_repo}:ref:refs/heads/main",
+            "repo:${var.github_repo}:environment:production-newaccount"
+          ]
         }
       }
     }]
