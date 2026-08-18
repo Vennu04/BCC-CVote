@@ -1,3 +1,17 @@
+# ── RETIRED 2026-08-18 ──────────────────────────────────────────────────────
+# The old AWS account (661474704151) this file targets ran out of free-tier
+# credits and converted to paid. Every resource it used to manage here (K3s
+# node, MongoDB node, ECR repos, IAM role/OIDC provider, security groups,
+# SSM params) has been destroyed. The app now runs entirely in a new,
+# dedicated free-tier account (642195693540) -- see terraform-new-account/.
+#
+# DO NOT run `terraform apply` in this directory -- every resource below is
+# still declared but no longer in state, so it would recreate the entire old
+# stack in the paid account. This file is kept only as a historical record
+# and for its CloudFront comment (see below) explaining the one resource
+# that's still deliberately alive here.
+# ─────────────────────────────────────────────────────────────────────────────
+
 terraform {
   required_version = ">= 1.7"
   required_providers {
@@ -626,70 +640,25 @@ resource "aws_eip" "k3s" {
   tags     = local.common_tags
 }
 
-# ── CloudFront — stable, memorable URL to hand out to players ─────────────────
-# Repointed 2026-08-17 to the new, dedicated free-tier AWS account
-# (642195693540, see terraform-new-account/) as part of the account
-# migration — this distribution itself deliberately stays in THIS (old)
-# account so the URL players already have (this distribution's own
-# cloudfront.net domain) keeps working unchanged; only the origin moved.
-# The old K3s node this used to front is being decommissioned separately.
+# ── CloudFront — intentionally NOT managed here anymore ────────────────────────
+# Distribution E1EZ6V1244PHBR (d2welg0wjdnhjp.cloudfront.net) still lives in
+# THIS (old) account and is still the live URL players use — its origin was
+# already repointed to the new account's server (13-234-252-190.sslip.io) on
+# 2026-08-17. Every OTHER resource this file used to manage (K3s node,
+# MongoDB node, ECR, IAM, security groups, SSM params) was destroyed on
+# 2026-08-18 once the account ran out of free-tier credits — see
+# terraform-new-account/ for where the app actually runs now.
 #
-# Caching is disabled entirely: this is a live voting app (JWT-authenticated
-# API calls + POST votes) under the same host as the static frontend, not a
-# CDN-cacheable site.
+# CloudFront was deliberately left running rather than migrated: a new
+# distribution in the new account would mean a brand-new *.cloudfront.net
+# URL (CloudFront distributions can't move between accounts), breaking every
+# captain/admin's existing link for no real savings (it's usage-billed, not
+# a fixed cost like the EC2s were). It was removed from this file's state
+# (`terraform state rm aws_cloudfront_distribution.app`) specifically so
+# nothing in this now-mostly-empty config can ever recreate or touch it.
 #
-# Origin request policy is AllViewerExceptHostHeader, NOT AllViewer — the new
-# origin's Caddy (deploy/Caddyfile) only matches Host: 13-234-252-190.sslip.io.
-# AllViewer would forward the viewer's real Host header (the *.cloudfront.net
-# domain), which Caddy doesn't recognize, and every request would fail TLS SNI
-# / hostname matching. Excluding Host lets CloudFront fall back to its default
-# custom-origin behavior of setting Host to the origin's own domain name,
-# which matches.
-resource "aws_cloudfront_distribution" "app" {
-  enabled         = true
-  is_ipv6_enabled = true
-  comment         = "BCC-CVote voting app"
-  price_class     = "PriceClass_All" # traffic is tiny (20 captains); optimize for reach, not cost
-
-  origin {
-    # Hardcoded literal, same convention as before — only needs updating if
-    # the new account's EIP is ever reallocated (static in practice; see
-    # terraform-new-account/main.tf's aws_eip.app). Deliberately not a
-    # cross-account resource reference (this account's Terraform doesn't
-    # manage the new account's instance at all).
-    domain_name = "13-234-252-190.sslip.io"
-    origin_id   = "bcc-cvote-k3s"
-
-    custom_origin_config {
-      http_port                = 80
-      https_port                = 443
-      origin_protocol_policy  = "https-only"
-      origin_ssl_protocols    = ["TLSv1.2"]
-    }
-  }
-
-  default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods          = ["GET", "HEAD"]
-    target_origin_id        = "bcc-cvote-k3s"
-    viewer_protocol_policy  = "redirect-to-https"
-
-    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed: CachingDisabled
-    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # AWS managed: AllViewerExceptHostHeader
-  }
-
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
-  }
-
-  viewer_certificate {
-    cloudfront_default_certificate = true
-  }
-
-  tags = local.common_tags
-}
+# Manage it by hand (AWS Console/CLI, profile `vfla-target`, id
+# E1EZ6V1244PHBR) if it ever needs to change.
 
 # ── Dedicated monitoring instance (Prometheus + Grafana) ──────────────────────
 # Plain Docker Compose, not K8s — no cluster overhead needed just to run two
