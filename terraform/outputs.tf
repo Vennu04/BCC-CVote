@@ -14,8 +14,10 @@ output "app_url" {
 }
 
 output "cloudfront_url" {
-  value       = "https://${aws_cloudfront_distribution.app.domain_name}"
-  description = "Public URL to share with players — stable across EIP changes, unlike the raw sslip.io IP-based URL"
+  # No longer a managed resource in this config (see main.tf's CloudFront
+  # comment) -- hardcoded since the distribution itself hasn't changed.
+  value       = "https://d2welg0wjdnhjp.cloudfront.net"
+  description = "Public URL to share with players — CloudFront dist E1EZ6V1244PHBR, managed by hand, not by this file"
 }
 
 output "ecr_backend_url" {
