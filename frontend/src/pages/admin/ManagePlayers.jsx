@@ -161,13 +161,14 @@ export default function ManagePlayers() {
   };
 
   const handleDeactivate = (person) => {
-    requestConfirm(`Remove ${person.name} from the player roster?`, async () => {
+    const label = person.role === "captain" ? "captain" : "player";
+    requestConfirm(`Remove ${person.name} from the ${label} roster? Their voting/auction history is kept — this can be undone by an admin directly in the database if needed.`, async () => {
       try {
-        await api.delete(`/admin/players/${person.id}`);
+        await api.delete(`/admin/${endpointFor(person)}/${person.id}`);
         toast.success(`${person.name} removed`);
         fetchPlayers();
-      } catch {
-        toast.error("Failed to remove player");
+      } catch (err) {
+        toast.error(err.response?.data?.error || `Failed to remove ${label}`);
       }
     });
   };
@@ -602,11 +603,11 @@ export default function ManagePlayers() {
                                 <Edit2 size={14} />
                               </button>
                             )}
-                            {!isCaptain && !isEditing && (
+                            {!isEditing && (
                               <button
                                 onClick={() => handleDeactivate(p)}
                                 className="icon-btn -my-2.5 bg-red-100 text-red-700 hover:bg-red-200"
-                                title="Remove player"
+                                title={`Remove ${isCaptain ? "captain" : "player"}`}
                               >
                                 <X size={14} />
                               </button>
@@ -789,7 +790,7 @@ export default function ManagePlayers() {
                               <Edit2 size={13} /> Edit
                             </button>
                           )}
-                          {!isCaptain && !isEditing && (
+                          {!isEditing && (
                             <button
                               onClick={() => handleDeactivate(p)}
                               className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-red-100 text-red-700 hover:bg-red-200 active:scale-[0.96] transition-all duration-150"
