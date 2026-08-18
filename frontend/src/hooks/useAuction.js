@@ -11,6 +11,7 @@ export function useAuction(auctionId) {
   const [bidding, setBidding] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [freePicking, setFreePicking] = useState(null);
+  const [sendingChat, setSendingChat] = useState(false);
   const hasLoadedOnce = useRef(false);
 
   const fetchAuction = useCallback(async () => {
@@ -111,5 +112,20 @@ export function useAuction(auctionId) {
     }
   };
 
-  return { auction, loading, error, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick, refetch: fetchAuction };
+  const sendChatMessage = async (text) => {
+    setSendingChat(true);
+    try {
+      await api.post(`/auction/${auctionId}/chat`, { message: text });
+      await fetchAuction();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to send message");
+    } finally {
+      setSendingChat(false);
+    }
+  };
+
+  return {
+    auction, loading, error, bidding, dropping, freePicking, sendingChat,
+    placeBid, dropCurrentPlayer, freePick, sendChatMessage, refetch: fetchAuction,
+  };
 }

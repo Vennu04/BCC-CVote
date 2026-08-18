@@ -899,6 +899,22 @@ def get_auction(auction_id):
             "created_at": format_ist(b["created_at"]),
         } for b in bids]
 
+    # Chat is deliberately NOT gated behind reveal_prices -- it's just Q&A
+    # between whoever's in the room, not confidential bid/price data, so it
+    # stays visible on the completed auction's page too. Capped at 200 --
+    # plenty for a single 25-minute session, and bounds how much this query
+    # can ever grow to.
+    chat_messages = list(
+        mongo.db.auction_chat.find({"auction_id": auction_id}).sort("created_at", 1).limit(200)
+    )
+    chat_feed = [{
+        "sender_id": m["sender_id"],
+        "sender_name": m["sender_name"],
+        "sender_role": m["sender_role"],
+        "message": m["message"],
+        "created_at": format_ist(m["created_at"]),
+    } for m in chat_messages]
+
     # Deprioritized (both captains passed at base price) sort to the end so
     # admin's release dropdown naturally offers everyone else in the category
     # first — they're still releasable any time, just not the default pick.
@@ -937,6 +953,7 @@ def get_auction(auction_id):
         "captain_a": captain_summary(auction["captain_a_id"]),
         "captain_b": captain_summary(auction["captain_b_id"]),
         "bid_feed": bid_feed,
+        "chat_feed": chat_feed,
         "auto_release_category": auction.get("auto_release_category"),
         "is_paused": auction.get("is_paused", False),
         "is_complete": is_complete,
@@ -1100,6 +1117,48 @@ def drop_player(auction_id):
         return response
 
     return jsonify({"message": "Dropped"})
+
+
+@auction_bp.route("/auction/<auction_id>/chat", methods=["POST"])
+@jwt_required()
+# Same ballpark as the bid endpoint's limit -- a captain typing several quick
+# messages in a row during live bidding shouldn't hit this, it's only a
+# backstop against a scripted flood.
+@limiter.limit("30 per minute")
+def send_chat_message(auction_id):
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+
+    user = get_current_user()
+    uid = str(user["_id"])
+    # Identical access rule to get_auction below -- whoever can already see
+    # this auction's live state can also post in its chat, nothing wider.
+    is_participant = uid in (auction["captain_a_id"], auction["captain_b_id"])
+    if not is_participant and user["role"] != "admin":
+        return jsonify({"error": "Access denied"}), 403
+
+    data = request.get_json(silent=True) or {}
+    text = (data.get("message") or "").strip()
+    if not text:
+        return jsonify({"error": "Message can't be empty"}), 400
+    if len(text) > 500:
+        return jsonify({"error": "Message is too long (max 500 characters)"}), 400
+
+    mongo.db.auction_chat.insert_one({
+        "auction_id": auction_id,
+        "sender_id": uid,
+        "sender_name": user.get("name", "?"),
+        # Whichever of the two assigned captains sent it reads as "captain" --
+        # anyone else who cleared the access check above is necessarily an
+        # admin, shown as "admin" regardless of their own role field, so a
+        # dual-role (is_admin) account watching without being one of the two
+        # assigned captains here still labels correctly.
+        "sender_role": "captain" if is_participant else "admin",
+        "message": text,
+        "created_at": utcnow(),
+    })
+    return jsonify({"message": "Sent"}), 201
 
 
 @auction_bp.route("/auction/<auction_id>/free-pick", methods=["POST"])

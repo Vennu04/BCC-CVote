@@ -7,6 +7,7 @@ import CountdownBadge from "../components/CountdownBadge";
 import PlayerInsightsCard from "../components/PlayerInsightsCard";
 import FairnessBanner from "../components/FairnessBanner";
 import ReleaseOrderLog from "../components/ReleaseOrderLog";
+import AuctionChat from "../components/AuctionChat";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
 import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap, AlertTriangle } from "lucide-react";
@@ -126,7 +127,10 @@ function CaptainCard({ summary, isYou, startingPrice }) {
 export default function Auction() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { auction, loading, error, bidding, dropping, freePicking, placeBid, dropCurrentPlayer, freePick, refetch } = useAuction(id);
+  const {
+    auction, loading, error, bidding, dropping, freePicking, sendingChat,
+    placeBid, dropCurrentPlayer, freePick, sendChatMessage, refetch,
+  } = useAuction(id);
   const [amount, setAmount] = useState("");
 
   const isParticipant = useMemo(() => {
@@ -516,6 +520,8 @@ export default function Auction() {
             </div>
           </div>
         )}
+
+        <AuctionChat chatFeed={auction.chat_feed} currentUserId={user?.id} onSend={sendChatMessage} sending={sendingChat} />
 
         {auction.status !== "pending" && <ReleaseOrderLog auctionId={id} />}
       </div>
