@@ -212,8 +212,27 @@ def dashboard():
     voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}).sort("name", 1))
     slots = list(mongo.db.match_slots.find({"is_active": {"$ne": False}}).sort("slot_number", 1))
 
-    # Resolve each slot's own active window up front
-    slot_windows = {str(s["_id"]): _get_active_window(str(s["_id"])) for s in slots}
+    # Resolve every slot's own active window in ONE query instead of one
+    # find_one per slot -- this endpoint is polled every 5-10s from two
+    # different admin pages, so N per-slot round trips compounds fast with
+    # both open during a live weekend. At most one active window per slot,
+    # so the dict comprehension below is safe.
+    slot_ids = [str(s["_id"]) for s in slots]
+    slot_windows = {
+        w["slot_id"]: w
+        for w in mongo.db.voting_windows.find({"slot_id": {"$in": slot_ids}, "is_active": True})
+    }
+
+    # Same batching for the "does this window already have an auction"
+    # lookup below -- was one find_one per slot-with-a-window, now one query
+    # for all of them, keeping (for each window_id) only the most recently
+    # created auction, matching the original per-slot sort=[("created_at",
+    # -1)] behavior.
+    window_ids = [str(w["_id"]) for w in slot_windows.values()]
+    linked_auction_by_window = {}
+    if window_ids:
+        for a in mongo.db.auctions.find({"window_id": {"$in": window_ids}}).sort("created_at", -1):
+            linked_auction_by_window.setdefault(a["window_id"], a)
 
     all_votes = list(mongo.db.votes.find({
         "$or": [
@@ -247,13 +266,11 @@ def dashboard():
     for slot in slots:
         sid = str(slot["_id"])
         slot_votes = [v for v in all_votes if v["slot_id"] == sid]
-        window_info = _window_info(slot_windows[sid])
+        window_info = _window_info(slot_windows.get(sid))
         if window_info["is_open"]:
             open_count += 1
-        if slot_windows[sid]:
-            linked_auction = mongo.db.auctions.find_one(
-                {"window_id": str(slot_windows[sid]["_id"])}, sort=[("created_at", -1)]
-            )
+        if slot_windows.get(sid):
+            linked_auction = linked_auction_by_window.get(str(slot_windows[sid]["_id"]))
             window_info["status"] = _window_status(slot_windows[sid], window_info, linked_auction)
         slot_summary.append({
             "slot_id": sid,

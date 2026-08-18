@@ -7,7 +7,7 @@ import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import attendancePhoto from "../../assets/dashboard-backgrounds/attendance.webp";
-import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp, UserCheck } from "lucide-react";
+import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp, UserCheck, AlertTriangle } from "lucide-react";
 
 // Mirrors the same role-aware endpoint pattern used on Manage Players —
 // captains and players are both rows in this roster but live on two
@@ -26,6 +26,15 @@ export default function Attendance() {
   const [mobileExpanded, setMobileExpanded] = useState(new Set());
   const { confirmProps, requestConfirm } = useConfirm();
 
+  // Snapshot of whatever's actually persisted server-side (cutoff + each
+  // row's eligibility), refreshed every time fetchAttendance loads fresh
+  // data or a save completes. Diffing live state against this is what
+  // "dirty" means below -- an admin toggling ~20 checkboxes (or hitting
+  // Auto-Mark Top N, which also only mutates local state) used to have no
+  // indication any of it was unsaved, and lost it all silently on an
+  // accidental refresh or nav-away.
+  const [savedSnapshot, setSavedSnapshot] = useState(null);
+
   // Suggest Attendance from Votes — ties the "+1" credit to who actually
   // voted available for a real match, instead of it being a blind click
   // with no relationship to any match. Admin picks the slot explicitly
@@ -42,6 +51,10 @@ export default function Attendance() {
       const res = await api.get("/admin/attendance");
       setRows(res.data.voters);
       setSettings(res.data.settings);
+      setSavedSnapshot({
+        cutoff: res.data.settings.knockout_cutoff,
+        eligible: Object.fromEntries(res.data.voters.map((v) => [v.id, v.knockout_eligible])),
+      });
     } catch {
       toast.error("Failed to load attendance");
     } finally {
@@ -131,6 +144,19 @@ export default function Attendance() {
       .map((r, idx) => ({ ...r, rank: idx + 1 }));
   }, [rows]);
 
+  const dirty = useMemo(() => {
+    if (!savedSnapshot) return false;
+    if (settings.knockout_cutoff !== savedSnapshot.cutoff) return true;
+    return rows.some((r) => savedSnapshot.eligible[r.id] !== r.knockout_eligible);
+  }, [rows, settings.knockout_cutoff, savedSnapshot]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
   const filteredRanked = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return ranked;
@@ -196,9 +222,16 @@ export default function Attendance() {
               Ranked by Attendance % — green rows are currently eligible for knockout matches. Click "+1" after a match to credit whoever played.
             </p>
           </div>
-          <button onClick={handleSaveAll} disabled={saving || loading} className="btn-primary">
-            {saving ? "Saving…" : "Save All"}
-          </button>
+          <div className="flex items-center gap-3">
+            {dirty && !saving && (
+              <span className="flex items-center gap-1 text-xs font-medium text-amber-600">
+                <AlertTriangle size={13} /> Unsaved changes
+              </span>
+            )}
+            <button onClick={handleSaveAll} disabled={saving || loading} className="btn-primary">
+              {saving ? "Saving…" : "Save All"}
+            </button>
+          </div>
         </div>
 
         {/* Knockout cutoff */}

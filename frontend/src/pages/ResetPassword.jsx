@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import api from "../utils/api";
+import PasswordInput from "../components/PasswordInput";
 import { COMPANY_NAME } from "../config/appMeta";
 import { KeyRound } from "lucide-react";
 
@@ -72,9 +73,7 @@ export default function ResetPassword() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-            <input
-              type="password"
-              className="input-field"
+            <PasswordInput
               value={form.current_password}
               onChange={(e) => setForm({ ...form, current_password: e.target.value })}
               required
@@ -82,8 +81,8 @@ export default function ResetPassword() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-            <input
-              type="password" className="input-field" required minLength={6}
+            <PasswordInput
+              required minLength={6}
               value={form.new_password}
               onChange={(e) => setForm({ ...form, new_password: e.target.value })}
             />
@@ -91,8 +90,8 @@ export default function ResetPassword() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-            <input
-              type="password" className="input-field" required minLength={6}
+            <PasswordInput
+              required minLength={6}
               value={form.confirm_password}
               onChange={(e) => setForm({ ...form, confirm_password: e.target.value })}
             />
