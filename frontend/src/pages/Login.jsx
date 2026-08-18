@@ -107,7 +107,10 @@ export default function Login() {
           </form>
 
           <p className="text-xs text-gray-400 text-center mt-6">
-            Contact your organizer if you need access.
+            Contact your support at email{" "}
+            <a href="mailto:buddybccsupport@gmail.com" className="text-pitch-700 font-medium underline">
+              buddybccsupport@gmail.com
+            </a>
           </p>
         </div>
       </div>
