@@ -455,6 +455,7 @@ export default function ManagePlayers() {
                   {filteredPlayers.map((p, i) => {
                     const isEditing = editId === p.id;
                     const isCaptain = p.role === "captain";
+                    const isAdmin = p.role === "admin";
                     const meta = statusMeta(p.tournament_status);
                     const dash = <span className="text-gray-300 italic">—</span>;
                     const statsExpanded = expandedStatsId === p.id;
@@ -494,14 +495,31 @@ export default function ManagePlayers() {
                         {/* Role + next-match availability, grouped together */}
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1 items-start">
-                            <select
-                              value={p.role}
-                              onChange={e => handleRoleChange(p, e.target.value)}
-                              className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
-                            >
-                              <option value="player">Player</option>
-                              <option value="captain">Captain</option>
-                            </select>
+                            {isAdmin ? (
+                              // Not an editable Player/Captain toggle — this is an
+                              // organizer login flagged to also vote, managed
+                              // outside this page. The role dropdown below only
+                              // offers Player/Captain, so a real admin account
+                              // would otherwise show as a confusing blank/default
+                              // selection - or worse, an accidental click could
+                              // silently demote it to "captain" (the backend's
+                              // role-update endpoint doesn't block that).
+                              <span
+                                className="text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] flex items-center border-0 text-indigo-700 bg-indigo-50"
+                                title="Admin account (also flagged to vote) — not managed from this page"
+                              >
+                                Admin
+                              </span>
+                            ) : (
+                              <select
+                                value={p.role}
+                                onChange={e => handleRoleChange(p, e.target.value)}
+                                className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                              >
+                                <option value="player">Player</option>
+                                <option value="captain">Captain</option>
+                              </select>
+                            )}
                             <span
                               title={p.next_match_label ? `Availability for ${p.next_match_label}` : "No upcoming match scheduled yet"}
                               className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${p.next_match_available ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"}`}
@@ -568,14 +586,16 @@ export default function ManagePlayers() {
                         {/* Actions */}
                         <td className="px-4 py-3">
                           <div className="flex gap-1 items-center">
-                            <button
-                              onClick={() => handleResetPassword(p)}
-                              disabled={resettingPassword === p.id}
-                              className="icon-btn -my-2.5 bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50"
-                              title="Reset password (forgotten password — generates a new temporary one)"
-                            >
-                              <KeyRound size={14} />
-                            </button>
+                            {!isAdmin && (
+                              <button
+                                onClick={() => handleResetPassword(p)}
+                                disabled={resettingPassword === p.id}
+                                className="icon-btn -my-2.5 bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                                title="Reset password (forgotten password — generates a new temporary one)"
+                              >
+                                <KeyRound size={14} />
+                              </button>
+                            )}
                             {isEditing ? (
                               <>
                                 <button
@@ -603,7 +623,7 @@ export default function ManagePlayers() {
                                 <Edit2 size={14} />
                               </button>
                             )}
-                            {!isEditing && (
+                            {!isEditing && !isAdmin && (
                               <button
                                 onClick={() => handleDeactivate(p)}
                                 className="icon-btn -my-2.5 bg-red-100 text-red-700 hover:bg-red-200"
@@ -640,6 +660,7 @@ export default function ManagePlayers() {
               {filteredPlayers.map((p) => {
                 const isEditing = editId === p.id;
                 const isCaptain = p.role === "captain";
+                const isAdmin = p.role === "admin";
                 const meta = statusMeta(p.tournament_status);
                 const statsExpanded = expandedStatsId === p.id;
                 const isExpanded = mobileExpanded.has(p.id);
@@ -655,7 +676,9 @@ export default function ManagePlayers() {
                         <span className="font-medium text-gray-900 truncate">{p.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {isCaptain ? (
+                        {isAdmin ? (
+                          <span className="text-xs font-medium text-indigo-700 bg-indigo-50 rounded-full px-2 py-0.5">Admin</span>
+                        ) : isCaptain ? (
                           <span className="flex items-center gap-1 text-xs font-medium text-cricket-navy bg-blue-50 rounded-full px-2 py-0.5">
                             <Shield size={10} /> Captain
                           </span>
@@ -686,14 +709,23 @@ export default function ManagePlayers() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-gray-500">Role</span>
                           <div className="flex items-center gap-2">
-                            <select
-                              value={p.role}
-                              onChange={e => handleRoleChange(p, e.target.value)}
-                              className={`text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
-                            >
-                              <option value="player">Player</option>
-                              <option value="captain">Captain</option>
-                            </select>
+                            {isAdmin ? (
+                              <span
+                                className="text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] flex items-center border-0 text-indigo-700 bg-indigo-50"
+                                title="Admin account (also flagged to vote) — not managed from this page"
+                              >
+                                Admin
+                              </span>
+                            ) : (
+                              <select
+                                value={p.role}
+                                onChange={e => handleRoleChange(p, e.target.value)}
+                                className={`text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                              >
+                                <option value="player">Player</option>
+                                <option value="captain">Captain</option>
+                              </select>
+                            )}
                             <span
                               title={p.next_match_label ? `Availability for ${p.next_match_label}` : "No upcoming match scheduled yet"}
                               className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${p.next_match_available ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"}`}
@@ -759,13 +791,15 @@ export default function ManagePlayers() {
                         </div>
 
                         <div className="flex flex-wrap gap-2 pt-1">
-                          <button
-                            onClick={() => handleResetPassword(p)}
-                            disabled={resettingPassword === p.id}
-                            className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 active:scale-[0.96] transition-all duration-150 disabled:opacity-50"
-                          >
-                            <KeyRound size={13} /> Reset Password
-                          </button>
+                          {!isAdmin && (
+                            <button
+                              onClick={() => handleResetPassword(p)}
+                              disabled={resettingPassword === p.id}
+                              className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 active:scale-[0.96] transition-all duration-150 disabled:opacity-50"
+                            >
+                              <KeyRound size={13} /> Reset Password
+                            </button>
+                          )}
                           {isEditing ? (
                             <>
                               <button
@@ -790,7 +824,7 @@ export default function ManagePlayers() {
                               <Edit2 size={13} /> Edit
                             </button>
                           )}
-                          {!isEditing && (
+                          {!isEditing && !isAdmin && (
                             <button
                               onClick={() => handleDeactivate(p)}
                               className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-red-100 text-red-700 hover:bg-red-200 active:scale-[0.96] transition-all duration-150"
