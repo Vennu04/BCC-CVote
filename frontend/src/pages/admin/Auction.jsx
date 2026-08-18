@@ -10,6 +10,8 @@ import CountdownBadge from "../../components/CountdownBadge";
 import PlayerInsightsCard from "../../components/PlayerInsightsCard";
 import FairnessBanner from "../../components/FairnessBanner";
 import ReleaseOrderLog from "../../components/ReleaseOrderLog";
+import AuctionChat from "../../components/AuctionChat";
+import { useAuth } from "../../context/AuthContext";
 import { useAuction } from "../../hooks/useAuction";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2 } from "lucide-react";
@@ -53,6 +55,7 @@ function buildWhatsAppSummary(auction) {
 }
 
 export default function AdminAuction() {
+  const { user } = useAuth();
   const [slots, setSlots] = useState([]);
   const [voteMatrix, setVoteMatrix] = useState([]);
   const [captains, setCaptains] = useState([]);
@@ -71,7 +74,7 @@ export default function AdminAuction() {
   const [resuming, setResuming] = useState(false);
 
   const [auctionId, setAuctionId] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
-  const { auction, loading, refetch } = useAuction(auctionId);
+  const { auction, loading, refetch, sendChatMessage, sendingChat } = useAuction(auctionId);
 
   // One-shot completion toast, gated by localStorage (not component state) so
   // it survives a refresh/reconnect instead of firing again — is_complete
@@ -752,6 +755,8 @@ export default function AdminAuction() {
                 );
               })}
             </div>
+
+            <AuctionChat chatFeed={auction.chat_feed} currentUserId={user?.id} onSend={sendChatMessage} sending={sendingChat} />
 
             {auction.status !== "pending" && <ReleaseOrderLog auctionId={auctionId} />}
           </>
