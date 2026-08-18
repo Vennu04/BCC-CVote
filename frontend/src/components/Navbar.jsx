@@ -5,6 +5,7 @@ import { homePathFor } from "./ProtectedRoute";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck, KeyRound } from "lucide-react";
+import { TOURNAMENT_NAME } from "../config/appMeta";
 
 const MY_AUCTION_POLL_MS = 10000;
 
@@ -51,7 +52,10 @@ export default function Navbar() {
         {/* Logo */}
         <Link to={homePathFor(user)} className="flex items-center gap-2 font-bold text-lg tracking-tight min-h-[44px]">
           <span className="text-2xl">🏏</span>
-          <span>BCC<span className="text-cricket-gold">-CVote</span></span>
+          <span className="flex flex-col leading-tight">
+            <span>BCC<span className="text-cricket-gold">-CVote</span></span>
+            <span className="hidden sm:block text-[10px] font-medium text-white/60 tracking-wide">{TOURNAMENT_NAME}</span>
+          </span>
         </Link>
 
         {/* Nav links */}
