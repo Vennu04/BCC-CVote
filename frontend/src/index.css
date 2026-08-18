@@ -2,38 +2,183 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design tokens ──────────────────────────────────────────────────────────
+   Single source of truth for the visual refresh. Mirrors tailwind.config.js's
+   palette/shadow values as real CSS custom properties, for the handful of
+   places (gradients, safe-area padding, inline styles) that need a literal
+   value rather than a Tailwind utility class. Every existing Tailwind
+   utility class in the app (bg-pitch-600, text-cricket-gold, rounded-xl,
+   etc.) is untouched and keeps working exactly as before — this block is
+   additive, not a replacement mechanism. */
+:root {
+  /* Colors */
+  --color-primary: #16a34a;       /* pitch-600 */
+  --color-primary-dark: #15803d;  /* pitch-700 */
+  --color-primary-light: #4ade80; /* pitch-400 */
+  --color-navy: #1e3a5f;
+  --color-navy-light: #2d4d78;
+  --color-gold: #f59e0b;
+  --color-gold-dark: #d97706;
+  --color-cream: #fef9ee;
+
+  /* Spacing scale (matches Tailwind's default rem scale, for reference) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Radius scale — 12–16px per the visual brief */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Shadows — soft/layered, no heavy drop-shadows on repeated list items */
+  --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px -2px rgb(15 23 42 / 0.08);
+  --shadow-soft-lg: 0 4px 8px rgb(15 23 42 / 0.04), 0 12px 28px -6px rgb(15 23 42 / 0.14);
+
+  /* Type scale (rem, matches Tailwind's text-xs..text-2xl) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+
+  /* Motion — 150-200ms per the brief, transform/opacity only for perf */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+}
+
 @layer base {
+  html {
+    /* iOS: stop Safari auto-bumping text size on rotation, which fights our
+       own type scale. */
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply font-sans text-gray-900 bg-cricket-cream min-h-screen;
+    /* Themed tap highlight instead of the default gray flash on Android/iOS
+       Safari's fallback — real pressed feedback comes from each button's own
+       :active state below, this is just a subtle brand-colored fallback. */
+    -webkit-tap-highlight-color: rgb(22 163 74 / 0.12);
+  }
+
+  /* Visible keyboard-navigation focus ring app-wide, as a safety net for any
+     interactive element that doesn't already define its own focus style
+     (inputs already have a stronger focus:ring via .input-field). Doesn't
+     remove or override any existing aria attributes or focus handling. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Momentum scrolling on any scrollable area (iOS) — applied via this
+     utility class where needed, see .scroll-touch below. Also default it on
+     any overflow-x-auto container app-wide (tables, the nav's link row)
+     without needing to touch every file that already uses that utility. */
+  .overflow-x-auto,
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
   }
 }
 
 @layer components {
+  /* ── Buttons ─────────────────────────────────────────────────────────────
+     One consistent system: primary / secondary / danger / ghost. All meet
+     the 44px touch-target minimum and share the same radius/transition/
+     pressed-state language. Pressed state uses transform+opacity only
+     (Android perf ask) — never animates box-shadow/width/height. */
   .btn-primary {
-    @apply bg-pitch-600 hover:bg-pitch-700 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-gradient-to-b from-pitch-500 to-pitch-600 hover:from-pitch-600 hover:to-pitch-700
+      text-white font-semibold px-6 py-2.5 rounded-xl shadow-soft
+      transition-all duration-200 min-h-[44px]
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+      active:scale-[0.97] active:brightness-95;
   }
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-6 py-2.5 rounded-lg border border-gray-300 transition-colors duration-200;
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-6 py-2.5 rounded-xl
+      border border-gray-300 shadow-soft transition-all duration-200 min-h-[44px]
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+      active:scale-[0.97] active:bg-gray-100;
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200;
+    @apply bg-gradient-to-b from-red-500 to-red-600 hover:from-red-600 hover:to-red-700
+      text-white font-semibold px-6 py-2.5 rounded-xl shadow-soft
+      transition-all duration-200 min-h-[44px]
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+      active:scale-[0.97] active:brightness-95;
   }
+  /* New — for low-emphasis actions that used to be one-off Tailwind combos
+     scattered across pages (icon-only refresh buttons, "not available"
+     toggle, etc.). Purely additive; nothing existing referenced a
+     ".btn-ghost" class name before. */
+  .btn-ghost {
+    @apply bg-transparent hover:bg-gray-100 text-gray-600 font-medium px-4 py-2.5 rounded-xl
+      transition-all duration-200 min-h-[44px]
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+      active:scale-[0.97] active:bg-gray-200;
+  }
+  /* New — standardizes every icon-only tappable control (nav icons, table
+     refresh buttons) to a real 44x44 target instead of the various ad-hoc
+     min-h-[36px] sizes previously scattered around. */
+  .icon-btn {
+    @apply flex items-center justify-center min-h-[44px] min-w-[44px] rounded-full
+      transition-all duration-200 active:scale-[0.92] active:bg-white/10;
+  }
+
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white rounded-2xl shadow-soft border border-gray-100 p-6
+      transition-shadow duration-200;
   }
+
   .input-field {
-    @apply w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pitch-500 focus:border-transparent text-sm;
+    /* text-base (16px), not text-sm (14px) — anything smaller triggers
+       iOS Safari's auto-zoom-on-focus, which used to happen on every form
+       in the app (Login, ChangePassword, ResetPassword, admin filters). */
+    @apply w-full px-4 py-3 min-h-[44px] border border-gray-300 rounded-xl
+      text-base bg-white
+      focus:outline-none focus:ring-2 focus:ring-pitch-500/40 focus:border-pitch-500
+      transition-all duration-150
+      disabled:opacity-50 disabled:cursor-not-allowed;
   }
+
+  /* Status pills — same color meaning as before (green=available,
+     red=not-available, yellow=maybe, gray=no-response), just a softer,
+     slightly larger "modern pill" treatment with a matching-tint border. */
   .badge-available {
-    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold
+      bg-green-100 text-green-800 border border-green-200;
   }
   .badge-not-available {
-    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800;
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold
+      bg-red-100 text-red-800 border border-red-200;
   }
   .badge-maybe {
-    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold
+      bg-yellow-100 text-yellow-800 border border-yellow-200;
   }
   .badge-no-response {
-    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600;
+    @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold
+      bg-gray-100 text-gray-600 border border-gray-200;
+  }
+
+  /* ── Mobile-safety utilities ──────────────────────────────────────────── */
+  /* Safe-area padding for fixed/sticky headers, bottom bars, and footers —
+     apply alongside normal padding utilities (adds to, doesn't replace). */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .scroll-touch {
+    -webkit-overflow-scrolling: touch;
   }
 }

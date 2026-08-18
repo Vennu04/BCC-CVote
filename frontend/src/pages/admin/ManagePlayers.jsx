@@ -396,7 +396,7 @@ export default function ManagePlayers() {
                 header has a scrolling ancestor to stick within. */}
             <div className="hidden sm:block max-h-[75vh] overflow-y-auto overflow-x-auto rounded-xl">
               <table className="min-w-full text-sm">
-                <thead className="bg-cricket-navy text-white sticky top-0 z-10">
+                <thead className="bg-gradient-to-r from-cricket-navy to-cricket-navy-light text-white sticky top-0 z-10">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">#</th>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
@@ -455,7 +455,7 @@ export default function ManagePlayers() {
                             <select
                               value={p.role}
                               onChange={e => handleRoleChange(p, e.target.value)}
-                              className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                              className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
                             >
                               <option value="player">Player</option>
                               <option value="captain">Captain</option>
@@ -488,7 +488,7 @@ export default function ManagePlayers() {
                           <select
                             value={p.auction_category || ""}
                             onChange={e => handleAuctionCategoryChange(p, e.target.value)}
-                            className="text-xs font-medium rounded px-2 py-1 border border-gray-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 bg-white text-gray-700"
+                            className="text-xs font-medium rounded-lg px-2 py-2.5 min-h-[44px] border border-gray-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 bg-white text-gray-700"
                           >
                             {AUCTION_CATEGORY_OPTIONS.map(opt => (
                               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -500,7 +500,7 @@ export default function ManagePlayers() {
                         <td className="px-4 py-3">
                           <button
                             onClick={() => toggleStats(p)}
-                            className="flex items-center gap-1.5 text-xs text-gray-700 hover:text-cricket-navy whitespace-nowrap"
+                            className="flex items-center gap-1.5 text-xs text-gray-700 hover:text-cricket-navy active:text-cricket-navy min-h-[44px] -my-2 transition-colors duration-150 whitespace-nowrap"
                             title="View / edit player insights (batting & bowling)"
                           >
                             <span>Bat {p.batting_average ?? "—"}/{p.strike_rate ?? "—"} · Bowl {p.bowling_average ?? "—"}/{p.economy ?? "—"}</span>
@@ -514,7 +514,7 @@ export default function ManagePlayers() {
                             <select
                               value={p.tournament_status || "not_played"}
                               onChange={e => handleStatusChange(p, e.target.value)}
-                              className={`text-xs font-semibold rounded px-2 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${meta.color}`}
+                              className={`text-xs font-semibold rounded-lg px-2 py-2.5 min-h-[44px] border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${meta.color}`}
                             >
                               {STATUS_OPTIONS.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -525,11 +525,11 @@ export default function ManagePlayers() {
 
                         {/* Actions */}
                         <td className="px-4 py-3">
-                          <div className="flex gap-2 items-center">
+                          <div className="flex gap-1 items-center">
                             <button
                               onClick={() => handleResetPassword(p)}
                               disabled={resettingPassword === p.id}
-                              className="p-1.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                              className="icon-btn -my-2.5 bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50"
                               title="Reset password (forgotten password — generates a new temporary one)"
                             >
                               <KeyRound size={14} />
@@ -539,14 +539,14 @@ export default function ManagePlayers() {
                                 <button
                                   onClick={() => handleSaveRow(p)}
                                   disabled={submitting}
-                                  className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                  className="icon-btn -my-2.5 bg-green-100 text-green-700 hover:bg-green-200"
                                   title="Save"
                                 >
                                   <Check size={14} />
                                 </button>
                                 <button
                                   onClick={() => setEditId(null)}
-                                  className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                  className="icon-btn -my-2.5 bg-gray-100 text-gray-600 hover:bg-gray-200"
                                   title="Cancel"
                                 >
                                   <X size={14} />
@@ -555,7 +555,7 @@ export default function ManagePlayers() {
                             ) : (
                               <button
                                 onClick={() => startEdit(p)}
-                                className="p-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                className="icon-btn -my-2.5 bg-blue-100 text-blue-700 hover:bg-blue-200"
                                 title="Edit name / code"
                               >
                                 <Edit2 size={14} />
@@ -564,7 +564,7 @@ export default function ManagePlayers() {
                             {!isCaptain && !isEditing && (
                               <button
                                 onClick={() => handleDeactivate(p)}
-                                className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                className="icon-btn -my-2.5 bg-red-100 text-red-700 hover:bg-red-200"
                                 title="Remove player"
                               >
                                 <X size={14} />
@@ -647,7 +647,7 @@ export default function ManagePlayers() {
                             <select
                               value={p.role}
                               onChange={e => handleRoleChange(p, e.target.value)}
-                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                              className={`text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
                             >
                               <option value="player">Player</option>
                               <option value="captain">Captain</option>
@@ -678,7 +678,7 @@ export default function ManagePlayers() {
                           <select
                             value={p.auction_category || ""}
                             onChange={e => handleAuctionCategoryChange(p, e.target.value)}
-                            className="text-xs font-medium rounded px-2 py-1 border border-gray-200 bg-white text-gray-700"
+                            className="text-xs font-medium rounded-lg px-2 py-2.5 min-h-[44px] border border-gray-200 bg-white text-gray-700"
                           >
                             {AUCTION_CATEGORY_OPTIONS.map(opt => (
                               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -692,7 +692,7 @@ export default function ManagePlayers() {
                             <select
                               value={p.tournament_status || "not_played"}
                               onChange={e => handleStatusChange(p, e.target.value)}
-                              className={`text-xs font-semibold rounded px-2 py-1 border-0 ${meta.color}`}
+                              className={`text-xs font-semibold rounded-lg px-2 py-2.5 min-h-[44px] border-0 ${meta.color}`}
                             >
                               {STATUS_OPTIONS.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -704,7 +704,7 @@ export default function ManagePlayers() {
                         <div>
                           <button
                             onClick={() => toggleStats(p)}
-                            className="flex items-center gap-1.5 text-xs text-gray-700 hover:text-cricket-navy"
+                            className="flex items-center gap-1.5 text-xs text-gray-700 hover:text-cricket-navy active:text-cricket-navy min-h-[44px] -my-2 transition-colors duration-150"
                           >
                             <span>Bat {p.batting_average ?? "—"}/{p.strike_rate ?? "—"} · Bowl {p.bowling_average ?? "—"}/{p.economy ?? "—"}</span>
                             {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -720,7 +720,7 @@ export default function ManagePlayers() {
                           <button
                             onClick={() => handleResetPassword(p)}
                             disabled={resettingPassword === p.id}
-                            className="flex items-center gap-1 text-xs py-1.5 px-3 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                            className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 active:scale-[0.96] transition-all duration-150 disabled:opacity-50"
                           >
                             <KeyRound size={13} /> Reset Password
                           </button>
@@ -729,13 +729,13 @@ export default function ManagePlayers() {
                               <button
                                 onClick={() => handleSaveRow(p)}
                                 disabled={submitting}
-                                className="flex items-center gap-1 text-xs py-1.5 px-3 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-green-100 text-green-700 hover:bg-green-200 active:scale-[0.96] transition-all duration-150"
                               >
                                 <Check size={13} /> Save
                               </button>
                               <button
                                 onClick={() => setEditId(null)}
-                                className="flex items-center gap-1 text-xs py-1.5 px-3 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 active:scale-[0.96] transition-all duration-150"
                               >
                                 <X size={13} /> Cancel
                               </button>
@@ -743,7 +743,7 @@ export default function ManagePlayers() {
                           ) : (
                             <button
                               onClick={() => startEdit(p)}
-                              className="flex items-center gap-1 text-xs py-1.5 px-3 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                              className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 active:scale-[0.96] transition-all duration-150"
                             >
                               <Edit2 size={13} /> Edit
                             </button>
@@ -751,7 +751,7 @@ export default function ManagePlayers() {
                           {!isCaptain && !isEditing && (
                             <button
                               onClick={() => handleDeactivate(p)}
-                              className="flex items-center gap-1 text-xs py-1.5 px-3 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                              className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-red-100 text-red-700 hover:bg-red-200 active:scale-[0.96] transition-all duration-150"
                             >
                               <X size={13} /> Remove
                             </button>

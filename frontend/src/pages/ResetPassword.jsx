@@ -35,14 +35,14 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-cricket-navy via-pitch-800 to-cricket-navy px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-cricket-navy via-pitch-800 to-cricket-navy px-4 py-8 safe-top safe-bottom safe-x">
       <div className="text-center mb-8">
         <div className="text-6xl mb-3">🏏</div>
-        <h1 className="text-3xl font-bold text-white">BCC-CVote</h1>
+        <h1 className="text-3xl font-bold text-white tracking-tight">BCC-CVote</h1>
         <p className="text-gray-400 text-xs mt-1">Powered by {COMPANY_NAME}</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
+      <div className="bg-white rounded-2xl shadow-soft-lg w-full max-w-sm p-8">
         <div className="flex items-center gap-2 mb-1">
           <KeyRound size={20} className="text-pitch-600" />
           <h2 className="text-xl font-bold text-gray-900">Reset Password</h2>
@@ -52,7 +52,7 @@ export default function ResetPassword() {
         </p>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-lg mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl mb-4">
             {error}
           </div>
         )}
@@ -103,7 +103,7 @@ export default function ResetPassword() {
         </form>
 
         <p className="text-xs text-gray-400 text-center mt-6">
-          Forgot your current password too? <Link to="/login" className="underline">Contact your organizer</Link> for a manual reset.
+          Forgot your current password too? <Link to="/login" className="underline text-pitch-700 font-medium">Contact your organizer</Link> for a manual reset.
         </p>
       </div>
     </div>

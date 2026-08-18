@@ -13,11 +13,11 @@ export default function AvailabilityGrid({ matrix, slots }) {
   if (!matrix?.length) return <p className="text-gray-500 text-sm">No votes yet.</p>;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto scroll-touch">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="bg-gray-50">
-            <th className="text-left px-4 py-3 font-semibold text-gray-700 border-b">Captain</th>
+            <th className="sticky left-0 z-10 bg-gray-50 text-left px-4 py-3 font-semibold text-gray-700 border-b">Captain</th>
             <th className="text-left px-4 py-3 font-semibold text-gray-700 border-b">Team</th>
             {slots?.map((s) => (
               <th key={s.slot_number} className="px-4 py-3 font-semibold text-gray-700 border-b text-center whitespace-nowrap">
@@ -30,9 +30,9 @@ export default function AvailabilityGrid({ matrix, slots }) {
         <tbody>
           {matrix.map((row, i) => (
             <tr key={row.captain.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-              <td className="px-4 py-3 font-medium text-gray-900 border-b">{row.captain.name}</td>
+              <td className={`sticky left-0 z-10 px-4 py-3 font-medium text-gray-900 border-b ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>{row.captain.name}</td>
               <td className="px-4 py-3 border-b">
-                <span className="bg-cricket-navy text-white text-xs font-bold px-2 py-0.5 rounded">
+                <span className="bg-gradient-to-b from-cricket-navy to-cricket-navy-light text-white text-xs font-bold px-2.5 py-1 rounded-lg">
                   {row.captain.team_code}
                 </span>
               </td>

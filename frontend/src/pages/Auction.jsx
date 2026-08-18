@@ -306,10 +306,7 @@ export default function Auction() {
             <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
             <p className="text-gray-700 font-medium">Couldn't load this auction</p>
             <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
-            <button
-              onClick={refetch}
-              className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border-2 border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 font-medium transition-colors min-h-[44px]"
-            >
+            <button onClick={refetch} className="btn-secondary">
               Retry
             </button>
           </div>

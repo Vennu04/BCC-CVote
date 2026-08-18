@@ -4,10 +4,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Same key names as before (pitch/cricket) — every existing
+        // bg-pitch-600 / text-cricket-gold / etc. across the app keeps
+        // working unchanged. Only added a couple of intermediate shades
+        // (300/400) needed for gradients, and gold-dark for gradient buttons.
         pitch: {
           50:  "#f0fdf4",
           100: "#dcfce7",
           200: "#bbf7d0",
+          300: "#86efac",
+          400: "#4ade80",
           500: "#22c55e",
           600: "#16a34a",
           700: "#15803d",
@@ -15,14 +21,32 @@ export default {
           900: "#14532d",
         },
         cricket: {
-          red:    "#dc2626",
-          gold:   "#f59e0b",
-          navy:   "#1e3a5f",
-          cream:  "#fef9ee",
+          red:      "#dc2626",
+          gold:     "#f59e0b",
+          "gold-dark": "#d97706",
+          navy:     "#1e3a5f",
+          "navy-light": "#2d4d78",
+          cream:    "#fef9ee",
         },
       },
+      // System font stack only — no CDN webfont (offline-safe, matches the
+      // native look on both platforms: San Francisco on iOS, Roboto on
+      // Android). Previously loaded "Inter" from Google Fonts in index.html,
+      // which silently broke the app's own "must work offline" requirement;
+      // removed there too.
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: [
+          "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto",
+          "system-ui", "sans-serif",
+        ],
+      },
+      // Softer, more layered shadows than Tailwind's defaults — used by the
+      // restyled .card/.btn-* classes. Kept off box-shadow transitions
+      // (only transform/opacity animate) per the Android performance ask.
+      boxShadow: {
+        soft: "0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px -2px rgb(15 23 42 / 0.08)",
+        "soft-lg": "0 4px 8px rgb(15 23 42 / 0.04), 0 12px 28px -6px rgb(15 23 42 / 0.14)",
+        "glow-pitch": "0 4px 14px -2px rgb(22 163 74 / 0.35)",
       },
     },
   },
