@@ -7,7 +7,46 @@ import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import playersPhoto from "../../assets/dashboard-backgrounds/players.webp";
-import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp, Search, Copy } from "lucide-react";
+
+// Both password-generation flows (Add Player's default password, Reset
+// Password's temp password) used to leave admin reading the value out of a
+// toast and retyping it into WhatsApp by hand. Same clipboard pattern as
+// admin/Auction.jsx's "Copy Teams"/"Copy Practice Link" buttons, just
+// surfaced inside the toast itself since there's no persistent card here to
+// hang a button off of.
+function showPasswordToast(label, password) {
+  toast.custom(
+    (t) => (
+      <div
+        className={`flex items-center gap-3 max-w-sm bg-white border border-gray-200 shadow-soft-lg rounded-xl px-4 py-3 ${
+          t.visible ? "animate-enter" : "animate-leave"
+        }`}
+      >
+        <div className="min-w-0">
+          <p className="text-sm text-gray-700">{label}</p>
+          <p className="text-sm font-mono font-semibold text-pitch-700 truncate">{password}</p>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(password);
+              toast.success("Copied", { duration: 1500 });
+            } catch {
+              toast.error("Couldn't copy — your browser may be blocking clipboard access");
+            }
+          }}
+          className="icon-btn shrink-0 text-pitch-600 hover:bg-pitch-50"
+          aria-label="Copy password"
+        >
+          <Copy size={16} />
+        </button>
+      </div>
+    ),
+    { duration: 15000 }
+  );
+}
 
 const AUCTION_CATEGORY_OPTIONS = [
   { value: "",                       label: "Not set" },
@@ -135,7 +174,7 @@ export default function ManagePlayers() {
         name: form.name, team_code: form.team_code, password: form.password,
       });
       const added = res.data.captain || res.data.player;
-      toast.success(`${added.name} added! Password: ${res.data.default_password}`);
+      showPasswordToast(`${added.name} added! Password:`, res.data.default_password);
       setForm({ role: "player", name: "", team_code: "", password: "" });
       setShowForm(false);
       fetchPlayers();
@@ -221,7 +260,7 @@ export default function ManagePlayers() {
       setResettingPassword(p.id);
       try {
         const res = await api.post(`/admin/${endpointFor(p)}/${p.id}/reset-password`);
-        toast.success(`${p.name}'s temporary password: ${res.data.temp_password}`, { duration: 15000 });
+        showPasswordToast(`${p.name}'s temporary password:`, res.data.temp_password);
         await fetchPlayers();
       } catch (err) {
         toast.error(err.response?.data?.error || "Failed to reset password");

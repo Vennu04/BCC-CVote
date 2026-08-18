@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 import Navbar from "../components/Navbar";
-import { BarChart2, Lock, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { BarChart2, Lock, ChevronDown, ChevronUp, Users, AlertTriangle, RefreshCw } from "lucide-react";
 import { LoadingState } from "../components/LoadingState";
 
 const AVAILABILITY_COLOR = {
@@ -44,22 +44,49 @@ function AttendanceList({ attendance }) {
 export default function Results() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState({});
 
   const toggleExpanded = (slotId) => setExpanded((prev) => ({ ...prev, [slotId]: !prev[slotId] }));
 
-  useEffect(() => {
+  const fetchResults = () => {
+    setLoading(true);
     api.get("/votes/summary")
-      .then((res) => setData(res.data))
-      .catch(() => {})
+      .then((res) => { setData(res.data); setError(false); })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(fetchResults, []);
 
   if (loading) return (
     <div className="min-h-screen"><Navbar />
       <div className="flex items-center justify-center h-64"><LoadingState label="Loading results…" /></div>
     </div>
   );
+
+  // Distinguish "the fetch failed" from "there's genuinely nothing to show
+  // yet" -- same fix VotingSlots.jsx already has, applied here since both
+  // used to render the identical "No results yet" empty state, which
+  // misleadingly read as "voting hasn't started" even on a real network/
+  // server error with a one-click fix (retry).
+  if (error && !data) {
+    return (
+      <div className="min-h-screen bg-cricket-cream">
+        <Navbar />
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <div className="card text-center py-12">
+            <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
+            <p className="text-gray-700 font-medium">Couldn't load results</p>
+            <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
+            <button onClick={fetchResults} className="btn-secondary inline-flex items-center gap-1.5">
+              <RefreshCw size={14} /> Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const summary = data?.summary || [];
 
