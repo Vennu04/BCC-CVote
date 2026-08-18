@@ -19,6 +19,7 @@ services:
       SECRET_KEY: dev-secret-local
       FRONTEND_URL: "http://localhost:5173"
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      DEVICE_LOCK_ENABLED: "false"
     ports:
       - "5000:5000"
     volumes:
