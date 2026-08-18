@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "../components/ProtectedRoute";
-import { COMPANY_NAME } from "../config/appMeta";
+import { COMPANY_NAME, TOURNAMENT_NAME } from "../config/appMeta";
 import toast from "react-hot-toast";
 import loginBackground from "../assets/branding/login-background.webp";
 import venuhyaIcon from "../assets/branding/venuhya-icon.png";
@@ -49,6 +49,9 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img src={venuhyaIcon} alt={COMPANY_NAME} className="w-20 h-20 mx-auto mb-3 rounded-2xl shadow-soft-lg" />
+          <span className="inline-block text-xs font-semibold tracking-wide text-cricket-navy bg-cricket-gold rounded-full px-3 py-1 mb-2 shadow-soft">
+            {TOURNAMENT_NAME}
+          </span>
           <h1 className="text-3xl font-bold text-white tracking-tight">BCC-CVote</h1>
           <p className="text-gray-200 text-sm mt-1">Cricket Captain Availability Voting</p>
           <p className="text-gray-400 text-xs mt-1">Powered by {COMPANY_NAME}</p>
