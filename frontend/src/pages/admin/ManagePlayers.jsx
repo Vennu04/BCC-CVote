@@ -29,6 +29,12 @@ const AUCTION_CATEGORY_FILTER_OPTIONS = [
   { value: "classic",                label: "Classic" },
 ];
 
+const ROLE_FILTER_OPTIONS = [
+  { value: "",        label: "All Roles" },
+  { value: "captain", label: "Captains Only" },
+  { value: "player",  label: "Players Only" },
+];
+
 const STATUS_OPTIONS = [
   { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-gray-600" },
   { value: "in_progress", label: "In-Progress",          color: "bg-blue-100 text-blue-700" },
@@ -39,6 +45,13 @@ const STATUS_OPTIONS = [
 function statusMeta(value) {
   return STATUS_OPTIONS.find(s => s.value === value) || STATUS_OPTIONS[0];
 }
+
+// "" means "no filter applied", same sentinel convention as the other two
+// filters below.
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All Statuses" },
+  ...STATUS_OPTIONS,
+];
 
 // Captains and players are both rows in the same voter roster (GET
 // /admin/players already returns everyone), but they're backed by two
@@ -61,6 +74,8 @@ export default function ManagePlayers() {
   const [resettingPassword, setResettingPassword] = useState(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [mobileExpanded, setMobileExpanded] = useState(new Set());
   const { confirmProps, requestConfirm } = useConfirm();
 
@@ -79,9 +94,16 @@ export default function ManagePlayers() {
       const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.team_code.toLowerCase().includes(q);
       const matchesCategory = !categoryFilter
         || (categoryFilter === "unset" ? !p.auction_category : p.auction_category === categoryFilter);
-      return matchesSearch && matchesCategory;
+      const matchesRole = !roleFilter || p.role === roleFilter;
+      // Status is captain-only (see the Status column below) — a status
+      // filter naturally excludes every player row, and a captain with no
+      // tournament_status set yet is treated as "not_played", same fallback
+      // statusMeta() already uses for what the column actually displays.
+      const matchesStatus = !statusFilter
+        || (p.role === "captain" && (p.tournament_status || "not_played") === statusFilter);
+      return matchesSearch && matchesCategory && matchesRole && matchesStatus;
     });
-  }, [players, search, categoryFilter]);
+  }, [players, search, categoryFilter, roleFilter, statusFilter]);
 
   const fetchPlayers = async () => {
     try {
@@ -361,7 +383,7 @@ export default function ManagePlayers() {
           </form>
         )}
 
-        {/* Search + Auction Category filter */}
+        {/* Search + Role + Status + Auction Category filters */}
         {!loading && players.length > 0 && (
           <div className="flex flex-wrap gap-3 mb-4">
             <div className="relative max-w-sm flex-1 min-w-[200px]">
@@ -374,6 +396,25 @@ export default function ManagePlayers() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <select
+              className="input-field max-w-[200px]"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+            >
+              {ROLE_FILTER_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <select
+              className="input-field max-w-[200px]"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              title="Filters captains only — players never have a tournament status"
+            >
+              {STATUS_FILTER_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
             <select
               className="input-field max-w-[240px]"
               value={categoryFilter}
@@ -768,8 +809,8 @@ export default function ManagePlayers() {
             {players.length > 0 && filteredPlayers.length === 0 && (
               <EmptyState message={
                 search
-                  ? `No players match "${search}"${categoryFilter ? " in that category" : ""}.`
-                  : "No players in that category."
+                  ? `No players match "${search}"${roleFilter || categoryFilter || statusFilter ? " with the current filters" : ""}.`
+                  : `No ${roleFilter === "captain" ? "captains" : roleFilter === "player" ? "players" : "voters"} match the current filters.`
               } />
             )}
           </div>
