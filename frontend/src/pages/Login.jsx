@@ -38,7 +38,7 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 relative bg-cover bg-center"
+      className="min-h-screen flex flex-col items-center justify-center px-4 py-8 relative bg-cover bg-center safe-top safe-bottom safe-x"
       style={{ backgroundImage: `url(${loginBackground})` }}
     >
       {/* Dark navy overlay over the photo — just enough to keep the card/text
@@ -48,26 +48,26 @@ export default function Login() {
       <div className="relative z-10 flex flex-col items-center w-full">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src={venuhyaIcon} alt={COMPANY_NAME} className="w-20 h-20 mx-auto mb-3 rounded-2xl shadow-lg" />
-          <h1 className="text-3xl font-bold text-white">BCC-CVote</h1>
-          <p className="text-gray-300 text-sm mt-1">Cricket Captain Availability Voting</p>
+          <img src={venuhyaIcon} alt={COMPANY_NAME} className="w-20 h-20 mx-auto mb-3 rounded-2xl shadow-soft-lg" />
+          <h1 className="text-3xl font-bold text-white tracking-tight">BCC-CVote</h1>
+          <p className="text-gray-200 text-sm mt-1">Cricket Captain Availability Voting</p>
           <p className="text-gray-400 text-xs mt-1">Powered by {COMPANY_NAME}</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
+        <div className="bg-white rounded-2xl shadow-soft-lg w-full max-w-sm p-8">
           <h2 className="text-xl font-bold text-gray-900 mb-1">Sign In</h2>
           <p className="text-sm text-gray-500 mb-6">Enter your team code and password</p>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-lg mb-4">
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl mb-4">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Team Code</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Team Code</label>
               <input
                 type="text"
                 className="input-field uppercase"
@@ -79,9 +79,9 @@ export default function Login() {
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-gray-700">Password</label>
-                <Link to="/reset-password" className="text-xs text-pitch-600 hover:text-pitch-700 font-medium">
+                <Link to="/reset-password" className="text-xs text-pitch-600 hover:text-pitch-700 font-medium min-h-[44px] flex items-center">
                   Reset Password
                 </Link>
               </div>

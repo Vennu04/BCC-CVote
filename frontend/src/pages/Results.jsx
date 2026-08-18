@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../utils/api";
 import Navbar from "../components/Navbar";
 import { BarChart2, Lock, ChevronDown, ChevronUp, Users } from "lucide-react";
+import { LoadingState } from "../components/LoadingState";
 
 const AVAILABILITY_COLOR = {
   available:     "bg-green-500",
@@ -56,7 +57,7 @@ export default function Results() {
 
   if (loading) return (
     <div className="min-h-screen"><Navbar />
-      <div className="flex items-center justify-center h-64"><p className="text-gray-500">Loading…</p></div>
+      <div className="flex items-center justify-center h-64"><LoadingState label="Loading results…" /></div>
     </div>
   );
 
@@ -91,7 +92,7 @@ export default function Results() {
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{slot.day}</p>
                       <p className="font-bold text-gray-900">{slot.time_of_day}</p>
                     </div>
-                    <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2.5 py-1">
+                    <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-3 py-1 border border-gray-200">
                       {total_voted}/{total_captains} voted
                     </span>
                   </div>
@@ -129,7 +130,7 @@ export default function Results() {
                         <button
                           type="button"
                           onClick={() => toggleExpanded(slot.id)}
-                          className="flex items-center gap-1 text-xs font-medium text-pitch-600 hover:text-pitch-700"
+                          className="flex items-center gap-1 text-xs font-medium text-pitch-600 hover:text-pitch-700 active:text-pitch-800 min-h-[44px] -my-2 transition-colors duration-150"
                         >
                           <Users size={13} />
                           {expanded[slot.id] ? "Hide players" : "View players"}

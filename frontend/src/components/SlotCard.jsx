@@ -121,7 +121,7 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           <button
             type="button"
             onClick={() => setShowAvailable((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-pitch-600 hover:text-pitch-700"
+            className="flex items-center gap-1.5 text-xs font-medium text-pitch-600 hover:text-pitch-700 active:text-pitch-800 min-h-[44px] -my-2 transition-colors duration-150"
           >
             <Users size={13} />
             Available Players ({availablePlayers.length})
@@ -141,7 +141,7 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           onClick={() => onRevoke(slot.id)}
           disabled={revoking}
           title={windowInfo.revoke_deadline ? `Available until ${windowInfo.revoke_deadline}` : undefined}
-          className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-300 rounded-lg py-1.5 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+          className="mt-3 w-full min-h-[44px] flex items-center justify-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-300 rounded-xl py-1.5 hover:bg-amber-100 active:scale-[0.98] active:bg-amber-100 disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
         >
           <AlertTriangle size={12} />
           {revoking ? "Withdrawing…" : "Emergency — Remove My Name"}

@@ -30,11 +30,11 @@ export default function CaptainDashboard() {
         {/* My Team card */}
         <div className="card mb-6 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="bg-cricket-navy text-white rounded-lg p-2.5">
+            <div className="bg-gradient-to-br from-cricket-navy to-cricket-navy-light text-white rounded-xl p-3 shadow-soft">
               <Shield size={20} />
             </div>
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">My Team</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">My Team</p>
               <p className="font-bold text-gray-900">{user?.team_name || <span className="text-gray-400 italic">No team name set</span>}</p>
               <p className="text-xs text-gray-500">Code: {user?.team_code}</p>
             </div>
@@ -48,7 +48,7 @@ export default function CaptainDashboard() {
               <p className="text-lg font-bold text-cricket-navy">{user?.matches_played ?? 0}</p>
               <p className="text-[11px] text-gray-500 uppercase">Played</p>
             </div>
-            <span className={`text-xs font-semibold rounded-full px-3 py-1.5 ${status.color}`}>
+            <span className={`text-xs font-semibold rounded-full px-3 py-1.5 border border-black/5 ${status.color}`}>
               {status.label}
             </span>
           </div>

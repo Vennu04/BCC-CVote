@@ -13,6 +13,7 @@ import ReleaseOrderLog from "../../components/ReleaseOrderLog";
 import { useAuction } from "../../hooks/useAuction";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2 } from "lucide-react";
+import { LoadingState } from "../../components/LoadingState";
 
 const STORAGE_KEY = "bcc_active_auction_id";
 
@@ -360,7 +361,7 @@ export default function AdminAuction() {
           <div className="flex items-center gap-3">
             {auction?.status === "active" && <CountdownBadge endsAtIso={auction.ends_at_iso} />}
             {auctionId && (
-              <button onClick={handleNewAuction} className="flex items-center gap-1 text-xs text-gray-500 hover:text-pitch-600">
+              <button onClick={handleNewAuction} className="flex items-center gap-1 text-xs text-gray-500 hover:text-pitch-600 active:text-pitch-700 min-h-[44px] px-2 -my-2 transition-colors duration-150">
                 <RefreshCw size={13} /> Start a new auction
               </button>
             )}
@@ -380,7 +381,7 @@ export default function AdminAuction() {
                   key={slot.id}
                   type="button"
                   onClick={() => { setSelectedSlotId(slot.id); setCaptainAId(""); setCaptainBId(""); }}
-                  className={`text-left rounded-lg border-2 px-3 py-2.5 transition-colors ${
+                  className={`text-left rounded-xl border-2 px-3 py-2.5 min-h-[44px] transition-all duration-150 active:scale-[0.98] ${
                     selectedSlotId === slot.id ? "border-pitch-400 bg-pitch-50" : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
                 >
@@ -554,7 +555,7 @@ export default function AdminAuction() {
           </div>
         )}
 
-        {auctionId && loading && <p className="text-gray-500 text-sm">Loading…</p>}
+        {auctionId && loading && <LoadingState label="Loading auction…" />}
 
         {auctionId && auction && (
           <>
@@ -612,7 +613,7 @@ export default function AdminAuction() {
                   <button onClick={handleStart} disabled={starting} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
                     <PlayCircle size={16} /> {starting ? "Starting…" : "Start Auction (25 min clock)"}
                   </button>
-                  <button onClick={handleCancelPending} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800">
+                  <button onClick={handleCancelPending} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 active:text-red-800 min-h-[44px] px-2 -my-2 transition-colors duration-150">
                     <StopCircle size={13} /> Cancel
                   </button>
                 </div>
@@ -632,7 +633,7 @@ export default function AdminAuction() {
                         <button
                           onClick={handleResume}
                           disabled={resuming}
-                          className="flex items-center gap-1 text-xs py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50"
+                          className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-xl border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
                         >
                           <PlayCircle size={13} /> {resuming ? "Resuming…" : "Resume Auto-Release"}
                         </button>
@@ -640,13 +641,13 @@ export default function AdminAuction() {
                         <button
                           onClick={handlePause}
                           disabled={pausing}
-                          className="flex items-center gap-1 text-xs py-1.5 px-3 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                          className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-xl border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
                         >
                           <Pause size={13} /> {pausing ? "Pausing…" : "Pause Auto-Release"}
                         </button>
                       )
                     )}
-                    <button onClick={handleClose} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800">
+                    <button onClick={handleClose} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 active:text-red-800 min-h-[44px] px-2 -my-2 transition-colors duration-150">
                       <StopCircle size={13} /> Force Close
                     </button>
                   </div>
@@ -680,7 +681,7 @@ export default function AdminAuction() {
                       <button
                         onClick={() => handleRelease(group)}
                         disabled={releasing === group || !!auction.current_player}
-                        className="text-sm py-1.5 px-3 rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 disabled:opacity-50 whitespace-nowrap"
+                        className="text-sm py-1.5 px-3 min-h-[44px] rounded-xl border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 whitespace-nowrap"
                       >
                         {releasing === group ? "Releasing…" : "Release Next"}
                       </button>

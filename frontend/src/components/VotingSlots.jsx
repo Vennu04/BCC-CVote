@@ -30,7 +30,7 @@ export default function VotingSlots({ voting }) {
         <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
         <button
           onClick={fetchVotes}
-          className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border-2 border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 font-medium transition-colors min-h-[44px]"
+          className="btn-secondary inline-flex items-center gap-1.5"
         >
           <RefreshCw size={14} /> Retry
         </button>
@@ -45,7 +45,7 @@ export default function VotingSlots({ voting }) {
     <>
       {/* All voted banner */}
       {allVoted && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 mb-4 text-sm font-medium">
+        <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 mb-4 text-sm font-medium shadow-soft">
           <CheckCircle size={18} />
           <span>All slots voted!</span>
         </div>
@@ -63,7 +63,7 @@ export default function VotingSlots({ voting }) {
           <button
             onClick={handleNotAvailableWeek}
             disabled={submitting === "all" || !anyOpen}
-            className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium transition-colors disabled:opacity-50 min-h-[44px]"
+            className="flex items-center gap-1.5 text-sm px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] font-medium transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
             title={anyOpen ? "" : "No voting windows are open right now"}
           >
             <XCircle size={15} />
@@ -71,9 +71,9 @@ export default function VotingSlots({ voting }) {
           </button>
           <button
             onClick={fetchVotes}
-            className="flex items-center gap-1 hover:text-pitch-600 transition-colors text-xs text-gray-400 min-h-[44px] min-w-[44px] justify-center"
+            className="icon-btn text-gray-400 hover:text-pitch-600 hover:bg-pitch-50"
           >
-            <RefreshCw size={13} />
+            <RefreshCw size={15} />
           </button>
         </div>
       </div>

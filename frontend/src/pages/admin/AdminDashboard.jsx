@@ -9,7 +9,7 @@ import YetToVotePanel from "../../components/YetToVotePanel";
 import { LoadingState } from "../../components/LoadingState";
 import adminPhoto from "../../assets/dashboard-backgrounds/admin.webp";
 import { STATUS_STYLES } from "../../utils/windowStatus";
-import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList } from "lucide-react";
+import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList, CalendarDays } from "lucide-react";
 
 // Live vote counts matter most on this page (the Thu-Fri voting window is
 // actively running), so it polls in the background — same pattern as
@@ -148,9 +148,11 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
             {visibleSlots.map((slot) => (
-              <div key={slot.slot_id} className="card text-center">
+              <div key={slot.slot_id} className="card text-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-pitch-400 to-pitch-600" />
+                <CalendarDays size={16} className="mx-auto text-gray-400 mb-1" />
                 <p className="text-xs font-medium text-gray-500 uppercase">{slot.day} {slot.time_of_day}</p>
-                <span className={`inline-block text-[10px] font-semibold rounded-full px-2 py-0.5 mt-1 ${STATUS_STYLES[slot.window?.status]?.className || "bg-gray-100 text-gray-600"}`}>
+                <span className={`inline-block text-[10px] font-semibold rounded-full px-2.5 py-1 mt-1.5 border border-black/5 ${STATUS_STYLES[slot.window?.status]?.className || "bg-gray-100 text-gray-600"}`}>
                   {STATUS_STYLES[slot.window?.status]?.label || slot.window?.status || "UNKNOWN"}
                 </span>
                 {/* Compact weather glance — full forecast card lives on the
@@ -179,14 +181,14 @@ export default function AdminDashboard() {
         )}
 
         {/* Voted count */}
-        <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-          <Users size={16} />
+        <div className="flex items-center gap-2 text-sm text-gray-600 mb-4 bg-white/60 rounded-xl px-4 py-2.5 w-fit">
+          <Users size={16} className="text-pitch-600" />
           <span><strong>{data?.captains_voted}</strong> of <strong>{data?.captains_total}</strong> voters have voted</span>
         </div>
 
         {/* Full matrix */}
         <div className="card overflow-hidden p-0">
-          <div className="flex items-center gap-2 px-6 py-4 border-b bg-gray-50">
+          <div className="flex items-center gap-2 px-6 py-4 border-b bg-gradient-to-r from-gray-50 to-white">
             <BarChart2 size={18} className="text-pitch-600" />
             <h2 className="font-semibold text-gray-800">Captain × Slot Availability</h2>
           </div>

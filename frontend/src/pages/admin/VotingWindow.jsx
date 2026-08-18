@@ -323,14 +323,14 @@ export default function VotingWindow() {
                                       type="button"
                                       onClick={() => handleSaveDateOverride(slot.id)}
                                       disabled={savingDateSlot === slot.id}
-                                      className="text-xs font-medium text-pitch-600 hover:text-pitch-700"
+                                      className="text-xs font-medium text-pitch-600 hover:text-pitch-700 min-h-[44px] px-2 -my-2 transition-colors duration-150"
                                     >
                                       {savingDateSlot === slot.id ? "Saving…" : "Save"}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => setEditingDateSlot(null)}
-                                      className="text-xs text-gray-500 hover:text-gray-700"
+                                      className="text-xs text-gray-500 hover:text-gray-700 min-h-[44px] px-2 -my-2 transition-colors duration-150"
                                     >
                                       Cancel
                                     </button>
@@ -345,7 +345,7 @@ export default function VotingWindow() {
                                       type="button"
                                       onClick={() => setEditingDateSlot(slot.id)}
                                       title="Change date for this week"
-                                      className="text-gray-400 hover:text-pitch-600"
+                                      className="text-gray-400 hover:text-pitch-600 active:text-pitch-700 min-h-[44px] min-w-[44px] flex items-center justify-center -my-2 transition-colors duration-150"
                                     >
                                       <Pencil size={12} />
                                     </button>
@@ -355,7 +355,7 @@ export default function VotingWindow() {
                                         onClick={() => handleResetDateOverride(slot.id)}
                                         disabled={savingDateSlot === slot.id}
                                         title="Reset to natural weekend date"
-                                        className="text-gray-400 hover:text-red-600"
+                                        className="text-gray-400 hover:text-red-600 active:text-red-700 min-h-[44px] min-w-[44px] flex items-center justify-center -my-2 transition-colors duration-150"
                                       >
                                         <RotateCcw size={12} />
                                       </button>
@@ -426,7 +426,7 @@ export default function VotingWindow() {
                               <button
                                 type="button"
                                 onClick={() => handleCloseEarly(slot.id)}
-                                className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                                className="flex items-center gap-2 text-sm py-2.5 px-4 min-h-[44px] rounded-xl border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] font-medium transition-all duration-150"
                               >
                                 <XCircle size={14} /> Close Early
                               </button>
@@ -435,7 +435,7 @@ export default function VotingWindow() {
                               <button
                                 type="button"
                                 onClick={() => setCancelingSlot(cancelingSlot === slot.id ? null : slot.id)}
-                                className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                                className="flex items-center gap-2 text-sm py-2.5 px-4 min-h-[44px] rounded-xl border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] font-medium transition-all duration-150"
                               >
                                 <Ban size={14} /> Cancel Match
                               </button>
@@ -444,7 +444,7 @@ export default function VotingWindow() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveSlot(slot.id)}
-                                className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
+                                className="flex items-center gap-2 text-sm py-2.5 px-4 min-h-[44px] rounded-xl border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] font-medium transition-all duration-150"
                               >
                                 <Trash2 size={14} /> Remove
                               </button>
@@ -465,14 +465,14 @@ export default function VotingWindow() {
                               type="button"
                               onClick={() => handleCancelMatch(slot.id)}
                               disabled={savingCancelSlot === slot.id}
-                              className="text-sm py-2 px-4 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50"
+                              className="btn-danger text-sm py-2.5 px-4"
                             >
                               {savingCancelSlot === slot.id ? "Cancelling…" : "Confirm Cancel"}
                             </button>
                             <button
                               type="button"
                               onClick={() => setCancelingSlot(null)}
-                              className="text-sm py-2 px-4 text-gray-500 hover:text-gray-700"
+                              className="btn-ghost text-sm py-2.5 px-4"
                             >
                               Dismiss
                             </button>

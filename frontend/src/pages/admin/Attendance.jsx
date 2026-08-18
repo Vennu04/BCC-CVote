@@ -297,7 +297,7 @@ export default function Attendance() {
             {/* Desktop / tablet: table */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-cricket-navy text-white">
+                <thead className="bg-gradient-to-r from-cricket-navy to-cricket-navy-light text-white">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Rank</th>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
@@ -336,7 +336,7 @@ export default function Attendance() {
                           <button
                             onClick={() => handleIncrementAttendance(r)}
                             disabled={incrementingId === r.id}
-                            className="flex items-center gap-1 text-xs py-1 px-2 rounded border border-pitch-500 text-pitch-700 bg-pitch-50 hover:bg-pitch-100 disabled:opacity-50 whitespace-nowrap"
+                            className="flex items-center gap-1 text-xs py-1 px-2.5 min-h-[44px] rounded-lg border border-pitch-500 text-pitch-700 bg-pitch-50 hover:bg-pitch-100 active:scale-[0.95] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 whitespace-nowrap"
                             title={`Credit ${r.name} with attending one more match`}
                           >
                             <Plus size={13} /> {incrementingId === r.id ? "…" : "+1"}
@@ -397,7 +397,7 @@ export default function Attendance() {
                         <button
                           onClick={() => handleIncrementAttendance(r)}
                           disabled={incrementingId === r.id}
-                          className="flex items-center gap-1 text-xs py-1.5 px-3 rounded border border-pitch-500 text-pitch-700 bg-pitch-50 hover:bg-pitch-100 disabled:opacity-50"
+                          className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg border border-pitch-500 text-pitch-700 bg-pitch-50 hover:bg-pitch-100 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
                         >
                           <Plus size={13} /> {incrementingId === r.id ? "…" : "+1 Attendance"}
                         </button>

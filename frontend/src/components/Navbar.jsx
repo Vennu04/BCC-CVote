@@ -17,8 +17,10 @@ export default function Navbar() {
   // Highlights whichever nav link matches the current route, so a fast-scanning
   // admin always has an at-a-glance answer to "which admin page am I on".
   const navLinkClass = (path) =>
-    `flex items-center gap-1 transition-colors whitespace-nowrap py-1 ${
-      location.pathname === path ? "text-cricket-gold font-semibold" : "hover:text-cricket-gold"
+    `flex items-center gap-1.5 transition-colors duration-150 whitespace-nowrap py-2 px-1 min-h-[44px] rounded-lg ${
+      location.pathname === path
+        ? "text-cricket-gold font-semibold bg-white/10"
+        : "text-white/85 hover:text-cricket-gold active:bg-white/10"
     }`;
 
   // Lets a captain (or an admin who's also flagged as a voter) discover "I'm
@@ -44,16 +46,16 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-cricket-navy text-white shadow-md">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-y-2">
+    <nav className="sticky top-0 z-40 bg-gradient-to-b from-cricket-navy to-cricket-navy-light text-white shadow-soft safe-top">
+      <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between flex-wrap gap-y-2">
         {/* Logo */}
-        <Link to={homePathFor(user)} className="flex items-center gap-2 font-bold text-lg tracking-tight">
+        <Link to={homePathFor(user)} className="flex items-center gap-2 font-bold text-lg tracking-tight min-h-[44px]">
           <span className="text-2xl">🏏</span>
           <span>BCC<span className="text-cricket-gold">-CVote</span></span>
         </Link>
 
         {/* Nav links */}
-        <div className="order-3 sm:order-none w-full sm:w-auto flex items-center gap-x-4 gap-y-1 text-sm overflow-x-auto flex-wrap sm:flex-nowrap">
+        <div className="order-3 sm:order-none w-full sm:w-auto flex items-center gap-x-3 gap-y-1 text-sm overflow-x-auto scroll-touch flex-wrap sm:flex-nowrap">
           {isAdmin && (
             <>
               <Link to="/admin" className={navLinkClass("/admin")}>
@@ -93,7 +95,7 @@ export default function Navbar() {
               {myAuctionId && (
                 <Link
                   to={`/auction/${myAuctionId}`}
-                  className="flex items-center gap-1 text-xs font-semibold bg-cricket-gold text-cricket-navy rounded-full px-3 py-1 whitespace-nowrap animate-pulse"
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-b from-cricket-gold to-cricket-gold-dark text-cricket-navy rounded-full px-3.5 py-2 min-h-[36px] whitespace-nowrap shadow-soft animate-pulse active:scale-95 transition-transform duration-150"
                 >
                   <Gavel size={13} /> Join Auction
                 </Link>
@@ -103,18 +105,18 @@ export default function Navbar() {
         </div>
 
         {/* User + logout */}
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
+        <div className="flex items-center gap-1.5">
+          <div className="text-right hidden sm:block mr-1">
             <p className="text-xs text-gray-300">{user?.role === "admin" ? "Organizer" : user?.role === "player" ? "Player" : "Captain"}</p>
             <p className="text-sm font-semibold">{user?.name}</p>
           </div>
-          <span className="bg-pitch-600 text-white text-xs font-bold px-2 py-0.5 rounded">
+          <span className="bg-gradient-to-b from-pitch-500 to-pitch-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-soft">
             {user?.team_code}
           </span>
-          <Link to="/change-password" className="p-1.5 hover:text-cricket-gold transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center" title="Change Password">
+          <Link to="/change-password" className="icon-btn text-white/85 hover:text-cricket-gold" title="Change Password">
             <KeyRound size={18} />
           </Link>
-          <button onClick={handleLogout} className="p-1.5 hover:text-cricket-gold transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center" title="Logout">
+          <button onClick={handleLogout} className="icon-btn text-white/85 hover:text-cricket-gold" title="Logout">
             <LogOut size={18} />
           </button>
         </div>
