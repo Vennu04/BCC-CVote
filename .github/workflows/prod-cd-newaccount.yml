@@ -1,11 +1,12 @@
 name: Prod CD (New Account)
 
-# Runs alongside the existing prod-cd.yml during the migration window — every
-# push to main deploys to BOTH the old K3s stack and this new single-instance
-# stack, so the new account can be validated in parallel before cutover.
-# Once CloudFront is repointed and the old account is decommissioned
-# (see project migration notes), retire prod-cd.yml and this becomes the
-# only prod deploy workflow.
+# The only prod deploy workflow — the old K3s stack + its prod-cd.yml were
+# decommissioned 2026-08-18 once the old AWS account (661474704151) ran out
+# of free-tier credits. See INFRASTRUCTURE.md for the full architecture and
+# terraform/main.tf's header comment for the decommission record. The name
+# "(New Account)" is kept for continuity with existing GitHub environment/
+# secret naming (NEW_AWS_DEPLOY_ROLE_ARN, NEW_INSTANCE_ID) rather than a
+# functional distinction — there's no "old account" deploy anymore.
 
 on:
   push:
@@ -17,9 +18,11 @@ env:
   ECR_REGISTRY: 642195693540.dkr.ecr.ap-south-1.amazonaws.com
   BACKEND_REPO: bcc-cvote-backend
   FRONTEND_REPO: bcc-cvote-frontend
-  # Direct sslip.io URL until the old account's CloudFront distribution is
-  # repointed at cutover — switch this to the CloudFront URL once that
-  # happens, matching the old workflow's CLOUDFRONT_URL convention.
+  # Direct sslip.io URL, deliberately not the CloudFront URL — this smoke
+  # test only needs to confirm THIS instance is actually serving after a
+  # deploy; CloudFront (d2welg0wjdnhjp.cloudfront.net, still in the old
+  # account, see INFRASTRUCTURE.md) just proxies to whatever this resolves
+  # to and isn't itself redeployed by this workflow.
   APP_URL: https://13-234-252-190.sslip.io
 
 jobs:
