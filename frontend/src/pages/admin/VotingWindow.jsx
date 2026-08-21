@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
@@ -366,7 +367,16 @@ export default function VotingWindow() {
                             )}
                           </div>
                           <div className="flex flex-col items-end gap-1.5">
-                            {win?.status && (
+                            {win?.status && win.status === "auction_completed" && win.auction_id ? (
+                              <Link
+                                to={`/auction/${win.auction_id}`}
+                                className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 hover:opacity-80 ${STATUS_STYLES[win.status]?.className}`}
+                                title="View the completed auction's teams"
+                              >
+                                <Clock size={12} />
+                                {STATUS_STYLES[win.status]?.label} — {win.opens_at} to {win.closes_at}
+                              </Link>
+                            ) : win?.status && (
                               <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
                                 <Clock size={12} />
                                 {STATUS_STYLES[win.status]?.label || win.status} — {win.opens_at} to {win.closes_at}

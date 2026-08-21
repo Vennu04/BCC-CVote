@@ -1197,6 +1197,7 @@ def get_window():
                 {"window_id": str(window["_id"])}, sort=[("created_at", -1)]
             )
             window_info["status"] = _window_status(window, window_info, linked_auction)
+            window_info["auction_id"] = str(linked_auction["_id"]) if linked_auction else None
 
         windows.append({
             "slot": slot_dict,
