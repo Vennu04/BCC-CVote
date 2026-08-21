@@ -383,7 +383,19 @@ export default function AdminAuction() {
                 <button
                   key={slot.id}
                   type="button"
-                  onClick={() => { setSelectedSlotId(slot.id); setCaptainAId(""); setCaptainBId(""); }}
+                  onClick={() => {
+                    // A slot that already has a linked auction (any status —
+                    // completed, or a pending/active one someone forgot to
+                    // finish) should open that auction, not walk admin back
+                    // through the create-new-auction form for a slot the
+                    // backend would reject as a duplicate anyway.
+                    if (win?.auction_id) {
+                      localStorage.setItem(STORAGE_KEY, win.auction_id);
+                      setAuctionId(win.auction_id);
+                      return;
+                    }
+                    setSelectedSlotId(slot.id); setCaptainAId(""); setCaptainBId("");
+                  }}
                   className={`text-left rounded-xl border-2 px-3 py-2.5 min-h-[44px] transition-all duration-150 active:scale-[0.98] ${
                     selectedSlotId === slot.id ? "border-pitch-400 bg-pitch-50" : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
