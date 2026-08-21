@@ -289,8 +289,13 @@ export default function AdminAuction() {
     }
   };
 
-  const handleProxyBid = async (captainId) => {
-    const amount = parseFloat(proxyAmounts[captainId]);
+  // `explicitAmount` lets the quick-increment buttons below bypass the typed
+  // input entirely -- typing an exact number is the slowest part of running
+  // this panel during a fast back-and-forth, so a tap on "+1 above current"
+  // should need no typing at all. Falls back to whatever's in the input for
+  // the plain "Bid" button (custom/odd amounts, or the opening bid).
+  const handleProxyBid = async (captainId, explicitAmount) => {
+    const amount = explicitAmount != null ? explicitAmount : parseFloat(proxyAmounts[captainId]);
     if (!amount && amount !== 0) {
       toast.error("Enter an amount first");
       return;
@@ -731,36 +736,67 @@ export default function AdminAuction() {
                       For captains bidding out loud / over chat instead of using this page themselves —
                       enter what they said and it's recorded under the exact same rules a real click would use.
                     </p>
-                    {[auction.captain_a, auction.captain_b].map((c) => (
-                      <div key={c.captain_id} className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-800 w-20 truncate">{c.name}</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min={auction.starting_price}
-                          placeholder={`min ${auction.starting_price}`}
-                          value={proxyAmounts[c.captain_id] || ""}
-                          onChange={(e) => setProxyAmounts((prev) => ({ ...prev, [c.captain_id]: e.target.value }))}
-                          className="input-field flex-1 py-1.5 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleProxyBid(c.captain_id)}
-                          disabled={proxying === `${c.captain_id}:bid`}
-                          className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
-                        >
-                          {proxying === `${c.captain_id}:bid` ? "…" : "Bid"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleProxyDrop(c.captain_id)}
-                          disabled={proxying === `${c.captain_id}:drop`}
-                          className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
-                        >
-                          {proxying === `${c.captain_id}:drop` ? "…" : "Drop"}
-                        </button>
-                      </div>
-                    ))}
+                    <p className="text-xs text-gray-600">
+                      Current bid: <strong>{auction.current_player.current_high_bid}</strong>
+                      {auction.current_player.current_high_bidder
+                        ? <> — {auction.current_player.current_high_bidder}</>
+                        : <> (no bids yet — base price)</>}
+                    </p>
+                    {[auction.captain_a, auction.captain_b].map((c) => {
+                      // Quick-tap increments over the current high bid -- the main point of
+                      // these is skipping mental math + typing during a fast back-and-forth.
+                      // A captain who already holds the high bid can't rebid over themselves
+                      // (same rule the backend enforces), so their own quick buttons are inert.
+                      const isCurrentLeader = c.name === auction.current_player.current_high_bidder;
+                      const base = auction.current_player.current_high_bid;
+                      const quickAmounts = [0.5, 1, 2].map((extra) => Math.round((base + extra) * 2) / 2);
+                      return (
+                        <div key={c.captain_id} className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-800 w-20 truncate">{c.name}</span>
+                            <input
+                              type="number"
+                              step="0.5"
+                              min={auction.starting_price}
+                              placeholder={`min ${auction.starting_price}`}
+                              value={proxyAmounts[c.captain_id] || ""}
+                              onChange={(e) => setProxyAmounts((prev) => ({ ...prev, [c.captain_id]: e.target.value }))}
+                              className="input-field flex-1 py-1.5 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleProxyBid(c.captain_id)}
+                              disabled={proxying === `${c.captain_id}:bid`}
+                              className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
+                            >
+                              {proxying === `${c.captain_id}:bid` ? "…" : "Bid"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleProxyDrop(c.captain_id)}
+                              disabled={proxying === `${c.captain_id}:drop`}
+                              className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
+                            >
+                              {proxying === `${c.captain_id}:drop` ? "…" : "Drop"}
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1.5 pl-[5.5rem]">
+                            {quickAmounts.map((amt, i) => (
+                              <button
+                                key={amt}
+                                type="button"
+                                onClick={() => handleProxyBid(c.captain_id, amt)}
+                                disabled={isCurrentLeader || proxying === `${c.captain_id}:bid`}
+                                title={`Bid ${amt}`}
+                                className="text-xs py-1 px-2 min-h-[28px] rounded-md border border-gray-200 text-gray-600 bg-gray-50 hover:bg-pitch-50 hover:border-pitch-300 hover:text-pitch-700 active:scale-[0.97] disabled:opacity-40 disabled:hover:bg-gray-50 disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-all duration-150 whitespace-nowrap"
+                              >
+                                +{[0.5, 1, 2][i]} → {amt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
