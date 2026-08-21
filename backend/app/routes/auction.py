@@ -964,6 +964,64 @@ def get_auction(auction_id):
 
 # ── Captain actions ───────────────────────────────────────────────────────────────
 
+def _bid_core(auction, auction_id, captain_id, amount):
+    """Shared by the captain's own bid endpoint and admin's proxy-bid endpoint
+    below -- every rule (increments, base price, remaining points, quota) lives
+    here exactly once, so a captain bidding for themselves and admin recording
+    a bid on their behalf can never enforce the rules differently."""
+    if not auction.get("current_player_id"):
+        return {"error": "No player is currently up for bidding"}, 400
+
+    if round(amount * 2) != amount * 2:
+        return {"error": "Bids must be in increments of 0.5"}, 400
+
+    player = _player_doc(auction_id, auction["current_player_id"])
+    if not player or player["status"] != "available":
+        return {"error": "This player is no longer available"}, 400
+
+    # Every bid = 8.5 base + extra (0-17). The base is never drawn from the
+    # purse, so a captain with 0 points left can still open (or take) a
+    # player at exactly the base price — the "no points left" case only
+    # actually bites once extra > 0, checked below via remaining_points.
+    remaining_points = _captain_points_remaining(auction, captain_id)
+
+    last_bid = mongo.db.auction_bids.find_one(
+        {"auction_id": auction_id, "player_id": auction["current_player_id"], "action": "bid"},
+        sort=[("created_at", -1)],
+    )
+    if last_bid:
+        if last_bid["captain_id"] == captain_id:
+            return {"error": "You already have the highest bid"}, 400
+        if amount <= last_bid["amount"]:
+            return {"error": f"Bid must be higher than the current bid of {last_bid['amount']}"}, 400
+    else:
+        # The opening bid on a fresh player can be the base price itself —
+        # a captain can claim a player at 8.5 with no extra if the other
+        # captain doesn't outbid them.
+        min_total = auction["starting_price"]
+        if amount < min_total:
+            return {"error": f"Bid must be at least the {min_total} base price"}, 400
+
+    extra = round(amount - auction["starting_price"], 1)
+    if extra > remaining_points:
+        return {
+            "error": f"That bid needs {extra} extra points on top of the {auction['starting_price']} base, "
+                     f"but you only have {remaining_points} remaining"
+        }, 400
+
+    quota = _group_quota(auction, player["category"])
+    count, _ = _captain_counts(auction, captain_id, player["category"])
+    if count >= quota:
+        return {"error": "That captain has already filled their quota for this category"}, 400
+
+    mongo.db.auction_bids.insert_one({
+        "auction_id": auction_id, "player_id": auction["current_player_id"],
+        "captain_id": captain_id, "action": "bid", "amount": amount,
+        "created_at": utcnow(),
+    })
+    return {"message": "Bid placed", "amount": amount}, 200
+
+
 @auction_bp.route("/auction/<auction_id>/bid", methods=["POST"])
 @jwt_required()
 # Generous on purpose -- a real bidding war between two captains can mean
@@ -983,8 +1041,6 @@ def place_bid(auction_id):
     captain_id = str(user["_id"])
     if captain_id not in (auction["captain_a_id"], auction["captain_b_id"]):
         return jsonify({"error": "Only the two assigned captains can bid in this auction"}), 403
-    if not auction.get("current_player_id"):
-        return jsonify({"error": "No player is currently up for bidding"}), 400
 
     data = request.get_json(silent=True) or {}
     try:
@@ -992,72 +1048,15 @@ def place_bid(auction_id):
     except (TypeError, ValueError):
         return jsonify({"error": "A numeric amount is required"}), 400
 
-    if round(amount * 2) != amount * 2:
-        return jsonify({"error": "Bids must be in increments of 0.5"}), 400
-
-    player = _player_doc(auction_id, auction["current_player_id"])
-    if not player or player["status"] != "available":
-        return jsonify({"error": "This player is no longer available"}), 400
-
-    # Every bid = 8.5 base + extra (0-17). The base is never drawn from the
-    # purse, so a captain with 0 points left can still open (or take) a
-    # player at exactly the base price — the "no points left" case only
-    # actually bites once extra > 0, checked below via remaining_points.
-    remaining_points = _captain_points_remaining(auction, captain_id)
-
-    last_bid = mongo.db.auction_bids.find_one(
-        {"auction_id": auction_id, "player_id": auction["current_player_id"], "action": "bid"},
-        sort=[("created_at", -1)],
-    )
-    if last_bid:
-        if last_bid["captain_id"] == captain_id:
-            return jsonify({"error": "You already have the highest bid"}), 400
-        if amount <= last_bid["amount"]:
-            return jsonify({"error": f"Bid must be higher than the current bid of {last_bid['amount']}"}), 400
-    else:
-        # The opening bid on a fresh player can be the base price itself —
-        # a captain can claim a player at 8.5 with no extra if the other
-        # captain doesn't outbid them.
-        min_total = auction["starting_price"]
-        if amount < min_total:
-            return jsonify({"error": f"Bid must be at least the {min_total} base price"}), 400
-
-    extra = round(amount - auction["starting_price"], 1)
-    if extra > remaining_points:
-        return jsonify({
-            "error": f"That bid needs {extra} extra points on top of the {auction['starting_price']} base, "
-                     f"but you only have {remaining_points} remaining"
-        }), 400
-
-    quota = _group_quota(auction, player["category"])
-    count, _ = _captain_counts(auction, captain_id, player["category"])
-    if count >= quota:
-        return jsonify({"error": "You've already filled your quota for this category"}), 400
-
-    mongo.db.auction_bids.insert_one({
-        "auction_id": auction_id, "player_id": auction["current_player_id"],
-        "captain_id": captain_id, "action": "bid", "amount": amount,
-        "created_at": utcnow(),
-    })
-    return jsonify({"message": "Bid placed", "amount": amount})
+    payload, status = _bid_core(auction, auction_id, captain_id, amount)
+    return jsonify(payload), status
 
 
-@auction_bp.route("/auction/<auction_id>/drop", methods=["POST"])
-@jwt_required()
-@limiter.limit("60 per minute")
-def drop_player(auction_id):
-    auction = _auction_or_404(auction_id)
-    if not auction:
-        return jsonify({"error": "Auction not found"}), 404
-    if auction["status"] != "active":
-        return jsonify({"error": "Auction is not active"}), 400
-
-    user = get_current_user()
-    captain_id = str(user["_id"])
-    if captain_id not in (auction["captain_a_id"], auction["captain_b_id"]):
-        return jsonify({"error": "Only the two assigned captains can act in this auction"}), 403
+def _drop_core(auction, auction_id, captain_id):
+    """Shared by the captain's own drop endpoint and admin's proxy-drop
+    endpoint below -- see _bid_core's docstring for why this is factored out."""
     if not auction.get("current_player_id"):
-        return jsonify({"error": "No player is currently up for bidding"}), 400
+        return {"error": "No player is currently up for bidding"}, 400
 
     player_id = auction["current_player_id"]
     player = _player_doc(auction_id, player_id)
@@ -1082,7 +1081,7 @@ def drop_player(auction_id):
         sort=[("created_at", -1)],
     )
     if last_bid and last_bid["captain_id"] == captain_id:
-        return jsonify({"error": "You have the highest bid — you can't drop out now"}), 400
+        return {"error": "That captain has the highest bid — they can't drop out now"}, 400
 
     mongo.db.auction_bids.insert_one({
         "auction_id": auction_id, "player_id": player_id, "captain_id": captain_id,
@@ -1099,9 +1098,9 @@ def drop_player(auction_id):
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
         auction = _auction_or_404(auction_id)
         _check_leftover_award(auction, player["category"])
-        response = jsonify({"message": "Sold", "sold_to": other_captain, "sold_price": last_bid["amount"]})
+        result = {"message": "Sold", "sold_to": other_captain, "sold_price": last_bid["amount"]}
         _maybe_auto_release_next(auction_id)
-        return response
+        return result, 200
 
     already_dropped = mongo.db.auction_bids.find_one({
         "auction_id": auction_id, "player_id": player_id, "captain_id": other_captain, "action": "drop", **this_round,
@@ -1112,11 +1111,112 @@ def drop_player(auction_id):
         # back until every other player in the category has already gone.
         mongo.db.auction_players.update_one({"_id": ObjectId(player_id)}, {"$set": {"deprioritized": True}})
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
-        response = jsonify({"message": "Both captains passed — this player becomes the last option in their category"})
+        result = {"message": "Both captains passed — this player becomes the last option in their category"}
         _maybe_auto_release_next(auction_id)
-        return response
+        return result, 200
 
-    return jsonify({"message": "Dropped"})
+    return {"message": "Dropped"}, 200
+
+
+@auction_bp.route("/auction/<auction_id>/drop", methods=["POST"])
+@jwt_required()
+@limiter.limit("60 per minute")
+def drop_player(auction_id):
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+    if auction["status"] != "active":
+        return jsonify({"error": "Auction is not active"}), 400
+
+    user = get_current_user()
+    captain_id = str(user["_id"])
+    if captain_id not in (auction["captain_a_id"], auction["captain_b_id"]):
+        return jsonify({"error": "Only the two assigned captains can act in this auction"}), 403
+
+    payload, status = _drop_core(auction, auction_id, captain_id)
+    return jsonify(payload), status
+
+
+# ── Admin proxy actions ──────────────────────────────────────────────────────
+# For captains who aren't comfortable operating the bidding UI themselves --
+# same real-world situation as two captains negotiating out loud (or over
+# WhatsApp) while admin runs the actual auction. Admin picks which of the two
+# captains an action is for and submits it here; _bid_core/_drop_core enforce
+# the exact same rules a captain's own click would. Every action also drops a
+# note in the shared chat so both captains see it confirmed in the same place
+# they're watching, without admin having to type it out separately.
+
+def _log_proxy_note(auction_id, admin_user, note):
+    mongo.db.auction_chat.insert_one({
+        "auction_id": auction_id,
+        "sender_id": str(admin_user["_id"]),
+        "sender_name": admin_user.get("name", "Admin"),
+        "sender_role": "admin",
+        "message": note,
+        "created_at": utcnow(),
+    })
+
+
+def _require_auction_captain(auction, data):
+    captain_id = data.get("captain_id")
+    if captain_id not in (auction["captain_a_id"], auction["captain_b_id"]):
+        return None, (jsonify({"error": "captain_id must be one of this auction's two assigned captains"}), 400)
+    return captain_id, None
+
+
+@auction_bp.route("/admin/auction/<auction_id>/proxy-bid", methods=["POST"])
+@admin_required
+@limiter.limit("60 per minute")
+def admin_proxy_bid(auction_id):
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+    if auction["status"] != "active":
+        return jsonify({"error": "Auction is not active"}), 400
+
+    data = request.get_json(silent=True) or {}
+    captain_id, err = _require_auction_captain(auction, data)
+    if err:
+        return err
+
+    try:
+        amount = float(data.get("amount"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "A numeric amount is required"}), 400
+
+    player = _player_doc(auction_id, auction.get("current_player_id")) if auction.get("current_player_id") else None
+    payload, status = _bid_core(auction, auction_id, captain_id, amount)
+    if status == 200:
+        admin = get_current_user()
+        captain_name = mongo.db.users.find_one({"_id": ObjectId(captain_id)}, {"name": 1}).get("name", "Captain")
+        player_name = mongo.db.users.find_one({"_id": ObjectId(player["user_id"])}, {"name": 1}).get("name", "?") if player else "?"
+        _log_proxy_note(auction_id, admin, f"📝 Recorded: {captain_name} bids {amount} on {player_name}")
+    return jsonify(payload), status
+
+
+@auction_bp.route("/admin/auction/<auction_id>/proxy-drop", methods=["POST"])
+@admin_required
+@limiter.limit("60 per minute")
+def admin_proxy_drop(auction_id):
+    auction = _auction_or_404(auction_id)
+    if not auction:
+        return jsonify({"error": "Auction not found"}), 404
+    if auction["status"] != "active":
+        return jsonify({"error": "Auction is not active"}), 400
+
+    data = request.get_json(silent=True) or {}
+    captain_id, err = _require_auction_captain(auction, data)
+    if err:
+        return err
+
+    player = _player_doc(auction_id, auction.get("current_player_id")) if auction.get("current_player_id") else None
+    player_name = mongo.db.users.find_one({"_id": ObjectId(player["user_id"])}, {"name": 1}).get("name", "?") if player else "?"
+    payload, status = _drop_core(auction, auction_id, captain_id)
+    if status == 200:
+        admin = get_current_user()
+        captain_name = mongo.db.users.find_one({"_id": ObjectId(captain_id)}, {"name": 1}).get("name", "Captain")
+        _log_proxy_note(auction_id, admin, f"📝 Recorded: {captain_name} drops on {player_name} — {payload['message']}")
+    return jsonify(payload), status
 
 
 @auction_bp.route("/auction/<auction_id>/chat", methods=["POST"])

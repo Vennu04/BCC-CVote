@@ -72,6 +72,10 @@ export default function AdminAuction() {
   const [releasing, setReleasing] = useState(null);
   const [pausing, setPausing] = useState(false);
   const [resuming, setResuming] = useState(false);
+  // Proxy bid/drop -- for captains who don't want to operate the bidding UI
+  // themselves. Keyed by captain_id so both teams' amount inputs are independent.
+  const [proxyAmounts, setProxyAmounts] = useState({});
+  const [proxying, setProxying] = useState(null); // `${captainId}:bid` | `${captainId}:drop`
 
   const [auctionId, setAuctionId] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
   const { auction, loading, refetch, sendChatMessage, sendingChat } = useAuction(auctionId);
@@ -282,6 +286,36 @@ export default function AdminAuction() {
       toast.error(err.response?.data?.error || "Failed to release player");
     } finally {
       setReleasing(null);
+    }
+  };
+
+  const handleProxyBid = async (captainId) => {
+    const amount = parseFloat(proxyAmounts[captainId]);
+    if (!amount && amount !== 0) {
+      toast.error("Enter an amount first");
+      return;
+    }
+    setProxying(`${captainId}:bid`);
+    try {
+      await api.post(`/admin/auction/${auctionId}/proxy-bid`, { captain_id: captainId, amount });
+      setProxyAmounts((prev) => ({ ...prev, [captainId]: "" }));
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to record bid");
+    } finally {
+      setProxying(null);
+    }
+  };
+
+  const handleProxyDrop = async (captainId) => {
+    setProxying(`${captainId}:drop`);
+    try {
+      await api.post(`/admin/auction/${auctionId}/proxy-drop`, { captain_id: captainId });
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to record drop");
+    } finally {
+      setProxying(null);
     }
   };
 
@@ -686,6 +720,48 @@ export default function AdminAuction() {
                       <>Currently bidding: <strong>{auction.current_player.name}</strong></>
                     )}
                   </p>
+                )}
+
+                {auction.current_player && (
+                  <div className="border border-gray-200 rounded-lg p-3 mb-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Record on a captain's behalf
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      For captains bidding out loud / over chat instead of using this page themselves —
+                      enter what they said and it's recorded under the exact same rules a real click would use.
+                    </p>
+                    {[auction.captain_a, auction.captain_b].map((c) => (
+                      <div key={c.captain_id} className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-800 w-20 truncate">{c.name}</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min={auction.starting_price}
+                          placeholder={`min ${auction.starting_price}`}
+                          value={proxyAmounts[c.captain_id] || ""}
+                          onChange={(e) => setProxyAmounts((prev) => ({ ...prev, [c.captain_id]: e.target.value }))}
+                          className="input-field flex-1 py-1.5 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleProxyBid(c.captain_id)}
+                          disabled={proxying === `${c.captain_id}:bid`}
+                          className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
+                        >
+                          {proxying === `${c.captain_id}:bid` ? "…" : "Bid"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleProxyDrop(c.captain_id)}
+                          disabled={proxying === `${c.captain_id}:drop`}
+                          className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
+                        >
+                          {proxying === `${c.captain_id}:drop` ? "…" : "Drop"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
                   const count = (auction.available_players || []).filter((p) => p.category === group).length;
