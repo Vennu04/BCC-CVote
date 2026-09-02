@@ -1,15 +1,20 @@
-# ── RETIRED 2026-08-18 ──────────────────────────────────────────────────────
+# ── RETIRED 2026-08-18, fully decommissioned 2026-09-02 ────────────────────
 # The old AWS account (661474704151) this file targets ran out of free-tier
 # credits and converted to paid. Every resource it used to manage here (K3s
 # node, MongoDB node, ECR repos, IAM role/OIDC provider, security groups,
 # SSM params) has been destroyed. The app now runs entirely in a new,
 # dedicated free-tier account (642195693540) -- see terraform-new-account/.
 #
-# DO NOT run `terraform apply` in this directory -- every resource below is
-# still declared but no longer in state, so it would recreate the entire old
-# stack in the paid account. This file is kept only as a historical record
-# and for its CloudFront comment (see below) explaining the one resource
-# that's still deliberately alive here.
+# The CloudFront distribution this file's comment used to describe as "still
+# deliberately alive" (E1EZ6V1244PHBR) was deleted 2026-09-02 -- the app now
+# uses a free DuckDNS domain (bcccvote.duckdns.org) pointed straight at the
+# new account's instance instead, see deploy/deploy.sh. Its S3 state bucket
+# (bcc-cvote-tfstate) and DynamoDB lock table (bcc-cvote-tfstate-lock) were
+# also deleted the same day -- the backend block below is now defunct and
+# `terraform init` in this directory will fail. That's fine: this file has
+# zero live resources left anywhere and is kept only as a historical record.
+#
+# DO NOT run `terraform init`/`apply` in this directory.
 # ─────────────────────────────────────────────────────────────────────────────
 
 terraform {
@@ -28,13 +33,11 @@ terraform {
       version = "~> 3.6"
     }
   }
-  backend "s3" {
-    bucket         = "bcc-cvote-tfstate"
-    key            = "prod/terraform.tfstate"
-    region         = "ap-south-1"
-    dynamodb_table = "bcc-cvote-tfstate-lock"
-    encrypt        = true
-  }
+  # backend "s3" block removed 2026-09-02 -- bcc-cvote-tfstate bucket and
+  # bcc-cvote-tfstate-lock table were both deleted (fully decommissioned
+  # old account). Was:
+  #   bucket = "bcc-cvote-tfstate", key = "prod/terraform.tfstate",
+  #   region = "ap-south-1", dynamodb_table = "bcc-cvote-tfstate-lock"
 }
 
 provider "aws" {
@@ -640,25 +643,22 @@ resource "aws_eip" "k3s" {
   tags     = local.common_tags
 }
 
-# ── CloudFront — intentionally NOT managed here anymore ────────────────────────
-# Distribution E1EZ6V1244PHBR (d2welg0wjdnhjp.cloudfront.net) still lives in
-# THIS (old) account and is still the live URL players use — its origin was
-# already repointed to the new account's server (13-234-252-190.sslip.io) on
-# 2026-08-17. Every OTHER resource this file used to manage (K3s node,
-# MongoDB node, ECR, IAM, security groups, SSM params) was destroyed on
-# 2026-08-18 once the account ran out of free-tier credits — see
-# terraform-new-account/ for where the app actually runs now.
+# ── CloudFront — DELETED 2026-09-02 (was: intentionally not managed here) ──
+# Distribution E1EZ6V1244PHBR (d2welg0wjdnhjp.cloudfront.net) used to live in
+# THIS (old) account as the live URL players used, deliberately left running
+# rather than migrated (see git history on this comment for the original
+# reasoning — a new distribution would've meant a brand-new *.cloudfront.net
+# URL, and it was already removed from this file's state via
+# `terraform state rm aws_cloudfront_distribution.app`).
 #
-# CloudFront was deliberately left running rather than migrated: a new
-# distribution in the new account would mean a brand-new *.cloudfront.net
-# URL (CloudFront distributions can't move between accounts), breaking every
-# captain/admin's existing link for no real savings (it's usage-billed, not
-# a fixed cost like the EC2s were). It was removed from this file's state
-# (`terraform state rm aws_cloudfront_distribution.app`) specifically so
-# nothing in this now-mostly-empty config can ever recreate or touch it.
-#
-# Manage it by hand (AWS Console/CLI, profile `vfla-target`, id
-# E1EZ6V1244PHBR) if it ever needs to change.
+# That tradeoff changed once CloudFront was dropped entirely in favor of a
+# free DuckDNS domain (bcccvote.duckdns.org) pointed straight at the new
+# account's instance — same "new URL" cost either way, but this removes the
+# old account dependency completely and needs no AWS CloudFront account
+# verification (which blocked creating a distribution in the new account,
+# see deploy/deploy.sh). The distribution was disabled, deployed, and
+# deleted by hand (profile `vfla-target`) once the new domain was verified
+# working end-to-end.
 
 # ── Dedicated monitoring instance (Prometheus + Grafana) ──────────────────────
 # Plain Docker Compose, not K8s — no cluster overhead needed just to run two
