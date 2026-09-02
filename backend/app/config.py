@@ -33,6 +33,12 @@ class Config:
     VOTING_OPENS_HOUR = 18   # 6:00 PM
     VOTING_CLOSES_DAY = "Friday"
     VOTING_CLOSES_HOUR = 20  # 8:00 PM
+    # Web Push (VAPID) — empty means push is silently disabled (see
+    # services/push.py), same "no crash, just no-op" convention as
+    # SENTRY_DSN above rather than a hard startup failure.
+    VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+    VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+    VAPID_CLAIM_EMAIL = os.environ.get("VAPID_CLAIM_EMAIL", "mailto:buddybccsupport@gmail.com")
 
 
 class DevelopmentConfig(Config):

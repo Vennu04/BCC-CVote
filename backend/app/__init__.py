@@ -82,11 +82,23 @@ def create_app(config_name: str = None) -> Flask:
     from .routes.votes import votes_bp
     from .routes.admin import admin_bp
     from .routes.auction import auction_bp
+    from .routes.push import push_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(votes_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(auction_bp, url_prefix="/api")
+    app.register_blueprint(push_bp, url_prefix="/api")
+
+    # Polls for voting windows that just opened and pushes a "cast your
+    # vote" notification to every subscribed captain/player — see
+    # services/notification_scheduler.py. Skipped in tests: the `app`
+    # fixture calls create_app() 100+ times a run (ENSURE_INDEXES's comment
+    # above explains why), and a background scheduler has no useful role in
+    # a test process anyway.
+    if config_name != "testing":
+        from .services.notification_scheduler import start_scheduler
+        start_scheduler(app)
 
     @app.route("/health")
     def health():

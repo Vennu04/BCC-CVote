@@ -6,6 +6,17 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // injectManifest (custom src/sw.js) instead of the previous default
+      // generateSW — needed for the `push`/`notificationclick` listeners
+      // generateSW's config object has no hook for. The /api/ NetworkOnly
+      // bypass that used to live in the `workbox` block below moved into
+      // sw.js itself, expressed via Workbox's routing API directly.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.js",
+      injectManifest: {
+        injectionPoint: "self.__WB_MANIFEST",
+      },
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "bcc-logo.png", "apple-touch-icon-180x180.png"],
       manifest: {
@@ -23,17 +34,6 @@ export default defineConfig({
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
           { src: "maskable-icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-        ],
-      },
-      workbox: {
-        // Never cache API responses — voting data must always be fresh when online.
-        // Only the app shell (HTML/JS/CSS/icons) is precached for offline install.
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            urlPattern: /^\/api\//,
-            handler: "NetworkOnly",
-          },
         ],
       },
     }),

@@ -4,6 +4,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/AuthContext";
 import { ProtectedRoute, AdminRoute, CaptainRoute, PlayerRoute, homePathFor } from "./components/ProtectedRoute";
 import Footer from "./components/Footer";
+import NotificationPrompt from "./components/NotificationPrompt";
 // Login/ResetPassword stay eager — they're the very first thing almost every
 // session sees, and lazy-loading them would add a network round-trip before
 // the login form even renders. Everything past auth is role-specific (a
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="*"   element={<NotFound />} />
         </Routes>
       </Suspense>
+      <NotificationPrompt />
       <Footer />
     </AuthProvider>
   );
