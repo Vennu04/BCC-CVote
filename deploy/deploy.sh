@@ -35,6 +35,9 @@ JWT_SECRET_KEY=$(get_secret /bcc-cvote/prod/jwt-secret)
 SECRET_KEY=$(get_secret /bcc-cvote/prod/app-secret)
 OPENWEATHER_API_KEY=$(get_secret /bcc-cvote/prod/openweather-api-key || echo "")
 SENTRY_DSN=$(get_secret /bcc-cvote/prod/sentry-dsn || echo "")
+VAPID_PUBLIC_KEY=$(get_secret /bcc-cvote/prod/vapid-public-key || echo "")
+VAPID_PRIVATE_KEY=$(get_secret /bcc-cvote/prod/vapid-private-key || echo "")
+VAPID_CLAIM_EMAIL=$(get_secret /bcc-cvote/prod/vapid-claim-email || echo "mailto:buddybccsupport@gmail.com")
 ECR_REGISTRY=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
 ENVEOF
 chmod 600 .env

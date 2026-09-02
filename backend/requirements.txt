@@ -11,3 +11,5 @@ python-dotenv==1.2.2
 openpyxl==3.1.5
 requests==2.33.0
 sentry-sdk[flask]==2.13.0
+pywebpush==2.0.1
+apscheduler==3.10.4

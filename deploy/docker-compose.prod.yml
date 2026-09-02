@@ -41,6 +41,9 @@ services:
       SENTRY_DSN: ${SENTRY_DSN}
       DEVICE_LOCK_ENABLED: "false"
       GUNICORN_WORKERS: 2
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_CLAIM_EMAIL: ${VAPID_CLAIM_EMAIL}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s

@@ -25,6 +25,8 @@ INDEX_SPECS = [
     ("auction_release_log", "auction_id", {}),
     ("attendance_credits", [("slot_id", 1), ("window_id", 1)], {}),
     ("league_matches", "created_at", {}),
+    ("push_subscriptions", "endpoint", {"unique": True}),
+    ("push_subscriptions", "user_id", {}),
 ]
 
 
