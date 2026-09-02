@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 
@@ -17,10 +18,22 @@ def send_push_to_user_ids(user_ids, payload: dict) -> dict:
     whole batch; one dead subscription shouldn't block everyone else's
     notification.
     """
-    private_key = current_app.config.get("VAPID_PRIVATE_KEY")
-    if not private_key:
+    raw_private_key = current_app.config.get("VAPID_PRIVATE_KEY")
+    if not raw_private_key:
         logger.warning("send_push_to_user_ids: VAPID_PRIVATE_KEY not configured, skipping send")
         return {"sent": 0, "failed": 0, "skipped": True}
+
+    # deploy.sh base64's the PEM into a single line to survive docker
+    # compose's --env-file format (one KEY=value per line, no embedded
+    # newlines) — decode it back here. Checked explicitly rather than
+    # try/except-ing the decode: base64.b64decode silently ignores
+    # non-alphabet characters unless validate=True, so a raw PEM pasted
+    # directly (e.g. local dev) could "succeed" at decoding into garbage
+    # instead of raising.
+    if raw_private_key.strip().startswith("-----BEGIN"):
+        private_key = raw_private_key
+    else:
+        private_key = base64.b64decode(raw_private_key).decode()
 
     claim_email = current_app.config.get("VAPID_CLAIM_EMAIL")
     subs = list(mongo.db.push_subscriptions.find({"user_id": {"$in": user_ids}}))
