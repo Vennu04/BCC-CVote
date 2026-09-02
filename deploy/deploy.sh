@@ -10,15 +10,22 @@ cd /opt/bcc-cvote
 
 REGION="ap-south-1"
 
-TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
-APP_HOSTNAME="$(echo "$PUBLIC_IP" | tr '.' '-').sslip.io"
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
 get_secret() {
   aws ssm get-parameter --name "$1" --with-decryption --region "$REGION" \
     --query Parameter.Value --output text
 }
+
+# /bcc-cvote/prod/app-hostname overrides the auto-detected sslip.io hostname
+# (e.g. a real domain like a DuckDNS name pointed at the instance's EIP) —
+# falls back to the IP-derived sslip.io hostname if the param isn't set, so
+# this keeps working with zero config on a fresh instance.
+APP_HOSTNAME=$(get_secret /bcc-cvote/prod/app-hostname || echo "")
+if [ -z "$APP_HOSTNAME" ]; then
+  TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+  PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+  APP_HOSTNAME="$(echo "$PUBLIC_IP" | tr '.' '-').sslip.io"
+fi
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 cat > .env <<ENVEOF
 APP_HOSTNAME=${APP_HOSTNAME}
