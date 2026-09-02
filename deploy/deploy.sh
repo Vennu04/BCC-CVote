@@ -36,7 +36,10 @@ SECRET_KEY=$(get_secret /bcc-cvote/prod/app-secret)
 OPENWEATHER_API_KEY=$(get_secret /bcc-cvote/prod/openweather-api-key || echo "")
 SENTRY_DSN=$(get_secret /bcc-cvote/prod/sentry-dsn || echo "")
 VAPID_PUBLIC_KEY=$(get_secret /bcc-cvote/prod/vapid-public-key || echo "")
-VAPID_PRIVATE_KEY=$(get_secret /bcc-cvote/prod/vapid-private-key || echo "")
+# Stored in SSM as a multi-line PEM, which breaks docker compose's --env-file
+# parsing (one KEY=value per line) if written through as-is — base64'd here
+# into a single line, decoded back to PEM by services/push.py before use.
+VAPID_PRIVATE_KEY=$(get_secret /bcc-cvote/prod/vapid-private-key | base64 -w0 || echo "")
 VAPID_CLAIM_EMAIL=$(get_secret /bcc-cvote/prod/vapid-claim-email || echo "mailto:buddybccsupport@gmail.com")
 ECR_REGISTRY=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
 ENVEOF
