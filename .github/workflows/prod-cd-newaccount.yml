@@ -18,12 +18,13 @@ env:
   ECR_REGISTRY: 642195693540.dkr.ecr.ap-south-1.amazonaws.com
   BACKEND_REPO: bcc-cvote-backend
   FRONTEND_REPO: bcc-cvote-frontend
-  # Direct sslip.io URL, deliberately not the CloudFront URL — this smoke
-  # test only needs to confirm THIS instance is actually serving after a
-  # deploy; CloudFront (d2welg0wjdnhjp.cloudfront.net, still in the old
-  # account, see INFRASTRUCTURE.md) just proxies to whatever this resolves
-  # to and isn't itself redeployed by this workflow.
-  APP_URL: https://13-234-252-190.sslip.io
+  # Free DuckDNS domain pointed at the instance's EIP — replaced the
+  # sslip.io URL 2026-09-02 when CloudFront (d2welg0wjdnhjp.cloudfront.net,
+  # old account) was retired in favor of this domain going straight to the
+  # instance. Caddy only serves this hostname now (see deploy/deploy.sh's
+  # APP_HOSTNAME override via /bcc-cvote/prod/app-hostname), so the old
+  # sslip.io URL no longer resolves to a valid cert.
+  APP_URL: https://bcccvote.duckdns.org
 
 jobs:
   backend-tests:
