@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, make_response, send_file
 import io
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 from pymongo import UpdateOne
 from werkzeug.security import generate_password_hash
@@ -8,7 +8,7 @@ from datetime import datetime
 import pytz
 
 from .. import mongo
-from ..utils.auth import admin_required, get_current_user
+from ..utils.auth import admin_required, admin_only_required, get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot,
     effective_match_date_str, get_match_weekend_dates, match_datetime_for_slot, to_iso_utc,
@@ -18,6 +18,7 @@ from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
 from ..services.next_match import next_match_context, next_match_label
 from ..utils.passwords import validate_password, generate_temp_password
+from ..utils.audit import log_action
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -298,6 +299,58 @@ def dashboard():
     })
 
 
+# Split out from dashboard() above on purpose — that endpoint is polled every
+# 10s from the Admin Dashboard page (see its frontend comment), so heavier
+# trend/aggregate queries that only need to run once per page load belong in
+# their own endpoint rather than adding weight to a hot polling loop.
+@admin_bp.route("/dashboard/insights", methods=["GET"])
+@admin_required
+def dashboard_insights():
+    # Attendance trend — one point per recorded league match, in the order
+    # they happened (created_at, same ordering list_league_matches already uses).
+    matches = list(mongo.db.league_matches.find({}).sort("created_at", 1))
+    attendance_trend = [
+        {
+            "match_id": str(m["_id"]),
+            "label": m.get("label") or m.get("match_date") or format_ist(m.get("created_at")),
+            "attendee_count": len(m.get("attendee_ids", [])),
+        }
+        for m in matches
+    ]
+
+    # Auction spend per category — summed across every player any auction has
+    # actually sold via bidding (status=="sold"; free/leftover assignments have
+    # no real bid price and are excluded, same distinction the auction module
+    # itself already draws via assigned_via).
+    spend_by_category = {}
+    for p in mongo.db.auction_players.find({"status": "sold"}, {"category": 1, "sold_price": 1}):
+        cat = p.get("category", "unknown")
+        spend_by_category[cat] = spend_by_category.get(cat, 0) + (p.get("sold_price") or 0)
+
+    # Participation % over time — most recent 12 voting windows, oldest first,
+    # each as (votes cast that window) / (current total voter count). Using
+    # today's voter count as the denominator for past windows is an
+    # approximation (the roster changes over time) but avoids reconstructing
+    # historical roster snapshots the app was never designed to keep.
+    voters_total = mongo.db.users.count_documents({"is_active": True, **VOTER_FILTER})
+    windows = list(mongo.db.voting_windows.find({}).sort("created_at", -1).limit(12))
+    participation_trend = []
+    for w in reversed(windows):
+        vote_count = mongo.db.votes.count_documents({"window_id": str(w["_id"])})
+        participation_trend.append({
+            "window_id": str(w["_id"]),
+            "opens_at": format_ist(w["opens_at"]) if w.get("opens_at") else None,
+            "votes_cast": vote_count,
+            "participation_pct": round((vote_count / voters_total) * 100, 1) if voters_total else 0,
+        })
+
+    return jsonify({
+        "attendance_trend": attendance_trend,
+        "auction_spend_by_category": spend_by_category,
+        "participation_trend": participation_trend,
+    })
+
+
 # ── Admin vote override ─────────────────────────────────────────────────────────
 # Lets admin set or clear someone's vote directly — for the real-world case
 # where a captain/player couldn't cast or fix their own vote in time (mobile
@@ -360,6 +413,8 @@ def admin_set_vote():
         "new_availability": availability,
         "overridden_at": now,
     })
+    log_action(acting_admin["_id"], "vote_override_set", "vote", f"{slot_id}:{user_id}",
+               old_value={"availability": old_availability}, new_value={"availability": availability})
     return jsonify({"message": f"{target['name']}'s vote set to {availability}", "availability": availability})
 
 
@@ -392,6 +447,8 @@ def admin_clear_vote(slot_id, user_id):
         "new_availability": None,
         "overridden_at": utcnow(),
     })
+    log_action(acting_admin["_id"], "vote_override_clear", "vote", f"{slot_id}:{user_id}",
+               old_value={"availability": existing["availability"]}, new_value=None)
     return jsonify({"message": f"{target['name']}'s vote cleared"})
 
 
@@ -432,6 +489,8 @@ def add_captain():
     }
     result = mongo.db.users.insert_one(doc)
     doc["_id"] = result.inserted_id
+    log_action(get_jwt_identity(), "create", "captain", doc["_id"],
+               new_value={"name": name, "team_code": team_code})
     return jsonify({
         "message": "Captain added",
         "captain": _user_to_dict(doc),
@@ -449,6 +508,14 @@ def update_captain(captain_id):
         updates["name"] = data["name"].strip()
     if "team_name" in data:
         updates["team_name"] = data["team_name"].strip()
+    # Optional — only used to pick which of email/SMS/WhatsApp channels
+    # notify_event() (services/notifications.py) can reach this person on,
+    # alongside Web Push which needs no contact info at all. Not backfilled
+    # for existing accounts; admin fills these in per-person as needed.
+    if "email" in data:
+        updates["email"] = data["email"].strip() or None
+    if "phone" in data:
+        updates["phone"] = data["phone"].strip() or None
     if "is_active" in data:
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
@@ -510,16 +577,23 @@ def update_captain(captain_id):
         # an admin-set password must kick out whatever session this captain
         # was already using just as thoroughly as changing it themselves would.
         mongo_update["$inc"] = {"token_version": 1}
+    before = mongo.db.users.find_one({"_id": ObjectId(captain_id)})
     result = mongo.db.users.update_one({"_id": ObjectId(captain_id)}, mongo_update)
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
 
     updated = mongo.db.users.find_one({"_id": ObjectId(captain_id)})
+    # Never log password_hash — old/new snapshots are just the fields the
+    # request actually touched, not raw hashes.
+    logged_fields = {k: v for k, v in updates.items() if k != "password_hash"}
+    log_action(get_jwt_identity(), "update", "captain", captain_id,
+               old_value={k: before.get(k) for k in logged_fields} if before else None,
+               new_value=logged_fields)
     return jsonify({"message": "Captain updated", "captain": _user_to_dict(updated)})
 
 
 @admin_bp.route("/captains/<captain_id>", methods=["DELETE"])
-@admin_required
+@admin_only_required
 def remove_captain(captain_id):
     result = mongo.db.users.update_one(
         {"_id": ObjectId(captain_id), "role": "captain"},
@@ -527,11 +601,13 @@ def remove_captain(captain_id):
     )
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
+    log_action(get_jwt_identity(), "delete", "captain", captain_id,
+               old_value={"is_active": True}, new_value={"is_active": False})
     return jsonify({"message": "Captain deactivated"})
 
 
 @admin_bp.route("/captains/<captain_id>/reset-device", methods=["POST"])
-@admin_required
+@admin_only_required
 def reset_captain_device(captain_id):
     # Clears the bound device so the captain's next login registers whatever
     # phone/browser they use then — for a lost/replaced phone, not a way
@@ -925,6 +1001,8 @@ def add_player():
     }
     result = mongo.db.users.insert_one(doc)
     doc["_id"] = result.inserted_id
+    log_action(get_jwt_identity(), "create", "player", doc["_id"],
+               new_value={"name": name, "team_code": team_code})
     return jsonify({
         "message": "Player added",
         "player": _user_to_dict(doc),
@@ -980,6 +1058,10 @@ def update_player(player_id):
         updates["auction_category"] = data["auction_category"]
     if "team_name" in data:
         updates["team_name"] = data["team_name"].strip()
+    if "email" in data:
+        updates["email"] = data["email"].strip() or None
+    if "phone" in data:
+        updates["phone"] = data["phone"].strip() or None
     if "role" in data:
         # Promotes an existing player to captain (or the reverse) in place —
         # keeps their real login (team_code/password) untouched, unlike creating
@@ -994,6 +1076,7 @@ def update_player(player_id):
     mongo_update = {"$set": updates}
     if password_changed:
         mongo_update["$inc"] = {"token_version": 1}
+    before = mongo.db.users.find_one({"_id": ObjectId(player_id)})
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "$or": [{"role": "player"}, ADMIN_VOTER_FILTER]},
         mongo_update,
@@ -1002,11 +1085,15 @@ def update_player(player_id):
         return jsonify({"error": "Player not found"}), 404
 
     updated = mongo.db.users.find_one({"_id": ObjectId(player_id)})
+    logged_fields = {k: v for k, v in updates.items() if k != "password_hash"}
+    log_action(get_jwt_identity(), "update", "player", player_id,
+               old_value={k: before.get(k) for k in logged_fields} if before else None,
+               new_value=logged_fields)
     return jsonify({"message": "Player updated", "player": _user_to_dict(updated)})
 
 
 @admin_bp.route("/players/<player_id>", methods=["DELETE"])
-@admin_required
+@admin_only_required
 def remove_player(player_id):
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "role": "player"},
@@ -1014,11 +1101,13 @@ def remove_player(player_id):
     )
     if result.matched_count == 0:
         return jsonify({"error": "Player not found"}), 404
+    log_action(get_jwt_identity(), "delete", "player", player_id,
+               old_value={"is_active": True}, new_value={"is_active": False})
     return jsonify({"message": "Player deactivated"})
 
 
 @admin_bp.route("/players/<player_id>/reset-device", methods=["POST"])
-@admin_required
+@admin_only_required
 def reset_player_device(player_id):
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "role": "player"},
@@ -1255,7 +1344,7 @@ def set_window():
 
 
 @admin_bp.route("/window/close", methods=["POST"])
-@admin_required
+@admin_only_required
 def close_window_early():
     data = request.get_json(silent=True) or {}
     slot_id = data.get("slot_id")

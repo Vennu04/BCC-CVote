@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 import Navbar from "../components/Navbar";
-import { BarChart2, Lock, ChevronDown, ChevronUp, Users, AlertTriangle, RefreshCw } from "lucide-react";
+import { BarChart2, Lock, ChevronDown, ChevronUp, Users, AlertTriangle, RefreshCw, Trophy } from "lucide-react";
 import { LoadingState } from "../components/LoadingState";
 
 const AVAILABILITY_COLOR = {
@@ -37,6 +37,41 @@ function AttendanceList({ attendance }) {
           <p className="text-gray-500 pl-3">{g.names.join(", ")}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Attendance leaderboard — same data admin's Attendance page shows, but a
+// read-only ranked subset any authenticated account can see (including the
+// viewer role, which has no admin-console access at all). Fetched once, not
+// polled — attendance changes only after admin records a completed match.
+function AttendanceLeaderboard() {
+  const [board, setBoard] = useState(null);
+
+  useEffect(() => {
+    api.get("/attendance/leaderboard").then((res) => setBoard(res.data)).catch(() => {});
+  }, []);
+
+  if (!board || board.leaderboard.length === 0) return null;
+
+  return (
+    <div className="card mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Trophy className="text-pitch-600" size={18} />
+        <h2 className="font-semibold text-gray-800">Attendance Leaderboard</h2>
+        <span className="text-xs text-gray-400 ml-auto">{board.total_matches_organized} matches recorded</span>
+      </div>
+      <ol className="space-y-1.5 text-sm">
+        {board.leaderboard.slice(0, 15).map((entry, i) => (
+          <li key={entry.name} className="flex items-center justify-between">
+            <span className="text-gray-700">
+              <span className="text-gray-400 w-5 inline-block">{i + 1}.</span> {entry.name}
+              {entry.knockout_eligible && <span className="ml-1.5 text-[10px] bg-pitch-100 text-pitch-700 rounded-full px-1.5 py-0.5">Eligible</span>}
+            </span>
+            <span className="font-medium text-gray-900">{entry.attendance_count}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -101,6 +136,8 @@ export default function Results() {
             <p className="text-sm text-gray-500">Each match has its own voting window</p>
           </div>
         </div>
+
+        <AttendanceLeaderboard />
 
         {summary.length === 0 ? (
           <div className="card text-center py-12">

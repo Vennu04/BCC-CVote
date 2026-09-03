@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 
 from .. import mongo, limiter
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, captain_required
 from ..utils.time_utils import (
     is_voting_window_open, seconds_until_close,
     format_ist, now_ist, suggested_window_for_slot,
@@ -145,7 +145,7 @@ def my_votes():
 # ── Submit / update a vote ─────────────────────────────────────────────────────
 
 @votes_bp.route("/votes", methods=["POST"])
-@jwt_required()
+@captain_required
 @limiter.limit("30 per minute")
 def submit_vote():
     user = get_current_user()
@@ -189,7 +189,7 @@ def submit_vote():
 # ── Emergency revoke: withdraw a vote after the window has closed ─────────────
 
 @votes_bp.route("/votes/<slot_id>", methods=["DELETE"])
-@jwt_required()
+@captain_required
 def revoke_vote(slot_id):
     user = get_current_user()
     slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
@@ -216,7 +216,7 @@ def revoke_vote(slot_id):
 # ── Bulk: mark captain not available for entire week ──────────────────────────
 
 @votes_bp.route("/votes/not-available-week", methods=["POST"])
-@jwt_required()
+@captain_required
 def not_available_week():
     user = get_current_user()
     slots = _visible_slots(user)
@@ -249,6 +249,36 @@ def not_available_week():
 
 
 # ── Vote summary — counts for everyone, named attendance once you've voted ────
+
+@votes_bp.route("/attendance/leaderboard", methods=["GET"])
+@jwt_required()
+def attendance_leaderboard():
+    """Read-only attendance leaderboard — viewable by any authenticated
+    account, including the read-only viewer role. A public-facing subset of
+    admin.py's /admin/attendance: ranked counts only, no settings-mutation,
+    no per-match check-in editing (that stays admin/organizer-only there)."""
+    voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}))
+    counts = {}
+    for match in mongo.db.league_matches.find({}, {"attendee_ids": 1}):
+        for voter_id in match.get("attendee_ids", []):
+            counts[voter_id] = counts.get(voter_id, 0) + 1
+
+    leaderboard = sorted(
+        (
+            {
+                "name": v["name"],
+                "attendance_count": counts.get(str(v["_id"]), 0),
+                "knockout_eligible": v.get("knockout_eligible", False),
+            }
+            for v in voters
+        ),
+        key=lambda e: (-e["attendance_count"], e["name"]),
+    )
+    return jsonify({
+        "leaderboard": leaderboard,
+        "total_matches_organized": mongo.db.league_matches.count_documents({}),
+    })
+
 
 @votes_bp.route("/votes/summary", methods=["GET"])
 @jwt_required()

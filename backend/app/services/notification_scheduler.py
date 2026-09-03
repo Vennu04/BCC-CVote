@@ -5,7 +5,7 @@ from bson import ObjectId
 
 from .. import mongo
 from ..utils.time_utils import utcnow
-from .push import send_push_to_user_ids
+from .notifications import notify_event
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +56,7 @@ def _check_and_notify():
             continue
 
         label = f"{slot.get('day', '')} {slot.get('match_time') or slot.get('time_of_day', '')}".strip()
-        result = send_push_to_user_ids(user_ids, {
-            "title": "🏏 Voting is open!",
-            "body": f"Cast your availability for {label} now.",
-            "url": "/",
-        })
+        result = notify_event("voting_window_open", user_ids, {"label": label})
         logger.info("notification_scheduler: notified window %s (%s) — %s", window["_id"], label, result)
 
 

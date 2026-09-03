@@ -1,10 +1,12 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { isStaff } from "../utils/roles";
 export { isVoter } from "../utils/roles";
 
 export function homePathFor(user) {
   if (!user) return "/login";
-  if (user.role === "admin") return "/admin";
+  if (isStaff(user)) return "/admin";
+  if (user.role === "viewer") return "/results";
   if (user.role === "player") return "/player/dashboard";
   return "/captain/dashboard";
 }
@@ -34,8 +36,11 @@ export function AdminRoute({ children }) {
   // role=="admin" is the normal case; a captain/player flagged is_admin=True
   // (see AuthContext's isAdmin) may reach admin routes too, without losing
   // their own dashboard/login — the reverse of PlayerRoute's admin+is_player
-  // exception below.
-  if (user.role !== "admin" && !user.is_admin) {
+  // exception below. role=="organizer" gets the same console access; the
+  // backend alone decides which specific actions organizer can't perform
+  // (PERMISSIONS["destructive"] in utils/auth.py) — this route guard is
+  // just "can see the admin console at all".
+  if (!isStaff(user)) {
     return <Navigate to={homePathFor(user)} replace />;
   }
   // A default-password account must reset it before touching anything else.

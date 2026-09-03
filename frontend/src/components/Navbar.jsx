@@ -111,7 +111,9 @@ export default function Navbar() {
         {/* User + logout */}
         <div className="flex items-center gap-1.5">
           <div className="text-right hidden sm:block mr-1">
-            <p className="text-xs text-gray-300">{user?.role === "admin" ? "Organizer" : user?.role === "player" ? "Player" : "Captain"}</p>
+            <p className="text-xs text-gray-300">
+              {{ admin: "Admin", organizer: "Organizer", viewer: "Viewer", player: "Player" }[user?.role] || "Captain"}
+            </p>
             <p className="text-sm font-semibold">{user?.name}</p>
           </div>
           <span className="bg-gradient-to-b from-pitch-500 to-pitch-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-soft">

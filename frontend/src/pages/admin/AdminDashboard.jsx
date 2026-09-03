@@ -23,6 +23,11 @@ export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Separate from `data` — insights query heavier aggregates (attendance
+  // trend, auction spend, participation history) that don't need to move
+  // every 10s like the live vote matrix does, so this fetches once on mount
+  // rather than joining the polling loop below.
+  const [insights, setInsights] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -41,6 +46,12 @@ export default function AdminDashboard() {
     const interval = setInterval(fetchData, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  useEffect(() => {
+    api.get("/admin/dashboard/insights")
+      .then((res) => setInsights(res.data))
+      .catch(() => {}); // Non-critical — the rest of the dashboard works fine without it.
+  }, []);
 
   // fetchData alone gave no feedback on click — it silently refetches, so if
   // nothing on screen happens to change, admin has no way to tell the button
@@ -196,7 +207,74 @@ export default function AdminDashboard() {
             <AvailabilityGrid matrix={filteredMatrix} slots={slots} />
           </div>
         </div>
+
+        {/* Broader insights — attendance trend, auction spend, participation
+            history. Plain-divs bar charts (no charting library in this app's
+            dependencies) to stay consistent with everything else here. */}
+        {insights && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+            <InsightBarCard
+              title="Attendance Trend"
+              icon={<Users size={16} className="text-pitch-600" />}
+              items={insights.attendance_trend.map((m) => ({ label: m.label, value: m.attendee_count }))}
+              emptyLabel="No league matches recorded yet"
+              valueSuffix=" present"
+            />
+            <InsightBarCard
+              title="Auction Spend by Category"
+              icon={<BarChart2 size={16} className="text-pitch-600" />}
+              items={Object.entries(insights.auction_spend_by_category).map(([label, value]) => ({ label, value }))}
+              emptyLabel="No auctioned players sold yet"
+              valuePrefix="₹"
+            />
+            <InsightBarCard
+              title="Voting Participation %"
+              icon={<CalendarDays size={16} className="text-pitch-600" />}
+              items={insights.participation_trend.map((w) => ({
+                label: w.opens_at ? w.opens_at.split(",")[0] : w.window_id.slice(-6),
+                value: w.participation_pct,
+              }))}
+              emptyLabel="No voting windows yet"
+              valueSuffix="%"
+            />
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Small horizontal bar chart — each item as a labeled row scaled to the max
+// value in the set. Deliberately not a new dependency; this app has no
+// charting library and these three cards don't need one.
+function InsightBarCard({ title, icon, items, emptyLabel, valuePrefix = "", valueSuffix = "" }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return (
+    <div className="card">
+      <div className="flex items-center gap-2 mb-4">
+        {icon}
+        <h3 className="font-semibold text-gray-800 text-sm">{title}</h3>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-4">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <div key={`${item.label}-${i}`} className="text-xs">
+              <div className="flex justify-between text-gray-600 mb-0.5">
+                <span className="truncate pr-2">{item.label}</span>
+                <span className="font-medium text-gray-800 shrink-0">{valuePrefix}{item.value}{valueSuffix}</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-pitch-500 rounded-full"
+                  style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
