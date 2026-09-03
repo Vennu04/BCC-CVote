@@ -299,6 +299,58 @@ def dashboard():
     })
 
 
+# Split out from dashboard() above on purpose — that endpoint is polled every
+# 10s from the Admin Dashboard page (see its frontend comment), so heavier
+# trend/aggregate queries that only need to run once per page load belong in
+# their own endpoint rather than adding weight to a hot polling loop.
+@admin_bp.route("/dashboard/insights", methods=["GET"])
+@admin_required
+def dashboard_insights():
+    # Attendance trend — one point per recorded league match, in the order
+    # they happened (created_at, same ordering list_league_matches already uses).
+    matches = list(mongo.db.league_matches.find({}).sort("created_at", 1))
+    attendance_trend = [
+        {
+            "match_id": str(m["_id"]),
+            "label": m.get("label") or m.get("match_date") or format_ist(m.get("created_at")),
+            "attendee_count": len(m.get("attendee_ids", [])),
+        }
+        for m in matches
+    ]
+
+    # Auction spend per category — summed across every player any auction has
+    # actually sold via bidding (status=="sold"; free/leftover assignments have
+    # no real bid price and are excluded, same distinction the auction module
+    # itself already draws via assigned_via).
+    spend_by_category = {}
+    for p in mongo.db.auction_players.find({"status": "sold"}, {"category": 1, "sold_price": 1}):
+        cat = p.get("category", "unknown")
+        spend_by_category[cat] = spend_by_category.get(cat, 0) + (p.get("sold_price") or 0)
+
+    # Participation % over time — most recent 12 voting windows, oldest first,
+    # each as (votes cast that window) / (current total voter count). Using
+    # today's voter count as the denominator for past windows is an
+    # approximation (the roster changes over time) but avoids reconstructing
+    # historical roster snapshots the app was never designed to keep.
+    voters_total = mongo.db.users.count_documents({"is_active": True, **VOTER_FILTER})
+    windows = list(mongo.db.voting_windows.find({}).sort("created_at", -1).limit(12))
+    participation_trend = []
+    for w in reversed(windows):
+        vote_count = mongo.db.votes.count_documents({"window_id": str(w["_id"])})
+        participation_trend.append({
+            "window_id": str(w["_id"]),
+            "opens_at": format_ist(w["opens_at"]) if w.get("opens_at") else None,
+            "votes_cast": vote_count,
+            "participation_pct": round((vote_count / voters_total) * 100, 1) if voters_total else 0,
+        })
+
+    return jsonify({
+        "attendance_trend": attendance_trend,
+        "auction_spend_by_category": spend_by_category,
+        "participation_trend": participation_trend,
+    })
+
+
 # ── Admin vote override ─────────────────────────────────────────────────────────
 # Lets admin set or clear someone's vote directly — for the real-world case
 # where a captain/player couldn't cast or fix their own vote in time (mobile
