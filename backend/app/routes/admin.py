@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, make_response, send_file
 import io
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 from pymongo import UpdateOne
 from werkzeug.security import generate_password_hash
@@ -18,6 +18,7 @@ from ..utils.export import build_csv_report
 from ..services.weather import get_forecast_for_slot
 from ..services.next_match import next_match_context, next_match_label
 from ..utils.passwords import validate_password, generate_temp_password
+from ..utils.audit import log_action
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -360,6 +361,8 @@ def admin_set_vote():
         "new_availability": availability,
         "overridden_at": now,
     })
+    log_action(acting_admin["_id"], "vote_override_set", "vote", f"{slot_id}:{user_id}",
+               old_value={"availability": old_availability}, new_value={"availability": availability})
     return jsonify({"message": f"{target['name']}'s vote set to {availability}", "availability": availability})
 
 
@@ -392,6 +395,8 @@ def admin_clear_vote(slot_id, user_id):
         "new_availability": None,
         "overridden_at": utcnow(),
     })
+    log_action(acting_admin["_id"], "vote_override_clear", "vote", f"{slot_id}:{user_id}",
+               old_value={"availability": existing["availability"]}, new_value=None)
     return jsonify({"message": f"{target['name']}'s vote cleared"})
 
 
@@ -432,6 +437,8 @@ def add_captain():
     }
     result = mongo.db.users.insert_one(doc)
     doc["_id"] = result.inserted_id
+    log_action(get_jwt_identity(), "create", "captain", doc["_id"],
+               new_value={"name": name, "team_code": team_code})
     return jsonify({
         "message": "Captain added",
         "captain": _user_to_dict(doc),
@@ -510,11 +517,18 @@ def update_captain(captain_id):
         # an admin-set password must kick out whatever session this captain
         # was already using just as thoroughly as changing it themselves would.
         mongo_update["$inc"] = {"token_version": 1}
+    before = mongo.db.users.find_one({"_id": ObjectId(captain_id)})
     result = mongo.db.users.update_one({"_id": ObjectId(captain_id)}, mongo_update)
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
 
     updated = mongo.db.users.find_one({"_id": ObjectId(captain_id)})
+    # Never log password_hash — old/new snapshots are just the fields the
+    # request actually touched, not raw hashes.
+    logged_fields = {k: v for k, v in updates.items() if k != "password_hash"}
+    log_action(get_jwt_identity(), "update", "captain", captain_id,
+               old_value={k: before.get(k) for k in logged_fields} if before else None,
+               new_value=logged_fields)
     return jsonify({"message": "Captain updated", "captain": _user_to_dict(updated)})
 
 
@@ -527,6 +541,8 @@ def remove_captain(captain_id):
     )
     if result.matched_count == 0:
         return jsonify({"error": "Captain not found"}), 404
+    log_action(get_jwt_identity(), "delete", "captain", captain_id,
+               old_value={"is_active": True}, new_value={"is_active": False})
     return jsonify({"message": "Captain deactivated"})
 
 
@@ -925,6 +941,8 @@ def add_player():
     }
     result = mongo.db.users.insert_one(doc)
     doc["_id"] = result.inserted_id
+    log_action(get_jwt_identity(), "create", "player", doc["_id"],
+               new_value={"name": name, "team_code": team_code})
     return jsonify({
         "message": "Player added",
         "player": _user_to_dict(doc),
@@ -994,6 +1012,7 @@ def update_player(player_id):
     mongo_update = {"$set": updates}
     if password_changed:
         mongo_update["$inc"] = {"token_version": 1}
+    before = mongo.db.users.find_one({"_id": ObjectId(player_id)})
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "$or": [{"role": "player"}, ADMIN_VOTER_FILTER]},
         mongo_update,
@@ -1002,6 +1021,10 @@ def update_player(player_id):
         return jsonify({"error": "Player not found"}), 404
 
     updated = mongo.db.users.find_one({"_id": ObjectId(player_id)})
+    logged_fields = {k: v for k, v in updates.items() if k != "password_hash"}
+    log_action(get_jwt_identity(), "update", "player", player_id,
+               old_value={k: before.get(k) for k in logged_fields} if before else None,
+               new_value=logged_fields)
     return jsonify({"message": "Player updated", "player": _user_to_dict(updated)})
 
 
@@ -1014,6 +1037,8 @@ def remove_player(player_id):
     )
     if result.matched_count == 0:
         return jsonify({"error": "Player not found"}), 404
+    log_action(get_jwt_identity(), "delete", "player", player_id,
+               old_value={"is_active": True}, new_value={"is_active": False})
     return jsonify({"message": "Player deactivated"})
 
 

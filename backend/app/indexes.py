@@ -27,6 +27,8 @@ INDEX_SPECS = [
     ("league_matches", "created_at", {}),
     ("push_subscriptions", "endpoint", {"unique": True}),
     ("push_subscriptions", "user_id", {}),
+    ("audit_logs", [("entity_type", 1), ("entity_id", 1)], {}),
+    ("audit_logs", [("timestamp", -1)], {}),
 ]
 
 

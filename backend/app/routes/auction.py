@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 from datetime import datetime, timedelta
 
 from .. import mongo, limiter
 from ..utils.auth import admin_required, get_current_user, captain_required
+from ..utils.audit import log_action
 from ..utils.time_utils import format_ist, to_iso_utc, utcnow
 from ..services.next_match import next_match_context, next_match_label
 
@@ -642,6 +643,8 @@ def release_player(auction_id):
     if not _claim_release(auction, category, player, users_map):
         return jsonify({"error": "A player is already up for bidding"}), 400
 
+    log_action(get_jwt_identity(), "release", "auction_player", player["_id"],
+               new_value={"category": category, "auction_id": auction_id})
     return jsonify({"message": "Player released for bidding", "player_id": str(player["_id"])})
 
 
@@ -688,6 +691,8 @@ def close_auction(auction_id):
         {"$set": {"status": "completed", "current_player_id": None}},
     )
     _close_linked_window_on_completion(auction)
+    log_action(get_jwt_identity(), "close", "auction", auction_id,
+               old_value={"status": auction["status"]}, new_value={"status": "completed"})
     return jsonify({"message": "Auction closed"})
 
 
@@ -1134,6 +1139,9 @@ def drop_player(auction_id):
         return jsonify({"error": "Only the two assigned captains can act in this auction"}), 403
 
     payload, status = _drop_core(auction, auction_id, captain_id)
+    if status == 200 and payload.get("sold_to"):
+        log_action(user["_id"], "sold", "auction_player", auction["current_player_id"],
+                   new_value={"sold_to": payload["sold_to"], "sold_price": payload["sold_price"]})
     return jsonify(payload), status
 
 
@@ -1216,6 +1224,9 @@ def admin_proxy_drop(auction_id):
         admin = get_current_user()
         captain_name = mongo.db.users.find_one({"_id": ObjectId(captain_id)}, {"name": 1}).get("name", "Captain")
         _log_proxy_note(auction_id, admin, f"📝 Recorded: {captain_name} drops on {player_name} — {payload['message']}")
+        if payload.get("sold_to"):
+            log_action(admin["_id"], "sold", "auction_player", auction["current_player_id"],
+                       new_value={"sold_to": payload["sold_to"], "sold_price": payload["sold_price"]})
     return jsonify(payload), status
 
 
