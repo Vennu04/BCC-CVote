@@ -181,4 +181,35 @@
   .scroll-touch {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* ── Royal-blue dark theme ─────────────────────────────────────────────
+     Scoped by usage, not by a global dark-mode switch: only Login.jsx and
+     the Admin/Captain/Player Dashboard pages (+ the components exclusively
+     used by them — VotingSlots/SlotCard/VoteButton/AvailabilityGrid)
+     reference these classes. Every other page keeps using .card/.input-field/
+     .btn-primary above, unchanged. Status-semantic colors (green=available,
+     red=not-available, yellow=maybe) are deliberately NOT touched here —
+     only chrome/background/brand elements move to blue, per the approved
+     mockup. */
+  .card-dark {
+    @apply bg-royal-600 border border-sky-400/[0.13] rounded-2xl p-6;
+  }
+  .input-field-dark {
+    @apply w-full px-4 py-3 min-h-[44px] rounded-xl text-base
+      bg-sky-400/5 border border-sky-400/20 text-white placeholder-white/30
+      focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400
+      transition-all duration-150
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary-dark {
+    @apply bg-sky-400 hover:bg-sky-300 text-royal-950 font-extrabold px-6 py-2.5 rounded-xl
+      shadow-[0_10px_26px_-8px_rgba(56,189,248,0.4)]
+      transition-all duration-200 min-h-[44px]
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+      active:scale-[0.97] active:brightness-95;
+  }
+  .badge-live-dark {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-extrabold
+      bg-red-500/10 border border-red-500/35 text-red-400;
+  }
 }

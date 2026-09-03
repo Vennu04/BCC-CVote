@@ -28,6 +28,18 @@ export default {
           "navy-light": "#2d4d78",
           cream:    "#fef9ee",
         },
+        // New — deep royal-blue chrome for Login + Admin/Captain/Player
+        // Dashboard ONLY (per the approved mockup). Every other page keeps
+        // the pitch/cricket theme above untouched. Accent/brand blue is
+        // Tailwind's own built-in `sky` scale (sky-400 == #38bdf8, matching
+        // the mockup's accent exactly) — no new token needed for that part.
+        royal: {
+          950: "#030d24", // deepest page background
+          900: "#051836", // page background, mid gradient stop
+          800: "#061630", // top nav bar
+          700: "#0a1a38", // ticker strip
+          600: "#0d1b33", // card background
+        },
       },
       // System font stack only — no CDN webfont (offline-safe, matches the
       // native look on both platforms: San Francisco on iOS, Roboto on
