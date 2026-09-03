@@ -221,11 +221,15 @@ export default function AdminDashboard() {
               valueSuffix=" present"
             />
             <InsightBarCard
-              title="Auction Spend by Category"
+              title="Auction Spend by Category (pts)"
               icon={<BarChart2 size={16} className="text-pitch-600" />}
               items={Object.entries(insights.auction_spend_by_category).map(([label, value]) => ({ label, value }))}
               emptyLabel="No auctioned players sold yet"
-              valuePrefix="₹"
+              // This app's auction is a points budget (POINTS_BUDGET=17,
+              // STARTING_PRICE=8.5 — see auction.py), not a currency purse —
+              // no "₹" here, matching how the live auction page itself shows
+              // prices (plain numbers, "pts" suffix on budget figures).
+              valueSuffix=" pts"
             />
             <InsightBarCard
               title="Voting Participation %"

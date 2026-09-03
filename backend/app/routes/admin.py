@@ -321,7 +321,10 @@ def dashboard_insights():
     # Auction spend per category — summed across every player any auction has
     # actually sold via bidding (status=="sold"; free/leftover assignments have
     # no real bid price and are excluded, same distinction the auction module
-    # itself already draws via assigned_via).
+    # itself already draws via assigned_via). sold_price is a points-budget
+    # value (POINTS_BUDGET=17, STARTING_PRICE=8.5 — see auction.py), NOT a
+    # currency amount — this app has no rupee/currency concept anywhere in
+    # the auction module. The frontend must label/format this as points.
     spend_by_category = {}
     for p in mongo.db.auction_players.find({"status": "sold"}, {"category": 1, "sold_price": 1}):
         cat = p.get("category", "unknown")
