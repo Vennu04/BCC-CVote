@@ -508,6 +508,14 @@ def update_captain(captain_id):
         updates["name"] = data["name"].strip()
     if "team_name" in data:
         updates["team_name"] = data["team_name"].strip()
+    # Optional — only used to pick which of email/SMS/WhatsApp channels
+    # notify_event() (services/notifications.py) can reach this person on,
+    # alongside Web Push which needs no contact info at all. Not backfilled
+    # for existing accounts; admin fills these in per-person as needed.
+    if "email" in data:
+        updates["email"] = data["email"].strip() or None
+    if "phone" in data:
+        updates["phone"] = data["phone"].strip() or None
     if "is_active" in data:
         updates["is_active"] = bool(data["is_active"])
     if "password" in data and data["password"]:
@@ -1050,6 +1058,10 @@ def update_player(player_id):
         updates["auction_category"] = data["auction_category"]
     if "team_name" in data:
         updates["team_name"] = data["team_name"].strip()
+    if "email" in data:
+        updates["email"] = data["email"].strip() or None
+    if "phone" in data:
+        updates["phone"] = data["phone"].strip() or None
     if "role" in data:
         # Promotes an existing player to captain (or the reverse) in place —
         # keeps their real login (team_code/password) untouched, unlike creating

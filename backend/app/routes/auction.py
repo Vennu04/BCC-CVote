@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
@@ -6,10 +8,12 @@ from datetime import datetime, timedelta
 from .. import mongo, limiter
 from ..utils.auth import admin_required, get_current_user, captain_required
 from ..utils.audit import log_action
+from ..services.notifications import notify_event
 from ..utils.time_utils import format_ist, to_iso_utc, utcnow
 from ..services.next_match import next_match_context, next_match_label
 
 auction_bp = Blueprint("auction", __name__)
+logger = logging.getLogger(__name__)
 
 # Every auctioned player sits in exactly one of these four groups, each split evenly
 # in half between the two captains (Extra Power is two independent sections, not one
@@ -610,6 +614,17 @@ def start_auction(auction_id):
     # the rest of AUCTION_GROUPS, so this is safe even if nobody voted into
     # extra_power_allrounder for this particular slot.
     _maybe_auto_release_next(auction_id)
+
+    slot = None
+    if auction.get("slot_id"):
+        try:
+            slot = mongo.db.match_slots.find_one({"_id": ObjectId(auction["slot_id"])})
+        except Exception:
+            slot = None
+    label = f"{slot.get('day', '')} {slot.get('time_of_day', '')}".strip() if slot else "your match"
+    captain_ids = [ObjectId(auction["captain_a_id"]), ObjectId(auction["captain_b_id"])]
+    notify_event("auction_started", captain_ids, {"label": label})
+
     return jsonify({"message": "Auction started", "ends_at": format_ist(ends_at), "ends_at_iso": to_iso_utc(ends_at)})
 
 
@@ -1138,10 +1153,12 @@ def drop_player(auction_id):
     if captain_id not in (auction["captain_a_id"], auction["captain_b_id"]):
         return jsonify({"error": "Only the two assigned captains can act in this auction"}), 403
 
+    sold_player_id = auction.get("current_player_id")
     payload, status = _drop_core(auction, auction_id, captain_id)
     if status == 200 and payload.get("sold_to"):
-        log_action(user["_id"], "sold", "auction_player", auction["current_player_id"],
+        log_action(user["_id"], "sold", "auction_player", sold_player_id,
                    new_value={"sold_to": payload["sold_to"], "sold_price": payload["sold_price"]})
+        _notify_player_sold(auction, sold_player_id, payload["sold_to"], payload["sold_price"])
     return jsonify(payload), status
 
 
@@ -1163,6 +1180,23 @@ def _log_proxy_note(auction_id, admin_user, note):
         "message": note,
         "created_at": utcnow(),
     })
+
+
+def _notify_player_sold(auction, player_id, sold_to_captain_id, sold_price):
+    """Best-effort — a lookup/notify failure here must never fail the bid/drop
+    request that already committed the sale in Mongo."""
+    try:
+        player = _player_doc(str(auction["_id"]), player_id)
+        player_user = mongo.db.users.find_one({"_id": ObjectId(player["user_id"])}) if player else None
+        team_user = mongo.db.users.find_one({"_id": ObjectId(sold_to_captain_id)})
+        captain_ids = [ObjectId(auction["captain_a_id"]), ObjectId(auction["captain_b_id"])]
+        notify_event("player_sold", captain_ids, {
+            "player_name": player_user["name"] if player_user else None,
+            "team_name": team_user["name"] if team_user else None,
+            "price": sold_price,
+        })
+    except Exception:
+        logger.exception("_notify_player_sold: failed for player_id=%s", player_id)
 
 
 def _require_auction_captain(auction, data):
@@ -1219,14 +1253,16 @@ def admin_proxy_drop(auction_id):
 
     player = _player_doc(auction_id, auction.get("current_player_id")) if auction.get("current_player_id") else None
     player_name = mongo.db.users.find_one({"_id": ObjectId(player["user_id"])}, {"name": 1}).get("name", "?") if player else "?"
+    sold_player_id = auction.get("current_player_id")
     payload, status = _drop_core(auction, auction_id, captain_id)
     if status == 200:
         admin = get_current_user()
         captain_name = mongo.db.users.find_one({"_id": ObjectId(captain_id)}, {"name": 1}).get("name", "Captain")
         _log_proxy_note(auction_id, admin, f"📝 Recorded: {captain_name} drops on {player_name} — {payload['message']}")
         if payload.get("sold_to"):
-            log_action(admin["_id"], "sold", "auction_player", auction["current_player_id"],
+            log_action(admin["_id"], "sold", "auction_player", sold_player_id,
                        new_value={"sold_to": payload["sold_to"], "sold_price": payload["sold_price"]})
+            _notify_player_sold(auction, sold_player_id, payload["sold_to"], payload["sold_price"])
     return jsonify(payload), status
 
 

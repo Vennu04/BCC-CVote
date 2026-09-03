@@ -50,7 +50,12 @@ def test_check_and_notify_sends_once_for_newly_opened_window(app, make_slot_and_
     make_user("player", "PLR1", "plr1")  # eligible voter (VOTER_FILTER)
     make_user("admin", "ADMIN2", "admin2")  # not eligible — excluded from the send
 
-    with app.app_context(), patch("app.services.notification_scheduler.send_push_to_user_ids") as mock_send:
+    # notification_scheduler now calls notify_event() (services/notifications.py),
+    # which is what actually calls send_push_to_user_ids — patched at its
+    # source module so both the push-specific assertions below and the
+    # (unconfigured, no-op) email/SMS/WhatsApp channels behave identically to
+    # before this refactor.
+    with app.app_context(), patch("app.services.notifications.send_push_to_user_ids") as mock_send:
         mock_send.return_value = {"sent": 1, "failed": 0, "skipped": False}
         _check_and_notify()
 
@@ -71,7 +76,12 @@ def test_check_and_notify_skips_test_slots(app, make_slot_and_window):
     slot_id, window_id = make_slot_and_window()
     mongo.db.match_slots.update_many({}, {"$set": {"is_test": True}})
 
-    with app.app_context(), patch("app.services.notification_scheduler.send_push_to_user_ids") as mock_send:
+    # notification_scheduler now calls notify_event() (services/notifications.py),
+    # which is what actually calls send_push_to_user_ids — patched at its
+    # source module so both the push-specific assertions below and the
+    # (unconfigured, no-op) email/SMS/WhatsApp channels behave identically to
+    # before this refactor.
+    with app.app_context(), patch("app.services.notifications.send_push_to_user_ids") as mock_send:
         _check_and_notify()
         mock_send.assert_not_called()
         window = mongo.db.voting_windows.find_one()
@@ -85,7 +95,12 @@ def test_check_and_notify_skips_future_windows(app, make_slot_and_window):
 
     slot_id, window_id = make_slot_and_window(opens_at=utcnow() + timedelta(hours=1))
 
-    with app.app_context(), patch("app.services.notification_scheduler.send_push_to_user_ids") as mock_send:
+    # notification_scheduler now calls notify_event() (services/notifications.py),
+    # which is what actually calls send_push_to_user_ids — patched at its
+    # source module so both the push-specific assertions below and the
+    # (unconfigured, no-op) email/SMS/WhatsApp channels behave identically to
+    # before this refactor.
+    with app.app_context(), patch("app.services.notifications.send_push_to_user_ids") as mock_send:
         _check_and_notify()
         mock_send.assert_not_called()
         window = mongo.db.voting_windows.find_one()
