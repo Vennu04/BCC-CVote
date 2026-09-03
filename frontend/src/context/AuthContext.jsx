@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
-import { isVoter } from "../utils/roles";
+import { isVoter, isStaff } from "../utils/roles";
 import { getDeviceId } from "../utils/device";
 
 const AuthContext = createContext(null);
@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, refreshMe, updateToken, loading, isAdmin: user?.role === "admin" || !!user?.is_admin, isVoter: isVoter(user) }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshMe, updateToken, loading, isAdmin: isStaff(user), isVoter: isVoter(user) }}>
       {children}
     </AuthContext.Provider>
   );

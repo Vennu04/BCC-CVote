@@ -250,6 +250,36 @@ def not_available_week():
 
 # ── Vote summary — counts for everyone, named attendance once you've voted ────
 
+@votes_bp.route("/attendance/leaderboard", methods=["GET"])
+@jwt_required()
+def attendance_leaderboard():
+    """Read-only attendance leaderboard — viewable by any authenticated
+    account, including the read-only viewer role. A public-facing subset of
+    admin.py's /admin/attendance: ranked counts only, no settings-mutation,
+    no per-match check-in editing (that stays admin/organizer-only there)."""
+    voters = list(mongo.db.users.find({"is_active": True, **VOTER_FILTER}))
+    counts = {}
+    for match in mongo.db.league_matches.find({}, {"attendee_ids": 1}):
+        for voter_id in match.get("attendee_ids", []):
+            counts[voter_id] = counts.get(voter_id, 0) + 1
+
+    leaderboard = sorted(
+        (
+            {
+                "name": v["name"],
+                "attendance_count": counts.get(str(v["_id"]), 0),
+                "knockout_eligible": v.get("knockout_eligible", False),
+            }
+            for v in voters
+        ),
+        key=lambda e: (-e["attendance_count"], e["name"]),
+    )
+    return jsonify({
+        "leaderboard": leaderboard,
+        "total_matches_organized": mongo.db.league_matches.count_documents({}),
+    })
+
+
 @votes_bp.route("/votes/summary", methods=["GET"])
 @jwt_required()
 def vote_summary():
