@@ -4,8 +4,31 @@ Cricket club app for weekend match-availability voting and a live points-based p
 auction to split available players into two balanced teams. Currently running the **BCC
 Premier League 2026** tournament.
 
-**Live:** https://d2welg0wjdnhjp.cloudfront.net
+**Live:** https://bcccvote.duckdns.org/
 **Deployment/ops details:** see [INFRASTRUCTURE.md](INFRASTRUCTURE.md)
+
+---
+
+## What's new
+
+- **Organizer & viewer roles** — a new `organizer` role gets full admin-console access
+  except the handful of destructive actions (delete captain/player, reset-device,
+  close-window-early), which stay admin-only. A new read-only `viewer` role can see
+  results/leaderboard but has no vote/bid/admin rights at all.
+- **Unified audit log** — every captain/player create/update/delete, admin vote
+  override, and auction release/sold/close now also writes to a single `audit_logs`
+  collection (`user_id`, `action`, `entity_type`, `entity_id`, `old_value`, `new_value`,
+  `timestamp`), alongside the existing specialized trails (vote overrides, auction
+  release log, proxy-bid/drop chat notes), which are unchanged.
+- **Admin dashboard insights** — new attendance-trend, auction-spend-by-category, and
+  voting-participation-% charts on the Admin Dashboard, fetched once per page load
+  (separate from the existing 10s-polled vote matrix).
+- **Email / SMS / WhatsApp notifications** — alongside the existing Web Push, admin can
+  configure SMTP and/or Twilio to also reach captains/players by email, SMS, or
+  WhatsApp when voting opens, an auction starts, or a player is sold. Every channel is
+  opt-in via env vars and silently no-ops if unconfigured.
+- **Public/viewer results view** — the Results page now includes a read-only Attendance
+  Leaderboard, reachable by any authenticated account including the new viewer role.
 
 ---
 

@@ -3,7 +3,10 @@
 Where BCC-CVote actually runs today, how it deploys, and how it got here. Feature/product
 docs live in [README.md](README.md) — this file is ops-only.
 
-**Live:** https://d2welg0wjdnhjp.cloudfront.net
+**Live:** https://bcccvote.duckdns.org/ (superseded the CloudFront URL below as of
+#22, 2026-09-02 — the rest of this document below is dated 2026-08-18 and still
+describes the pre-DuckDNS CloudFront/sslip.io setup; a full rewrite is out of scope
+here, see #22's commit message for what actually changed)
 
 ---
 
