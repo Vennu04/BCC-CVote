@@ -12,7 +12,7 @@ export default function VotingSlots({ voting }) {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="text-4xl mb-2">🏏</div>
-          <p className="text-gray-500">Loading slots…</p>
+          <p className="text-white/40">Loading slots…</p>
         </div>
       </div>
     );
@@ -24,13 +24,13 @@ export default function VotingSlots({ voting }) {
   // actually a network/server error with a one-click fix (retry).
   if (error && rows.length === 0) {
     return (
-      <div className="card text-center py-12">
-        <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
-        <p className="text-gray-700 font-medium">Couldn't load your voting slots</p>
-        <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
+      <div className="card-dark text-center py-12">
+        <AlertTriangle className="mx-auto text-amber-400 mb-3" size={40} />
+        <p className="text-white font-medium">Couldn't load your voting slots</p>
+        <p className="text-white/40 text-sm mt-1 mb-4">Check your connection and try again</p>
         <button
           onClick={fetchVotes}
-          className="btn-secondary inline-flex items-center gap-1.5"
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl border border-sky-400/20 text-white/80 hover:bg-sky-400/10 transition-all duration-150"
         >
           <RefreshCw size={14} /> Retry
         </button>
@@ -45,7 +45,7 @@ export default function VotingSlots({ voting }) {
     <>
       {/* All voted banner */}
       {allVoted && (
-        <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 mb-4 text-sm font-medium shadow-soft">
+        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 text-green-400 rounded-xl px-4 py-3 mb-4 text-sm font-medium">
           <CheckCircle size={18} />
           <span>All slots voted!</span>
         </div>
@@ -53,17 +53,17 @@ export default function VotingSlots({ voting }) {
 
       {/* Not available this week button */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <span className="text-sm text-gray-500">{votedCount} / {rows.length} slots voted</span>
+        <span className="text-sm text-white/40">{votedCount} / {rows.length} slots voted</span>
         <div className="flex items-center gap-2">
           {error && (
-            <span className="flex items-center gap-1 text-xs text-amber-600" title="Showing last known data — refresh failed">
+            <span className="flex items-center gap-1 text-xs text-amber-400" title="Showing last known data — refresh failed">
               <AlertTriangle size={13} /> Refresh failed
             </span>
           )}
           <button
             onClick={handleNotAvailableWeek}
             disabled={submitting === "all" || !anyOpen}
-            className="flex items-center gap-1.5 text-sm px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] font-medium transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
+            className="flex items-center gap-1.5 text-sm px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/15 active:scale-[0.97] font-medium transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
             title={anyOpen ? "" : "No voting windows are open right now"}
           >
             <XCircle size={15} />
@@ -71,7 +71,7 @@ export default function VotingSlots({ voting }) {
           </button>
           <button
             onClick={fetchVotes}
-            className="icon-btn text-gray-400 hover:text-pitch-600 hover:bg-pitch-50"
+            className="icon-btn text-white/40 hover:text-sky-400 hover:bg-sky-400/10"
           >
             <RefreshCw size={15} />
           </button>
@@ -80,10 +80,10 @@ export default function VotingSlots({ voting }) {
 
       {/* Slot cards */}
       {rows.length === 0 ? (
-        <div className="card text-center py-12">
+        <div className="card-dark text-center py-12">
           <div className="text-5xl mb-3">🏏</div>
-          <p className="text-gray-600 font-medium">No slots available yet</p>
-          <p className="text-gray-400 text-sm mt-1">The organizer hasn't set up this weekend's slots</p>
+          <p className="text-white/70 font-medium">No slots available yet</p>
+          <p className="text-white/40 text-sm mt-1">The organizer hasn't set up this weekend's slots</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

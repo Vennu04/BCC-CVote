@@ -9,20 +9,36 @@ import { TOURNAMENT_NAME } from "../config/appMeta";
 
 const MY_AUCTION_POLL_MS = 10000;
 
+// The 3 dashboard routes that get the new royal-blue chrome (per the
+// approved mockup) — every other route keeps the existing cricket-navy
+// Navbar exactly as it was. Login has no navbar at all (public route), so
+// it isn't listed here.
+const DARK_THEME_ROUTES = ["/admin", "/captain/dashboard", "/player/dashboard"];
+
 export default function Navbar() {
   const { user, logout, isAdmin, isVoter } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [myAuctionId, setMyAuctionId] = useState(null);
+  const dark = DARK_THEME_ROUTES.includes(location.pathname);
 
   // Highlights whichever nav link matches the current route, so a fast-scanning
   // admin always has an at-a-glance answer to "which admin page am I on".
-  const navLinkClass = (path) =>
-    `flex items-center gap-1.5 transition-colors duration-150 whitespace-nowrap py-2 px-1 min-h-[44px] rounded-lg ${
-      location.pathname === path
+  const navLinkClass = (path) => {
+    const isActive = location.pathname === path;
+    if (dark) {
+      return `flex items-center gap-1.5 transition-colors duration-150 whitespace-nowrap py-2 px-1 min-h-[44px] border-b-2 ${
+        isActive
+          ? "text-white font-extrabold border-sky-400"
+          : "text-white/45 hover:text-white font-bold border-transparent"
+      }`;
+    }
+    return `flex items-center gap-1.5 transition-colors duration-150 whitespace-nowrap py-2 px-1 min-h-[44px] rounded-lg ${
+      isActive
         ? "text-cricket-gold font-semibold bg-white/10"
         : "text-white/85 hover:text-cricket-gold active:bg-white/10"
     }`;
+  };
 
   // Lets a captain (or an admin who's also flagged as a voter) discover "I'm
   // in a live auction right now" without needing a manually-shared link —
@@ -47,15 +63,25 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-40 bg-gradient-to-b from-cricket-navy to-cricket-navy-light text-white shadow-soft safe-top">
+    <nav className={`sticky top-0 z-40 text-white safe-top ${
+      dark
+        ? "bg-royal-800 border-b border-sky-400/10"
+        : "bg-gradient-to-b from-cricket-navy to-cricket-navy-light shadow-soft"
+    }`}>
       <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between flex-wrap gap-y-2">
         {/* Logo */}
         <Link to={homePathFor(user)} className="flex items-center gap-2 font-bold text-lg tracking-tight min-h-[44px]">
-          <span className="text-2xl">🏏</span>
-          <span className="flex flex-col leading-tight">
-            <span>BCC<span className="text-cricket-gold">-CVote</span></span>
-            <span className="hidden sm:block text-[10px] font-medium text-white/60 tracking-wide">{TOURNAMENT_NAME}</span>
-          </span>
+          {dark ? (
+            <span className="font-black">BCC<span className="text-sky-400">CVote</span></span>
+          ) : (
+            <>
+              <span className="text-2xl">🏏</span>
+              <span className="flex flex-col leading-tight">
+                <span>BCC<span className="text-cricket-gold">-CVote</span></span>
+                <span className="hidden sm:block text-[10px] font-medium text-white/60 tracking-wide">{TOURNAMENT_NAME}</span>
+              </span>
+            </>
+          )}
         </Link>
 
         {/* Nav links */}
