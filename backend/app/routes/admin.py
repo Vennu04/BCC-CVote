@@ -8,7 +8,7 @@ from datetime import datetime
 import pytz
 
 from .. import mongo
-from ..utils.auth import admin_required, get_current_user
+from ..utils.auth import admin_required, admin_only_required, get_current_user
 from ..utils.time_utils import (
     is_voting_window_open, format_ist, now_ist, IST, suggested_window_for_slot,
     effective_match_date_str, get_match_weekend_dates, match_datetime_for_slot, to_iso_utc,
@@ -519,7 +519,7 @@ def update_captain(captain_id):
 
 
 @admin_bp.route("/captains/<captain_id>", methods=["DELETE"])
-@admin_required
+@admin_only_required
 def remove_captain(captain_id):
     result = mongo.db.users.update_one(
         {"_id": ObjectId(captain_id), "role": "captain"},
@@ -531,7 +531,7 @@ def remove_captain(captain_id):
 
 
 @admin_bp.route("/captains/<captain_id>/reset-device", methods=["POST"])
-@admin_required
+@admin_only_required
 def reset_captain_device(captain_id):
     # Clears the bound device so the captain's next login registers whatever
     # phone/browser they use then — for a lost/replaced phone, not a way
@@ -1006,7 +1006,7 @@ def update_player(player_id):
 
 
 @admin_bp.route("/players/<player_id>", methods=["DELETE"])
-@admin_required
+@admin_only_required
 def remove_player(player_id):
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "role": "player"},
@@ -1018,7 +1018,7 @@ def remove_player(player_id):
 
 
 @admin_bp.route("/players/<player_id>/reset-device", methods=["POST"])
-@admin_required
+@admin_only_required
 def reset_player_device(player_id):
     result = mongo.db.users.update_one(
         {"_id": ObjectId(player_id), "role": "player"},
@@ -1255,7 +1255,7 @@ def set_window():
 
 
 @admin_bp.route("/window/close", methods=["POST"])
-@admin_required
+@admin_only_required
 def close_window_early():
     data = request.get_json(silent=True) or {}
     slot_id = data.get("slot_id")

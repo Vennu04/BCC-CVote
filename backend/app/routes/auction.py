@@ -4,7 +4,7 @@ from bson import ObjectId
 from datetime import datetime, timedelta
 
 from .. import mongo, limiter
-from ..utils.auth import admin_required, get_current_user
+from ..utils.auth import admin_required, get_current_user, captain_required
 from ..utils.time_utils import format_ist, to_iso_utc, utcnow
 from ..services.next_match import next_match_context, next_match_label
 
@@ -1023,7 +1023,7 @@ def _bid_core(auction, auction_id, captain_id, amount):
 
 
 @auction_bp.route("/auction/<auction_id>/bid", methods=["POST"])
-@jwt_required()
+@captain_required
 # Generous on purpose -- a real bidding war between two captains can mean
 # several rapid clicks in a row, and this should never be the thing that
 # gets in the way of that. Just a backstop against a scripted flood, not a
@@ -1119,7 +1119,7 @@ def _drop_core(auction, auction_id, captain_id):
 
 
 @auction_bp.route("/auction/<auction_id>/drop", methods=["POST"])
-@jwt_required()
+@captain_required
 @limiter.limit("60 per minute")
 def drop_player(auction_id):
     auction = _auction_or_404(auction_id)
@@ -1220,7 +1220,7 @@ def admin_proxy_drop(auction_id):
 
 
 @auction_bp.route("/auction/<auction_id>/chat", methods=["POST"])
-@jwt_required()
+@captain_required
 # Same ballpark as the bid endpoint's limit -- a captain typing several quick
 # messages in a row during live bidding shouldn't hit this, it's only a
 # backstop against a scripted flood.
@@ -1262,7 +1262,7 @@ def send_chat_message(auction_id):
 
 
 @auction_bp.route("/auction/<auction_id>/free-pick", methods=["POST"])
-@jwt_required()
+@captain_required
 @limiter.limit("20 per minute")
 def free_pick(auction_id):
     """
