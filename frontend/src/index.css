@@ -194,6 +194,12 @@
   .card-dark {
     @apply bg-royal-600 border border-sky-400/[0.13] rounded-2xl p-6;
   }
+  /* Lighter sibling of .card-dark — Captain/Player Dashboard only (per user
+     feedback that those two should read "a little light compared to
+     admin"), same royal-blue family, one step up the scale. */
+  .card-dark-light {
+    @apply bg-royal-500 border border-sky-400/[0.16] rounded-2xl p-6;
+  }
   .input-field-dark {
     @apply w-full px-4 py-3 min-h-[44px] rounded-xl text-base
       bg-sky-400/5 border border-sky-400/20 text-white placeholder-white/30

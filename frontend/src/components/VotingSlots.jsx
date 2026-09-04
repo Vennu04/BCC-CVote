@@ -24,7 +24,7 @@ export default function VotingSlots({ voting }) {
   // actually a network/server error with a one-click fix (retry).
   if (error && rows.length === 0) {
     return (
-      <div className="card-dark text-center py-12">
+      <div className="card-dark-light text-center py-12">
         <AlertTriangle className="mx-auto text-amber-400 mb-3" size={40} />
         <p className="text-white font-medium">Couldn't load your voting slots</p>
         <p className="text-white/40 text-sm mt-1 mb-4">Check your connection and try again</p>
@@ -80,7 +80,7 @@ export default function VotingSlots({ voting }) {
 
       {/* Slot cards */}
       {rows.length === 0 ? (
-        <div className="card-dark text-center py-12">
+        <div className="card-dark-light text-center py-12">
           <div className="text-5xl mb-3">🏏</div>
           <p className="text-white/70 font-medium">No slots available yet</p>
           <p className="text-white/40 text-sm mt-1">The organizer hasn't set up this weekend's slots</p>

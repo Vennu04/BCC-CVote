@@ -34,11 +34,17 @@ export default {
         // Tailwind's own built-in `sky` scale (sky-400 == #38bdf8, matching
         // the mockup's accent exactly) — no new token needed for that part.
         royal: {
-          950: "#030d24", // deepest page background
-          900: "#051836", // page background, mid gradient stop
-          800: "#061630", // top nav bar
+          950: "#030d24", // deepest page background (Admin/Login)
+          900: "#051836", // page background, mid gradient stop (Admin/Login); also Captain/Player's page bg
+          800: "#061630", // top nav bar; also Captain/Player's page bg mid gradient stop
           700: "#0a1a38", // ticker strip
-          600: "#0d1b33", // card background
+          600: "#0d1b33", // Admin card background
+          // One step lighter than 600 — Captain/Player Dashboard cards only,
+          // so those two pages read as a visibly lighter tint of the same
+          // royal-blue family, not a different palette. Added here rather
+          // than reusing 600 so the two dashboards' cards are genuinely
+          // lighter, not just sitting on a lighter page background.
+          500: "#15305c",
         },
       },
       // System font stack only — no CDN webfont (offline-safe, matches the

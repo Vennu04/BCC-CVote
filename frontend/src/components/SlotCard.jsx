@@ -54,7 +54,7 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
   const showRevoke = currentVote && windowInfo?.can_revoke;
 
   return (
-    <div className="card-dark">
+    <div className="card-dark-light">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
