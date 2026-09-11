@@ -439,7 +439,7 @@ export default function AdminAuction() {
                     selectedSlotId === slot.id ? "border-pitch-400 bg-pitch-50" : "border-gray-200 bg-white hover:border-gray-300"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center justify-between gap-2 mb-1">
                     <p className="text-xs font-semibold text-gray-700">{slot.day} {slot.match_time || slot.time_of_day}</p>
                     {win?.status && (
                       <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
@@ -447,6 +447,9 @@ export default function AdminAuction() {
                       </span>
                     )}
                   </div>
+                  {win?.closes_at && (
+                    <p className="text-[11px] text-gray-400 mb-2">📅 {win.closes_at}</p>
+                  )}
                   <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} compact />
                 </button>
               ))}
@@ -467,6 +470,7 @@ export default function AdminAuction() {
                   {slots.map(({ slot, window: win }) => (
                     <option key={slot.id} value={slot.id}>
                       {slot.day} {slot.match_time || slot.time_of_day}
+                      {win?.closes_at ? ` — ${win.closes_at}` : ""}
                       {win?.status === "auction_completed" ? " — LIVE AUCTION COMPLETED" : ""}
                     </option>
                   ))}
