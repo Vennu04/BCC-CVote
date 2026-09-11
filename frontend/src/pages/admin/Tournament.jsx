@@ -95,8 +95,12 @@ export default function AdminTournament() {
     }
     setAddingFixture(true);
     try {
-      await api.post("/admin/tournament/fixtures", { group: activeGroup, ...newFixture });
-      toast.success("Fixture added");
+      const res = await api.post("/admin/tournament/fixtures", { group: activeGroup, ...newFixture });
+      // A fixture saved with a date immediately opens its voting window and
+      // becomes votable/auctionable — see backend/app/routes/tournament.py
+      // _ensure_match_slot_and_window. One without a date yet just gets
+      // scheduled here for now; voting opens once a date is added later.
+      toast.success(res.data?.fixture?.match_slot_id ? "Fixture added — voting window is open! 🗳️" : "Fixture added");
       setNewFixture(EMPTY_FIXTURE);
       fetchData();
     } catch (err) {
@@ -109,10 +113,14 @@ export default function AdminTournament() {
   const handleSaveFixture = async (fixtureId) => {
     const edit = fixtureEdits[fixtureId];
     if (!edit) return;
+    const hadNoSlotYet = !fixtures.find((f) => f.id === fixtureId)?.match_slot_id;
     setSavingFixture(fixtureId);
     try {
-      await api.put(`/admin/tournament/fixtures/${fixtureId}`, edit);
-      toast.success("Fixture updated");
+      const res = await api.put(`/admin/tournament/fixtures/${fixtureId}`, edit);
+      // Only call out the voting-window auto-open the first time a date
+      // lands on this fixture — re-saving an already-scheduled fixture (e.g.
+      // just the venue) is a routine edit, not a "voting just started" event.
+      toast.success(hadNoSlotYet && res.data?.match_slot_id ? "Fixture updated — voting window is open! 🗳️" : "Fixture updated");
       setFixtureEdits((prev) => { const next = { ...prev }; delete next[fixtureId]; return next; });
       fetchData();
     } catch (err) {

@@ -166,6 +166,12 @@ def _slot_to_dict(slot):
         "date_override": slot.get("date_override"),
         "description": slot.get("description", ""),
         "is_adhoc": slot.get("is_adhoc", False),
+        "team_a_id": slot.get("team_a_id"),
+        "team_a_name": slot.get("team_a_name"),
+        "team_b_id": slot.get("team_b_id"),
+        "team_b_name": slot.get("team_b_name"),
+        "group": slot.get("group"),
+        "tournament_fixture_id": slot.get("tournament_fixture_id"),
     }
 
 
