@@ -1284,11 +1284,6 @@ def get_window():
             continue
 
         window = _get_active_window(sid)
-        suggested = suggested_window_for_slot(slot)
-        slot_dict = _slot_to_dict(slot)
-        slot_dict["weather"] = get_forecast_for_slot(slot)
-        slot_dict["match_starts_at_iso"] = to_iso_utc(match_start) if match_start else None
-
         window_info = _window_info(window) if window else None
         if window_info:
             linked_auction = mongo.db.auctions.find_one(
@@ -1296,6 +1291,21 @@ def get_window():
             )
             window_info["status"] = _window_status(window, window_info, linked_auction)
             window_info["auction_id"] = str(linked_auction["_id"]) if linked_auction else None
+
+            # Cancelled and fully-auctioned matches are done -- a cancelled
+            # match won't reopen and a completed auction can't be re-run
+            # against this same window -- so they drop off the dashboard
+            # immediately rather than waiting for match_start to also pass.
+            # "closed" (voting ended, no auction yet) deliberately stays
+            # visible: that's exactly the state admin needs to click into to
+            # set up the auction, so hiding it would break that workflow.
+            if window_info["status"] in ("cancelled", "auction_completed"):
+                continue
+
+        suggested = suggested_window_for_slot(slot)
+        slot_dict = _slot_to_dict(slot)
+        slot_dict["weather"] = get_forecast_for_slot(slot)
+        slot_dict["match_starts_at_iso"] = to_iso_utc(match_start) if match_start else None
 
         windows.append({
             "slot": slot_dict,
