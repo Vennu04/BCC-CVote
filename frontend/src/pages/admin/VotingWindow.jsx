@@ -40,10 +40,22 @@ export default function VotingWindow() {
   const [savingCancelSlot, setSavingCancelSlot] = useState(null);
   const { confirmProps, requestConfirm } = useConfirm();
 
+  // This page is where admin manages what's still actionable -- a match with
+  // no window yet (needs one set), or one currently open/about to open. Once
+  // voting has closed, the match is cancelled, or its auction is done, there's
+  // nothing left to do here -- surfacing it just makes the actionable ones
+  // harder to find in the list. Deliberately filtered here (client-side, this
+  // page only) rather than on the shared GET /admin/window response itself --
+  // the Auction page's "Compare Available Slots"/slot picker reads that same
+  // endpoint and specifically needs closed-but-unauctioned windows to still
+  // show up there, since that's exactly the state it exists to resolve.
+  const VISIBLE_STATUSES = new Set(["open", "scheduled"]);
+  const isVisible = (win) => !win || VISIBLE_STATUSES.has(win.status);
+
   const fetchWindows = async () => {
     try {
       const res = await api.get("/admin/window");
-      const list = res.data.windows || [];
+      const list = (res.data.windows || []).filter(({ window: win }) => isVisible(win));
       setWindows(list);
       setForms((prev) => {
         const next = { ...prev };
