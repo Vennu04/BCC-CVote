@@ -110,7 +110,7 @@ def _check_leftover_award(auction, group):
             mongo.db.auction_players.update_one(
                 {"_id": p["_id"]},
                 {"$set": {"status": "free_assigned", "sold_to": other_id,
-                          "sold_price": 0, "assigned_via": "leftover_free"}},
+                          "sold_price": 0, "assigned_via": "leftover_free", "sold_at": now}},
             )
             mongo.db.auction_bids.insert_one({
                 "auction_id": str(auction["_id"]), "player_id": str(p["_id"]),
@@ -306,7 +306,7 @@ def _distribute_remaining_players_evenly(auction):
             mongo.db.auction_players.update_one(
                 {"_id": p["_id"]},
                 {"$set": {"status": "free_assigned", "sold_to": target,
-                          "sold_price": 0, "assigned_via": "leftover_free"}},
+                          "sold_price": 0, "assigned_via": "leftover_free", "sold_at": now}},
             )
             mongo.db.auction_bids.insert_one({
                 "auction_id": str(auction["_id"]), "player_id": str(p["_id"]),
@@ -816,7 +816,18 @@ def get_auction(auction_id):
     reveal_prices = auction["status"] != "completed"
 
     def captain_summary(captain_id):
-        roster = [p for p in players if p.get("sold_to") == captain_id]
+        # Sorted by sold_at (when each pick was actually resolved, whether by
+        # bid, leftover-award, or free-pick) so the roster — and anything
+        # built from it, like the WhatsApp copy summary — reads in the real
+        # order picks happened during the live auction, not Mongo's arbitrary
+        # insertion order from when auction_players was first seeded at
+        # create_auction time. Auctions completed before this field existed
+        # have no sold_at on their players; those just keep insertion order
+        # (datetime.min sorts them first, stably, instead of erroring).
+        roster = sorted(
+            (p for p in players if p.get("sold_to") == captain_id),
+            key=lambda p: p.get("sold_at") or datetime.min,
+        )
         points_remaining = _captain_points_remaining(auction, captain_id)
         by_group = {g: 0 for g in AUCTION_GROUPS}
         for p in roster:
@@ -1113,7 +1124,7 @@ def _drop_core(auction, auction_id, captain_id):
         mongo.db.auction_players.update_one(
             {"_id": ObjectId(player_id)},
             {"$set": {"status": "sold", "sold_to": other_captain,
-                      "sold_price": last_bid["amount"], "assigned_via": "bid"}},
+                      "sold_price": last_bid["amount"], "assigned_via": "bid", "sold_at": utcnow()}},
         )
         mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
         auction = _auction_or_404(auction_id)
@@ -1355,7 +1366,8 @@ def free_pick(auction_id):
 
     mongo.db.auction_players.update_one(
         {"_id": player["_id"]},
-        {"$set": {"status": "free_assigned", "sold_to": captain_id, "sold_price": 0, "assigned_via": "free_pick"}},
+        {"$set": {"status": "free_assigned", "sold_to": captain_id, "sold_price": 0,
+                  "assigned_via": "free_pick", "sold_at": utcnow()}},
     )
     mongo.db.auction_bids.insert_one({
         "auction_id": auction_id, "player_id": str(player["_id"]), "captain_id": captain_id,
