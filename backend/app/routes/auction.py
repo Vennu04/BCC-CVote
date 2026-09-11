@@ -190,6 +190,23 @@ def get_next_player_in_category(candidates, category, users_map):
     return queue[0] if queue else None
 
 
+# Same ranking _release_rank_key/get_next_player_in_category use to decide
+# release order WITHIN a live auction, reused here BEFORE one exists — so
+# "who's the least-impactful player to hold out of an odd category" and "who
+# gets released last in that category anyway" are answered by the identical
+# rule, not two different opinions about the same players. Returns every
+# voter_id in the category, best-ranked first; the caller wanting a holdout
+# suggestion just takes the last one.
+def _order_voters_by_release_rank(voter_ids, category, users_map):
+    scored, unscored = [], []
+    for uid in voter_ids:
+        key = _release_rank_key({"category": category, "user_id": uid}, users_map)
+        (scored if key is not None else unscored).append((uid, key))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    unscored.sort(key=lambda x: users_map.get(x[0], {}).get("name", ""))
+    return [uid for uid, _ in scored] + [uid for uid, _ in unscored]
+
+
 def _next_release_candidate(auction, category, users_map):
     """Mongo-querying wrapper around get_next_player_in_category — admin only
     ever chooses the category, never the specific player, so there's no room
@@ -357,6 +374,67 @@ def _apply_timeout_fallback(auction):
 
 # ── Admin: setup + control ──────────────────────────────────────────────────────
 
+# Read-only counterpart to create_auction()'s parity check — lets admin see
+# (and fix) an odd-category pool BEFORE hitting the 400 from a real create
+# attempt, instead of finding out by trial and error. Mirrors create_auction's
+# own voter-pool derivation exactly (same slot/window/captain-exclusion
+# logic) so the suggestion here is guaranteed consistent with what an actual
+# create_auction call would see for the same inputs.
+@auction_bp.route("/admin/auction/preview", methods=["GET"])
+@admin_required
+def preview_auction_pool():
+    slot_id = request.args.get("slot_id")
+    captain_a_id = request.args.get("captain_a_id")
+    captain_b_id = request.args.get("captain_b_id")
+    if not slot_id:
+        return jsonify({"error": "slot_id is required"}), 400
+
+    window = _get_active_window(slot_id)
+    if not window:
+        return jsonify({"error": "No active voting window for this slot"}), 400
+
+    excluded_captains = {cid for cid in (captain_a_id, captain_b_id) if cid}
+    available_votes = list(mongo.db.votes.find({
+        "slot_id": slot_id, "window_id": str(window["_id"]), "availability": "available",
+    }))
+    voter_ids = [v["captain_id"] for v in available_votes if v["captain_id"] not in excluded_captains]
+    voters = list(mongo.db.users.find({"_id": {"$in": [ObjectId(i) for i in voter_ids]}}))
+    users_map = {str(v["_id"]): v for v in voters}
+
+    by_group = {g: [] for g in AUCTION_GROUPS}
+    missing_category = []
+    for v in voters:
+        cat = v.get("auction_category")
+        if not cat:
+            missing_category.append({"user_id": str(v["_id"]), "name": v["name"]})
+            continue
+        by_group[cat].append(str(v["_id"]))
+
+    groups = []
+    for g in AUCTION_GROUPS:
+        ids = by_group[g]
+        is_odd = len(ids) % 2 != 0
+        ranked = _order_voters_by_release_rank(ids, g, users_map) if is_odd else []
+        groups.append({
+            "category": g,
+            "count": len(ids),
+            "is_balanced": not is_odd,
+            # Worst-ranked (last released) voter in the category — the same
+            # player who'd be released dead last anyway, so sitting them out
+            # this week costs the least. Every candidate is included (not
+            # just the top suggestion) so admin can pick someone else instead.
+            "suggested_holdout_id": ranked[-1] if ranked else None,
+            "players": [{"user_id": uid, "name": users_map[uid]["name"]} for uid in ids],
+        })
+
+    return jsonify({
+        "total_voters": len(voters),
+        "missing_category": missing_category,
+        "groups": groups,
+        "is_balanced": all(g["is_balanced"] for g in groups),
+    })
+
+
 @auction_bp.route("/admin/auction", methods=["POST"])
 @admin_required
 def create_auction():
@@ -364,6 +442,11 @@ def create_auction():
     slot_id = data.get("slot_id")
     captain_a_id = data.get("captain_a_id")
     captain_b_id = data.get("captain_b_id")
+    # Optional — the "hold this player out this week" fix an admin picks after
+    # seeing GET .../preview's suggestions. Silently intersected against the
+    # real voter pool below rather than trusted outright, so a stale/bogus id
+    # can never do anything beyond just not matching anyone.
+    holdout_ids = set(data.get("exclude_voter_ids") or [])
 
     if not slot_id or not captain_a_id or not captain_b_id:
         return jsonify({"error": "slot_id, captain_a_id and captain_b_id are required"}), 400
@@ -418,7 +501,12 @@ def create_auction():
 
     # Captains never auction themselves — they run the draft, they're not in the
     # pool being drafted, even if they happened to vote available for this slot.
-    voter_ids = [v["captain_id"] for v in available_votes if v["captain_id"] not in (captain_a_id, captain_b_id)]
+    # holdout_ids removes admin's chosen sit-outs the same way — both are just
+    # "not in this week's pool", the reason why doesn't matter past this line.
+    voter_ids = [
+        v["captain_id"] for v in available_votes
+        if v["captain_id"] not in (captain_a_id, captain_b_id) and v["captain_id"] not in holdout_ids
+    ]
     if not voter_ids:
         return jsonify({"error": "No one (other than the two captains) has voted available for this slot"}), 400
     voters = list(mongo.db.users.find({"_id": {"$in": [ObjectId(i) for i in voter_ids]}}))

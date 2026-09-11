@@ -14,7 +14,7 @@ import AuctionChat from "../../components/AuctionChat";
 import { useAuth } from "../../context/AuthContext";
 import { useAuction } from "../../hooks/useAuction";
 import { STATUS_STYLES } from "../../utils/windowStatus";
-import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2 } from "lucide-react";
+import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2, Scale } from "lucide-react";
 import { LoadingState } from "../../components/LoadingState";
 
 const STORAGE_KEY = "bcc_active_auction_id";
@@ -150,6 +150,45 @@ export default function AdminAuction() {
     [captainAId, captainBId]
   );
 
+  const [balancePreview, setBalancePreview] = useState(null);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+  const [holdoutChoices, setHoldoutChoices] = useState({}); // category -> user_id to sit out this week
+
+  // Same odd/even parity check create_auction() itself enforces, run early
+  // (as soon as a slot + both captains are picked) so admin sees — and can
+  // fix — an unbalanced pool before hitting a 400 on submit, instead of
+  // discovering it by trial and error. Suggested holdouts default to
+  // whoever create_auction's own release-order ranking would pick last in
+  // that category anyway (see backend's _order_voters_by_release_rank), so
+  // sitting them out this week costs the least.
+  useEffect(() => {
+    if (!selectedSlotId || !captainAId || !captainBId) {
+      setBalancePreview(null);
+      setHoldoutChoices({});
+      return;
+    }
+    let cancelled = false;
+    setLoadingBalance(true);
+    api.get("/admin/auction/preview", { params: { slot_id: selectedSlotId, captain_a_id: captainAId, captain_b_id: captainBId } })
+      .then((res) => {
+        if (cancelled) return;
+        setBalancePreview(res.data);
+        const defaults = {};
+        (res.data.groups || []).forEach((g) => {
+          if (!g.is_balanced && g.suggested_holdout_id) defaults[g.category] = g.suggested_holdout_id;
+        });
+        setHoldoutChoices(defaults);
+      })
+      .catch(() => { if (!cancelled) setBalancePreview(null); })
+      .finally(() => { if (!cancelled) setLoadingBalance(false); });
+    return () => { cancelled = true; };
+  }, [selectedSlotId, captainAId, captainBId]);
+
+  const unbalancedGroups = useMemo(
+    () => (balancePreview?.groups || []).filter((g) => !g.is_balanced),
+    [balancePreview]
+  );
+
   // Practice auctions don't need real votes/categories — any active voter
   // (captain or player) is a fair pick for a rehearsal pool, minus whoever's
   // running the draft this time.
@@ -218,6 +257,7 @@ export default function AdminAuction() {
     try {
       const res = await api.post("/admin/auction", {
         slot_id: selectedSlotId, captain_a_id: captainAId, captain_b_id: captainBId,
+        exclude_voter_ids: Object.values(holdoutChoices),
       });
       toast.success(`Auction created — ${JSON.stringify(res.data.group_counts)}`);
       localStorage.setItem(STORAGE_KEY, res.data.auction_id);
@@ -516,6 +556,50 @@ export default function AdminAuction() {
                   </select>
                 </div>
               </div>
+
+              {loadingBalance && (
+                <p className="text-xs text-gray-400">Checking category balance…</p>
+              )}
+
+              {unbalancedGroups.length > 0 && (
+                <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3.5 space-y-3">
+                  <div className="flex items-center gap-1.5">
+                    <Scale size={15} className="text-amber-700 shrink-0" />
+                    <p className="text-sm font-bold text-amber-900">
+                      {unbalancedGroups.length === 1 ? "1 category needs" : `${unbalancedGroups.length} categories need`} an even split
+                    </p>
+                  </div>
+                  <p className="text-xs text-amber-800">
+                    Each category splits evenly between the two teams. Pick one player per category below to
+                    sit out this week — pre-selected with whoever'd be released last anyway (least impact),
+                    but you can choose someone else.
+                  </p>
+                  {unbalancedGroups.map((g) => (
+                    <div key={g.category} className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-amber-900 w-40 shrink-0">
+                        {GROUP_LABELS[g.category]} <span className="font-normal text-amber-700">({g.count})</span>
+                      </label>
+                      <select
+                        className="input-field text-xs py-1.5 flex-1 bg-white"
+                        value={holdoutChoices[g.category] || ""}
+                        onChange={(e) => setHoldoutChoices({ ...holdoutChoices, [g.category]: e.target.value })}
+                      >
+                        {g.players.map((p) => (
+                          <option key={p.user_id} value={p.user_id}>
+                            {p.name}{p.user_id === g.suggested_holdout_id ? " (suggested)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {balancePreview && unbalancedGroups.length === 0 && (
+                <p className="text-xs text-green-700 flex items-center gap-1.5">
+                  <Scale size={13} /> All categories are evenly split — ready to go.
+                </p>
+              )}
 
               <button type="submit" disabled={creating} className="btn-primary text-sm py-2 px-4">
                 {creating ? "Creating…" : "Create Auction"}
