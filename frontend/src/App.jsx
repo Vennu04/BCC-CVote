@@ -19,11 +19,13 @@ const CaptainDashboard = lazy(() => import("./pages/CaptainDashboard"));
 const PlayerDashboard = lazy(() => import("./pages/PlayerDashboard"));
 const Results = lazy(() => import("./pages/Results"));
 const Auction = lazy(() => import("./pages/Auction"));
+const Tournament = lazy(() => import("./pages/Tournament"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const ManagePlayers = lazy(() => import("./pages/admin/ManagePlayers"));
 const Attendance = lazy(() => import("./pages/admin/Attendance"));
 const VotingWindow = lazy(() => import("./pages/admin/VotingWindow"));
 const AdminAuction = lazy(() => import("./pages/admin/Auction"));
+const AdminTournament = lazy(() => import("./pages/admin/Tournament"));
 
 function RouteLoading() {
   return (
@@ -63,6 +65,7 @@ export default function App() {
           <Route path="/player/dashboard"  element={<PlayerRoute><PlayerDashboard /></PlayerRoute>} />
           <Route path="/results"           element={<ProtectedRoute><Results /></ProtectedRoute>} />
           <Route path="/auction/:id"       element={<ProtectedRoute><Auction /></ProtectedRoute>} />
+          <Route path="/tournament"        element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
 
           <Route path="/admin"           element={<AdminRoute><AdminDashboard /></AdminRoute>} />
           <Route path="/admin/players"   element={<AdminRoute><ManagePlayers /></AdminRoute>} />
@@ -72,6 +75,7 @@ export default function App() {
           <Route path="/admin/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
           <Route path="/admin/window"    element={<AdminRoute><VotingWindow /></AdminRoute>} />
           <Route path="/admin/auction"   element={<AdminRoute><AdminAuction /></AdminRoute>} />
+          <Route path="/admin/tournament" element={<AdminRoute><AdminTournament /></AdminRoute>} />
 
           <Route path="/"   element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
           <Route path="*"   element={<NotFound />} />
