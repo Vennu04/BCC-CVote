@@ -74,6 +74,9 @@ def _serialize_slot(slot):
         "date_override": slot.get("date_override"),
         "is_adhoc": slot.get("is_adhoc", False),
         "label": f"{slot['day']} {slot.get('match_time', slot['time_of_day'])}",
+        "team_a_name": slot.get("team_a_name"),
+        "team_b_name": slot.get("team_b_name"),
+        "group": slot.get("group"),
     }
 
 

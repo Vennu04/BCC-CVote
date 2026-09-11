@@ -2,14 +2,89 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from bson import ObjectId
 from bson.errors import InvalidId
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
 
 from .. import mongo
 from ..utils.auth import admin_required
+from ..utils.time_utils import IST, utcnow
 
 tournament_bp = Blueprint("tournament", __name__)
 
 GROUPS = ("A", "B", "C")
+
+
+def _12h_display(value):
+    try:
+        return datetime.strptime(value, "%H:%M").strftime("%I:%M %p")
+    except (TypeError, ValueError):
+        return None
+
+
+# A fixture only becomes a real votable/auctionable match once it has a date —
+# this creates the same match_slots + voting_windows documents the manual
+# admin.py add_slot()/set_window() flow would (so it shows up on the Window
+# Dashboard and the Auction page's "Compare Available Slots" exactly like any
+# other match), but triggered automatically from saving the fixture instead
+# of two separate manual admin actions. Voting opens immediately and closes
+# at the fixture's own kickoff time, so no extra date/duration picker is
+# needed in the Tournament admin UI. Guarded by match_slot_id so re-saving an
+# already-scheduled fixture (e.g. just updating the venue) never creates a
+# second slot/window for the same fixture.
+def _ensure_match_slot_and_window(fixture, team1, team2):
+    if fixture.get("match_slot_id") or not fixture.get("date"):
+        return None
+
+    match_dt = datetime.fromisoformat(fixture["date"])
+    time_str = fixture.get("time")
+    if time_str:
+        try:
+            hh, mm = time_str.split(":")
+            match_dt = match_dt.replace(hour=int(hh), minute=int(mm))
+        except ValueError:
+            time_str = None
+    if not time_str:
+        match_dt = match_dt.replace(hour=23, minute=59)  # end of match day, no kickoff time given
+
+    opens_at = utcnow()
+    closes_at = IST.localize(match_dt).astimezone(pytz.utc).replace(tzinfo=None)
+    if closes_at <= opens_at:
+        # Fixture date/time is already in the past (or right now) — give it a
+        # short real window rather than opening a voting window that's
+        # instantly closed and unusable.
+        closes_at = opens_at + timedelta(hours=6)
+
+    last_slot = mongo.db.match_slots.find_one(sort=[("slot_number", -1)])
+    slot_doc = {
+        "slot_number": (last_slot["slot_number"] + 1) if last_slot else 1,
+        "day": datetime.fromisoformat(fixture["date"]).strftime("%A"),
+        "time_of_day": "Evening" if (time_str and int(time_str.split(":")[0]) >= 16) else "Morning",
+        "match_time": _12h_display(time_str) or "",
+        "start_time": time_str,
+        "end_time": None,
+        "description": fixture.get("venue") or "",
+        "match_date": fixture["date"],
+        "is_adhoc": True,
+        "is_active": True,
+        "created_at": utcnow(),
+        "team_a_id": str(team1["_id"]), "team_a_name": team1["name"],
+        "team_b_id": str(team2["_id"]), "team_b_name": team2["name"],
+        "group": fixture["group"],
+        "tournament_fixture_id": str(fixture["_id"]),
+    }
+    slot_id = mongo.db.match_slots.insert_one(slot_doc).inserted_id
+
+    mongo.db.voting_windows.insert_one({
+        "slot_id": str(slot_id),
+        "opens_at": opens_at,
+        "closes_at": closes_at,
+        "is_active": True,
+        "created_at": utcnow(),
+    })
+    mongo.db.tournament_fixtures.update_one(
+        {"_id": fixture["_id"]}, {"$set": {"match_slot_id": str(slot_id)}}
+    )
+    return str(slot_id)
 
 
 def _object_id(raw):
@@ -38,6 +113,7 @@ def _fixture_to_dict(f, teams_by_id):
         "time": f.get("time"),
         "venue": f.get("venue"),
         "result": f.get("result"),
+        "match_slot_id": f.get("match_slot_id"),
     }
 
 
@@ -140,6 +216,7 @@ def create_fixture():
         "created_at": datetime.utcnow(),
     }
     doc["_id"] = mongo.db.tournament_fixtures.insert_one(doc).inserted_id
+    doc["match_slot_id"] = _ensure_match_slot_and_window(doc, team1, team2)
     teams_by_id = {str(team1["_id"]): team1, str(team2["_id"]): team2}
     return jsonify({"fixture": _fixture_to_dict(doc, teams_by_id)}), 201
 
@@ -167,7 +244,21 @@ def update_fixture(fixture_id):
     result = mongo.db.tournament_fixtures.update_one({"_id": fixture_oid}, {"$set": updates})
     if result.matched_count == 0:
         return jsonify({"error": "Fixture not found"}), 404
-    return jsonify({"success": True})
+
+    # A fixture created without a date yet (or one whose teams/date just
+    # changed) may only become schedulable right now — same auto-open as
+    # create_fixture, guarded the same way so an already-scheduled fixture
+    # never gets a second slot/window from a later, unrelated edit (e.g. just
+    # updating the venue or a result).
+    match_slot_id = None
+    if "date" in updates:
+        fixture = mongo.db.tournament_fixtures.find_one({"_id": fixture_oid})
+        team1 = mongo.db.tournament_teams.find_one({"_id": fixture["team1_id"]})
+        team2 = mongo.db.tournament_teams.find_one({"_id": fixture["team2_id"]})
+        if team1 and team2:
+            match_slot_id = _ensure_match_slot_and_window(fixture, team1, team2) or fixture.get("match_slot_id")
+
+    return jsonify({"success": True, "match_slot_id": match_slot_id})
 
 
 @tournament_bp.route("/admin/tournament/fixtures/<fixture_id>", methods=["DELETE"])
