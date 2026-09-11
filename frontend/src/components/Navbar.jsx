@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
 import api from "../utils/api";
 import toast from "react-hot-toast";
-import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck, KeyRound } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck, KeyRound, Trophy } from "lucide-react";
 import { TOURNAMENT_NAME } from "../config/appMeta";
 
 const MY_AUCTION_POLL_MS = 10000;
@@ -86,6 +86,11 @@ export default function Navbar() {
 
         {/* Nav links */}
         <div className="order-3 sm:order-none w-full sm:w-auto flex items-center gap-x-3 gap-y-1 text-sm overflow-x-auto scroll-touch flex-wrap sm:flex-nowrap">
+          {user && (
+            <Link to="/tournament" className={navLinkClass("/tournament")}>
+              <Trophy size={15} /> Tournament
+            </Link>
+          )}
           {isAdmin && (
             <>
               <Link to="/admin" className={navLinkClass("/admin")}>
@@ -102,6 +107,9 @@ export default function Navbar() {
               </Link>
               <Link to="/admin/auction" className={navLinkClass("/admin/auction")}>
                 <Gavel size={15} /> Auction
+              </Link>
+              <Link to="/admin/tournament" className={navLinkClass("/admin/tournament")}>
+                <Trophy size={15} /> Manage Tournament
               </Link>
             </>
           )}

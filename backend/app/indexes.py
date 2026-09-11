@@ -29,6 +29,8 @@ INDEX_SPECS = [
     ("push_subscriptions", "user_id", {}),
     ("audit_logs", [("entity_type", 1), ("entity_id", 1)], {}),
     ("audit_logs", [("timestamp", -1)], {}),
+    ("tournament_teams", [("group", 1), ("name", 1)], {}),
+    ("tournament_fixtures", [("group", 1), ("match_number", 1)], {}),
 ]
 
 
