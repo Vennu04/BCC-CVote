@@ -295,12 +295,25 @@ def dashboard():
             "weather": get_forecast_for_slot(slot),
         })
 
+    # Same "only what's still actionable" rule as the Window Dashboard
+    # (VotingWindow.jsx) -- Cancelled, Closed, and Auction Completed matches
+    # have nothing left to do, so the Admin Dashboard's per-slot stat cards
+    # drop them. Scoped to just this "slots" list, not vote_matrix -- that's
+    # still built from the full, unfiltered `slots` above and stays that way,
+    # since VotingWindow.jsx and Auction.jsx both poll this same endpoint
+    # purely for vote_matrix (their own slot lists come from GET
+    # /admin/window instead) and would otherwise lose per-category confirmed
+    # counts for a closed-but-unauctioned match right when Auction's
+    # "Compare Available Slots" needs them most.
+    ARCHIVED_STATUSES = {"cancelled", "closed", "auction_completed"}
+    visible_slots = [s for s in slot_summary if s["window"].get("status") not in ARCHIVED_STATUSES]
+
     return jsonify({
         "open_count": open_count,
         "total_slots": len(slots),
         "captains_total": len(voters),
         "captains_voted": len({v["captain_id"] for v in all_votes}),
-        "slots": slot_summary,
+        "slots": visible_slots,
         "vote_matrix": matrix,
     })
 
