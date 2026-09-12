@@ -73,9 +73,16 @@ def test_release_endpoint_only_accepts_a_category_no_player_selection(client, ad
     # 2 meaningful (scored) players + 20 unscored fillers to hit the 22-player
     # minimum — fillers sort after any scored player (see _next_release_candidate),
     # so they can't interfere with the "highest score released first" assertion.
-    # classic ranks on (battingAverage - bowlingAverage); bowling_average held
-    # equal (10) for both scored players so batting average alone still decides.
+    # classic ranks on ((bat+sr)-(bowl+econ)) x (attendance%/100) — strike
+    # rate, economy, and attendance held equal across both scored players so
+    # batting average alone still decides which one has the higher index.
+    # Fillers get none of these (attendance missing -> their index is
+    # unconditionally 0), so they stay below both real players regardless.
     setup = make_auction_setup([("classic", 10, 10), ("classic", 20, 10)] + [("classic", None, None)] * 20)
+    mongo.db.users.update_many(
+        {"_id": {"$in": [v["_id"] for v in setup["voters"][:2]]}},
+        {"$set": {"strike_rate": 100, "economy": 8, "attendance_percentage": 90}},
+    )
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
     auction_id = _create(client, admin_headers, setup).get_json()["auction_id"]
@@ -131,14 +138,20 @@ def test_cannot_release_while_a_player_is_already_up(client, admin_headers, make
 
 def test_full_lifecycle_release_order_bid_sell_and_quota_leftover_award(client, admin_headers, auth_header, make_auction_setup):
     # 4 classic voters, quota = 2 per captain. classic ranks on
-    # (battingAverage - bowlingAverage) — bowling_average held equal (10) for
-    # all four so the batting average alone still drives a deterministic
-    # order: P1(30-10=20) > P2(20-10=10) > P0(10-10=0) > P3(5-10=-5). Padded
-    # with 18 "power" fillers (a different category, so classic's own quota
-    # of 2 is unaffected) to hit the 22-player pool minimum.
+    # ((bat+sr)-(bowl+econ)) x (attendance%/100) — strike rate, economy, and
+    # attendance held equal across all four so batting average alone still
+    # drives a deterministic order:
+    #   P1(30+100-10-8)*.9=100.8 > P2(20+100-18)*.9=91.8
+    #   > P0(10+100-18)*.9=82.8 > P3(5+100-18)*.9=78.3
+    # Padded with 18 "power" fillers (a different category, so classic's own
+    # quota of 2 is unaffected) to hit the 22-player pool minimum.
     setup = make_auction_setup([("classic", 10, 10), ("classic", 30, 10),
                                  ("classic", 20, 10), ("classic", 5, 10)]
                                 + [("power", None, None)] * 18)
+    mongo.db.users.update_many(
+        {"_id": {"$in": [v["_id"] for v in setup["voters"][:4]]}},
+        {"$set": {"strike_rate": 100, "economy": 8, "attendance_percentage": 90}},
+    )
     a_headers = auth_header(setup["captain_a"])
     b_headers = auth_header(setup["captain_b"])
 
