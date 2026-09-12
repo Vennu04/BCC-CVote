@@ -1,12 +1,23 @@
 """Requirement #7 (updated): release order within a category is driven by
 batting/bowling stats, never admin's manual pick.
 
-extra_power_batsman is graded on batting only (battingAverage desc, then
-strikeRate desc — bowling never enters the score). extra_power_allrounder,
-power and classic are graded on both skills via a direct signed sum:
-(battingAverage - bowlingAverage) desc as primary, (strikeRate - economy)
-desc as secondary. Any remaining tie across all four groups is broken by
-attendance_percentage descending.
+Each category has its own admin-specified index formula:
+  - extra_power_batsman: Batting Avg x Strike Rate (bowling never enters)
+  - extra_power_allrounder: (Batting Avg x Strike Rate) x
+    (1000 / (Bowling Avg x Economy)) -- multiplicative; missing/zero
+    bowling stats drop that multiplier rather than zeroing the score
+  - power: (Batting Avg x Strike Rate / 100) + (1000 / (Bowling Avg x
+    Economy)) -- additive; a pure batsman or pure bowler gets their side
+    credited standalone
+  - classic: ((Batting Avg + Strike Rate) - (Bowling Avg + Economy)) x
+    (Attendance% / 100) -- attendance multiplies the whole index, so a
+    player with no attendance on record scores 0 here regardless of stats
+
+Tie-break chain (only reached on an exact index tie): Strike Rate /
+Economy descending, then Attendance% descending, then name A-Z. A
+totally stat-less player still gets a real score (0) rather than falling
+into a separate "unscored" bucket, so it's sorted by the same tie-break
+chain as everyone else.
 
 get_next_player_in_category is a pure function (no Mongo access) so the
 ranking logic is verified independently of the bid/quota/leftover machinery
@@ -82,29 +93,81 @@ def test_extra_power_batsman_ignores_bowling_stats_entirely(app, fake_auction):
     assert winner is not None  # a terrible bowling_average must not disqualify a batsman
 
 
-# ── extra_power_allrounder / power / classic: combined signed-sum ──────────
+# ── extra_power_allrounder: (bat x sr) x (1000 / (bowl x econ)) ────────────
 
-@pytest.mark.parametrize("category", ["extra_power_allrounder", "power", "classic"])
-def test_combined_groups_rank_by_batting_minus_bowling_average(category):
-    # Weaker raw batting average but a much better bowling average nets a higher combined score.
+def test_allrounder_index_is_multiplicative_bowling_can_outweigh_batting():
+    # StrongBat: (30x100) x (1000/(25x8)) = 3000 x 5.0    = 15000
+    # Balanced:  (20x100) x (1000/(10x8)) = 2000 x 12.5   = 25000  -> wins despite lower batting
     strong_bat = {"name": "StrongBat", "batting_average": 30, "strike_rate": 100, "bowling_average": 25, "economy": 8}
     balanced = {"name": "Balanced", "batting_average": 20, "strike_rate": 100, "bowling_average": 10, "economy": 8}
-    # StrongBat: 30-25=5. Balanced: 20-10=10 -> Balanced should win despite the lower raw batting average.
     users_map = {"1": strong_bat, "2": balanced}
-    candidates = [_candidate(category, "1"), _candidate(category, "2")]
-    winner = get_next_player_in_category(candidates, category, users_map)
+    candidates = [_candidate("extra_power_allrounder", "1"), _candidate("extra_power_allrounder", "2")]
+    winner = get_next_player_in_category(candidates, "extra_power_allrounder", users_map)
     assert users_map[winner["user_id"]]["name"] == "Balanced"
 
 
-@pytest.mark.parametrize("category", ["extra_power_allrounder", "power", "classic"])
-def test_combined_groups_secondary_sort_is_strike_rate_minus_economy(category):
-    # Both have battingAverage - bowlingAverage == 10 (tied primary); strikeRate - economy breaks it.
-    a = {"name": "A", "batting_average": 20, "bowling_average": 10, "strike_rate": 150, "economy": 8}   # secondary 142
-    b = {"name": "B", "batting_average": 25, "bowling_average": 15, "strike_rate": 110, "economy": 10}  # secondary 100
-    users_map = {"1": a, "2": b}
-    candidates = [_candidate(category, "1"), _candidate(category, "2")]
-    winner = get_next_player_in_category(candidates, category, users_map)
-    assert users_map[winner["user_id"]]["name"] == "A"
+def test_allrounder_missing_bowling_drops_the_multiplier_instead_of_zeroing_score():
+    # A multiplicative formula can't "default a factor to 0" the way an
+    # additive one can (0 x anything = 0, wiping out the whole score) -- a
+    # player missing bowling stats gets just (bat x sr) standalone instead.
+    specialist = {"name": "Specialist", "batting_average": 40, "strike_rate": 200}  # bat*sr = 8000, no bowling
+    weak_allrounder = {
+        "name": "WeakAllrounder", "batting_average": 10, "strike_rate": 100,
+        "bowling_average": 50, "economy": 12,
+    }  # (10x100) x (1000/(50x12)) = 1000 x 1.67 = 1667
+    users_map = {"1": specialist, "2": weak_allrounder}
+    candidates = [_candidate("extra_power_allrounder", "1"), _candidate("extra_power_allrounder", "2")]
+    winner = get_next_player_in_category(candidates, "extra_power_allrounder", users_map)
+    assert users_map[winner["user_id"]]["name"] == "Specialist"
+
+
+# ── power: (bat x sr / 100) + (1000 / (bowl x econ)) ───────────────────────
+
+def test_power_index_credits_pure_batsmen_and_pure_bowlers_standalone():
+    # Pure batsman: (25x140/100) + 0 (no bowling) = 35.0
+    # Pure bowler:  0 (no batting) + (1000/(15x9)) = 7.4
+    # Batsman's side alone already beats the bowler's side alone here.
+    pure_batsman = {"name": "PureBatsman", "batting_average": 25, "strike_rate": 140}
+    pure_bowler = {"name": "PureBowler", "bowling_average": 15, "economy": 9}
+    users_map = {"1": pure_batsman, "2": pure_bowler}
+    candidates = [_candidate("power", "1"), _candidate("power", "2")]
+    winner = get_next_player_in_category(candidates, "power", users_map)
+    assert users_map[winner["user_id"]]["name"] == "PureBatsman"
+
+
+def test_power_index_lets_a_strong_pure_bowler_outrank_a_weak_batsman():
+    # Weak batsman: (12x90/100) + 0                = 10.8
+    # Strong pure bowler: 0 + (1000/(8x6.5))        = 19.2  -> wins
+    weak_batsman = {"name": "WeakBatsman", "batting_average": 12, "strike_rate": 90}
+    strong_bowler = {"name": "StrongBowler", "bowling_average": 8, "economy": 6.5}
+    users_map = {"1": weak_batsman, "2": strong_bowler}
+    candidates = [_candidate("power", "1"), _candidate("power", "2")]
+    winner = get_next_player_in_category(candidates, "power", users_map)
+    assert users_map[winner["user_id"]]["name"] == "StrongBowler"
+
+
+# ── classic: ((bat + sr) - (bowl + econ)) x (attendance% / 100) ───────────
+
+def test_classic_index_scales_by_attendance_percentage():
+    # Same raw (bat+sr)-(bowl+econ) = 100 for both; attendance scales it.
+    frequent = {"name": "Frequent", "batting_average": 20, "strike_rate": 100, "bowling_average": 10, "economy": 10, "attendance_percentage": 90}
+    rare = {"name": "Rare", "batting_average": 20, "strike_rate": 100, "bowling_average": 10, "economy": 10, "attendance_percentage": 20}
+    users_map = {"1": frequent, "2": rare}
+    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
+    winner = get_next_player_in_category(candidates, "classic", users_map)
+    assert users_map[winner["user_id"]]["name"] == "Frequent"
+
+
+def test_classic_index_is_zero_with_no_attendance_on_record_regardless_of_stats():
+    # Attendance multiplies the WHOLE index here, not just a tie-break --
+    # a great player with no attendance record scores exactly 0, same as
+    # a player with no stats at all.
+    great_no_attendance = {"name": "GreatNoAttendance", "batting_average": 50, "strike_rate": 200, "bowling_average": 5, "economy": 4}
+    modest_with_attendance = {"name": "ModestWithAttendance", "batting_average": 10, "strike_rate": 80, "bowling_average": 15, "economy": 8, "attendance_percentage": 50}
+    users_map = {"1": great_no_attendance, "2": modest_with_attendance}
+    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
+    winner = get_next_player_in_category(candidates, "classic", users_map)
+    assert users_map[winner["user_id"]]["name"] == "ModestWithAttendance"
 
 
 # ── Tie-break: attendance_percentage descending ─────────────────────────────
@@ -120,16 +183,7 @@ def test_attendance_percentage_breaks_a_full_tie_on_primary_and_secondary():
     assert users_map[winner["user_id"]]["name"] == "Frequent"
 
 
-def test_attendance_percentage_tiebreak_also_applies_to_combined_groups():
-    a = {"name": "A", "batting_average": 20, "bowling_average": 10, "strike_rate": 100, "economy": 8, "attendance_percentage": 100.0}
-    b = {"name": "B", "batting_average": 20, "bowling_average": 10, "strike_rate": 100, "economy": 8, "attendance_percentage": 52.94}
-    users_map = {"1": a, "2": b}
-    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
-    winner = get_next_player_in_category(candidates, "classic", users_map)
-    assert users_map[winner["user_id"]]["name"] == "A"
-
-
-# ── Missing stats (null, not 0) sort after every scored player ─────────────
+# ── Missing stats: treated as 0, not a disqualifying "unscored" bucket ─────
 
 def test_players_without_batting_average_sort_after_scored_players_by_name(app, fake_auction):
     scored = _add_user("Zeta", batting_average=5, strike_rate=100)
@@ -148,18 +202,6 @@ def test_players_without_batting_average_sort_after_scored_players_by_name(app, 
     # "Zeta" has a real average so it goes first despite alphabetical order;
     # the two unscored players then follow, sorted by name (Alpha before Beta).
     assert order == ["Zeta", "Alpha", "Beta"]
-
-
-def test_combined_groups_require_both_batting_and_bowling_average_for_a_score():
-    # A pure batting specialist with no bowling record at all falls into the
-    # unscored group for a combined category (needs the tie-break rule
-    # explicitly, not silently treated as bowling_average=0).
-    specialist = {"name": "Specialist", "batting_average": 40, "strike_rate": 200}  # no bowling_average
-    allrounder = {"name": "Allrounder", "batting_average": 10, "bowling_average": 20, "strike_rate": 90, "economy": 9}
-    users_map = {"1": specialist, "2": allrounder}
-    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
-    winner = get_next_player_in_category(candidates, "classic", users_map)
-    assert users_map[winner["user_id"]]["name"] == "Allrounder"
 
 
 # ── Deprioritized queue (unchanged behavior, re-verified against new scoring) ─

@@ -123,41 +123,67 @@ def _check_leftover_award(auction, group):
 
 
 def _release_rank_key(player, users_map):
-    """Sort key for one candidate within a category's release queue. Returns
-    (has_score, primary, secondary, attendance) where every component sorts
-    descending (higher = released sooner) — has_score alone already pushes
-    players with no usable stats to the back, ahead of the by-name fallback
-    ordered() applies to that subgroup.
+    """Sort key for one candidate within a category's release queue — the
+    higher-is-better index each category is scored on (admin's explicit
+    formulas, one per category), plus the tie-breaker chain applied only
+    when two players land on the exact same index.
 
-    extra_power_batsman: battingAverage, then strikeRate. Bowling is never
-    consulted for this group — it's explicitly a pure-batting pool.
+    A missing stat (never recorded) is treated as 0 for these formulas
+    rather than disqualifying the player from ranking at all (the old
+    behavior) — a genuinely stat-less player still gets a real score
+    (usually 0) and gets sorted against everyone else by the same
+    tie-breaker chain the spec defines, rather than needing a separate
+    "no data" bucket.
 
-    extra_power_allrounder / power / classic: (battingAverage - bowlingAverage)
-    as the primary key, (strikeRate - economy) as the secondary — both skills
-    have to be present to produce a score; a player with only one half of the
-    pair (e.g. a specialist batsman with no bowling record) falls into the
-    no-score/by-name group for these three, same as a player with neither.
+    extra_power_batsman: Batting Avg x Strike Rate (bowling never
+    consulted — explicitly a pure-batting pool).
+
+    extra_power_allrounder: (Batting Avg x Strike Rate) x (1000 / (Bowling
+    Avg x Economy)) — MULTIPLICATIVE, so "no bowling record" (bowling avg
+    or economy is 0 or missing) can't just zero that factor out (it would
+    zero the entire score); it drops the bowling multiplier entirely
+    instead, leaving the batting side to stand alone, same end result the
+    spec's ADDITIVE formulas get from literally defaulting a term to 0.
+
+    power: (Batting Avg x Strike Rate / 100) + (1000 / (Bowling Avg x
+    Economy)) — ADDITIVE, so a missing half of the pair (pure batsman or
+    pure bowler) defaults that side to 0 exactly as the spec says, letting
+    the other side's contribution stand alone.
+
+    classic: ((Batting Avg + Strike Rate) - (Bowling Avg + Economy)) x
+    (Attendance% / 100) — attendance is a multiplier on the WHOLE index
+    here, not just a tie-break; a player with 0%/no attendance on record
+    scores 0 regardless of their other stats.
+
+    Tie-breakers (only reached when the primary index is exactly equal):
+    1. Strike Rate / Economy (economy 0 or missing -> 0, not a crash)
+    2. Attendance % descending
+    3. Name, A-Z (handled by the caller — see get_next_player_in_category)
     """
     user = users_map.get(player["user_id"], {})
-    bat = user.get("batting_average")
-    bowl = user.get("bowling_average")
-    sr = user.get("strike_rate")
-    econ = user.get("economy")
-    attendance = user.get("attendance_percentage")
-    attendance_key = attendance if attendance is not None else -1
+    bat = user.get("batting_average") or 0
+    bowl = user.get("bowling_average") or 0
+    sr = user.get("strike_rate") or 0
+    econ = user.get("economy") or 0
+    attendance = user.get("attendance_percentage") or 0
+    has_bowling = bowl > 0 and econ > 0
+    category = player["category"]
 
-    if player["category"] in BATSMAN_ONLY_GROUPS:
-        if bat is None:
-            return None
-        primary = bat
-        secondary = sr if sr is not None else float("-inf")
-    else:
-        if bat is None or bowl is None:
-            return None
-        primary = bat - bowl
-        secondary = (sr if sr is not None else 0) - (econ if econ is not None else 0)
+    if category in BATSMAN_ONLY_GROUPS:
+        primary = bat * sr
+    elif category == "extra_power_allrounder":
+        primary = bat * sr
+        if has_bowling:
+            primary *= 1000 / (bowl * econ)
+    elif category == "power":
+        primary = (bat * sr) / 100
+        if has_bowling:
+            primary += 1000 / (bowl * econ)
+    else:  # classic
+        primary = ((bat + sr) - (bowl + econ)) * (attendance / 100)
 
-    return (primary, secondary, attendance_key)
+    efficiency_ratio = (sr / econ) if econ > 0 else 0
+    return (primary, efficiency_ratio, attendance)
 
 
 def get_next_player_in_category(candidates, category, users_map):
@@ -166,23 +192,25 @@ def get_next_player_in_category(candidates, category, users_map):
     so this is unit-testable on its own), returns whichever one should be
     released next, or None if the pool is empty.
 
-    Ranking: _release_rank_key descending (primary stat, then secondary stat,
-    then attendance_percentage as the final tie-break); players with no usable
-    score sort after every scored player, ordered by name. Players flagged
+    Ranking: _release_rank_key descending (each category's own index formula,
+    then strike-rate/economy, then attendance% as tie-breakers), name A-Z as
+    the final fallback if every one of those is still tied. Players flagged
     `deprioritized` (both captains passed on them at the base price — see
     drop_player) are held back to the very end of the category's queue,
     after every other player has already been offered, ranked the same way
     within that held-back group.
     """
     def ordered(group):
-        scored = []
-        unscored = []
-        for p in group:
-            key = _release_rank_key({**p, "category": category}, users_map)
-            (scored if key is not None else unscored).append((p, key))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        unscored.sort(key=lambda x: users_map.get(x[0]["user_id"], {}).get("name", ""))
-        return [p for p, _ in (*scored, *unscored)]
+        # Ascending sort on a fully-negated numeric key == descending on the
+        # real values, while the name stays un-negated so its fallback order
+        # is natural A-Z instead of reversed — one sort, no separate
+        # scored/unscored split needed since every player now gets a real
+        # (if sometimes 0) score.
+        def sort_key(p):
+            primary, efficiency_ratio, attendance = _release_rank_key({**p, "category": category}, users_map)
+            name = users_map.get(p["user_id"], {}).get("name", "")
+            return (-primary, -efficiency_ratio, -attendance, name)
+        return sorted(group, key=sort_key)
 
     normal = ordered([p for p in candidates if not p.get("deprioritized")])
     held_back = ordered([p for p in candidates if p.get("deprioritized")])
@@ -198,13 +226,11 @@ def get_next_player_in_category(candidates, category, users_map):
 # voter_id in the category, best-ranked first; the caller wanting a holdout
 # suggestion just takes the last one.
 def _order_voters_by_release_rank(voter_ids, category, users_map):
-    scored, unscored = [], []
-    for uid in voter_ids:
-        key = _release_rank_key({"category": category, "user_id": uid}, users_map)
-        (scored if key is not None else unscored).append((uid, key))
-    scored.sort(key=lambda x: x[1], reverse=True)
-    unscored.sort(key=lambda x: users_map.get(x[0], {}).get("name", ""))
-    return [uid for uid, _ in scored] + [uid for uid, _ in unscored]
+    def sort_key(uid):
+        primary, efficiency_ratio, attendance = _release_rank_key({"category": category, "user_id": uid}, users_map)
+        name = users_map.get(uid, {}).get("name", "")
+        return (-primary, -efficiency_ratio, -attendance, name)
+    return sorted(voter_ids, key=sort_key)
 
 
 def _next_release_candidate(auction, category, users_map):
