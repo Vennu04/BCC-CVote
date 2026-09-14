@@ -186,6 +186,53 @@ def _release_rank_key(player, users_map):
     return (primary, efficiency_ratio, attendance)
 
 
+# A plain-language "why is this player here" sentence for both captains,
+# built server-side from the SAME numbers _release_rank_key just computed --
+# deliberately not duplicated as a second copy of the formula in the
+# frontend (that's exactly how PlayerInsightsCard's old RULE_TEXT strings
+# went stale after the per-category formulas below replaced the original
+# shared one: the frontend copy was never updated alongside the backend
+# rule change it was describing). The frontend only ever displays this
+# string verbatim, so there's nothing left to fall out of sync.
+def _release_rank_description(player, users_map):
+    user = users_map.get(player["user_id"], {})
+    bat = user.get("batting_average") or 0
+    bowl = user.get("bowling_average") or 0
+    sr = user.get("strike_rate") or 0
+    econ = user.get("economy") or 0
+    attendance = user.get("attendance_percentage") or 0
+    has_bowling = bowl > 0 and econ > 0
+    category = player["category"]
+    primary, _, _ = _release_rank_key(player, users_map)
+    index = round(primary, 1)
+
+    if category in BATSMAN_ONLY_GROUPS:
+        return (
+            f"This is a pure-batting category — ranked by Batting Avg x Strike Rate. "
+            f"Index: {bat} x {sr} = {index}."
+        )
+    if category == "extra_power_allrounder":
+        if has_bowling:
+            return (
+                f"Ranked by batting output multiplied by a bowling bonus — the better the "
+                f"bowling, the bigger the multiplier. Index: {index}."
+            )
+        return (
+            f"Ranked by batting output multiplied by a bowling bonus, but no bowling record "
+            f"is on file, so batting stands alone. Index: {index}."
+        )
+    if category == "power":
+        return (
+            f"Ranked by batting and bowling contributions added together, so a pure batsman "
+            f"or pure bowler still scores fully on their side. Index: {index}."
+        )
+    # classic
+    return (
+        f"Ranked by batting minus bowling, scaled by attendance — showing up matters here. "
+        f"Index: {index} (attendance {attendance}%)."
+    )
+
+
 def get_next_player_in_category(candidates, category, users_map):
     """Pure ranking function: given the pool of still-available auction_player
     docs for ONE category (already filtered by caller — no Mongo access here,
@@ -1012,6 +1059,7 @@ def get_auction(auction_id):
                 "category_of_total": mongo.db.auction_players.count_documents(
                     {"auction_id": auction_id, "category": cp["category"]}
                 ),
+                "why": _release_rank_description({"user_id": cp["user_id"], "category": cp["category"]}, users_map),
             }
 
             current_player = {

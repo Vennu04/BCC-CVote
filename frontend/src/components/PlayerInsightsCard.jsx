@@ -7,15 +7,6 @@ const GROUP_LABELS = {
   classic: "Classic",
 };
 
-// Mirrors _release_rank_key in backend/app/routes/auction.py exactly --
-// keep these two in sync if the ranking rule ever changes.
-const RULE_TEXT = {
-  extra_power_batsman: "highest Batting Average, then Strike Rate as tie-break",
-  extra_power_allrounder: "highest (Batting Avg − Bowling Avg), then (Strike Rate − Economy) as tie-break",
-  power: "highest (Batting Avg − Bowling Avg), then (Strike Rate − Economy) as tie-break",
-  classic: "highest (Batting Avg − Bowling Avg), then (Strike Rate − Economy) as tie-break",
-};
-
 function Stat({ label, value }) {
   return (
     <div>
@@ -77,9 +68,11 @@ export default function PlayerInsightsCard({ player }) {
           <strong className="text-gray-700">Release order:</strong>{" "}
           {ro.index} of {ro.of_total} overall · {ro.category_index} of {ro.category_of_total} in {GROUP_LABELS[ro.category] || ro.category}
         </p>
-        <p className="mt-1">
-          Rule: within {GROUP_LABELS[ro.category] || ro.category}, players go by {RULE_TEXT[ro.category] || "stat ranking"} — admin only chooses which category to release from next, never the specific player.
-        </p>
+        {ro.why && (
+          <p className="mt-1">
+            <strong className="text-gray-700">Why here:</strong> {ro.why} Admin only chooses which category to release from next, never the specific player within it.
+          </p>
+        )}
       </div>
     </div>
   );
