@@ -9,9 +9,16 @@ Each category has its own admin-specified index formula:
   - power: (Batting Avg x Strike Rate / 100) + (1000 / (Bowling Avg x
     Economy)) -- additive; a pure batsman or pure bowler gets their side
     credited standalone
-  - classic: ((Batting Avg + Strike Rate) - (Bowling Avg + Economy)) x
-    (Attendance% / 100) -- attendance multiplies the whole index, so a
-    player with no attendance on record scores 0 here regardless of stats
+  - classic: (Batting Avg + Strike Rate + bowling bonus) x (Attendance% /
+    100) -- attendance multiplies the whole index, so a player with no
+    attendance on record scores 0 here regardless of stats. The bowling
+    bonus is (1000 / (Bowling Avg x Economy)) when the player has a
+    bowling record, 0 otherwise -- additive, same shape as power's
+    bowling term, so a real bowler is never worse off than an otherwise-
+    identical non-bowler. (Originally a straight subtraction of bowling
+    stats; that inverted the incentive, since "no bowling record"
+    defaults to 0 and beats subtracting any real positive number -- fixed
+    after it showed up in real club data.)
 
 Tie-break chain (only reached on an exact index tie): Strike Rate /
 Economy descending, then Attendance% descending, then name A-Z. A
@@ -168,6 +175,36 @@ def test_classic_index_is_zero_with_no_attendance_on_record_regardless_of_stats(
     candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
     winner = get_next_player_in_category(candidates, "classic", users_map)
     assert users_map[winner["user_id"]]["name"] == "ModestWithAttendance"
+
+
+def test_classic_bowling_is_a_bonus_never_a_penalty():
+    # Regression for the original (Bat+SR)-(Bowl+Econ) formula: subtracting
+    # a real bowling record always scored worse than subtracting nothing
+    # (a missing record defaults to 0), so an actual part-time bowler with a
+    # perfectly good economy lost to an equally/weaker-batting teammate who'd
+    # never bowled at all -- confirmed against real club data before fixing.
+    # Same batting+attendance on both; only the bowler has a bowling record.
+    non_bowler = {"name": "NonBowler", "batting_average": 9, "strike_rate": 70, "attendance_percentage": 60}
+    part_time_bowler = {"name": "PartTimeBowler", "batting_average": 9, "strike_rate": 70,
+                         "bowling_average": 18, "economy": 7, "attendance_percentage": 60}
+    users_map = {"1": non_bowler, "2": part_time_bowler}
+    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
+    winner = get_next_player_in_category(candidates, "classic", users_map)
+    assert users_map[winner["user_id"]]["name"] == "PartTimeBowler"
+
+
+def test_classic_bowling_bonus_scales_with_bowling_quality():
+    # Among two bowlers with identical batting, the better bowling figures
+    # (lower avg x economy) should still win -- the fix changes sign, not
+    # the "better bowling ranks higher" relationship among bowlers.
+    good_bowler = {"name": "GoodBowler", "batting_average": 15, "strike_rate": 90,
+                    "bowling_average": 12, "economy": 5, "attendance_percentage": 70}
+    weak_bowler = {"name": "WeakBowler", "batting_average": 15, "strike_rate": 90,
+                    "bowling_average": 25, "economy": 9, "attendance_percentage": 70}
+    users_map = {"1": good_bowler, "2": weak_bowler}
+    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
+    winner = get_next_player_in_category(candidates, "classic", users_map)
+    assert users_map[winner["user_id"]]["name"] == "GoodBowler"
 
 
 # ── Tie-break: attendance_percentage descending ─────────────────────────────
