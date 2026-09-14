@@ -150,10 +150,24 @@ def _release_rank_key(player, users_map):
     pure bowler) defaults that side to 0 exactly as the spec says, letting
     the other side's contribution stand alone.
 
-    classic: ((Batting Avg + Strike Rate) - (Bowling Avg + Economy)) x
-    (Attendance% / 100) — attendance is a multiplier on the WHOLE index
-    here, not just a tie-break; a player with 0%/no attendance on record
-    scores 0 regardless of their other stats.
+    classic: (Batting Avg + Strike Rate + bowling bonus) x (Attendance% /
+    100) — attendance is a multiplier on the WHOLE index here, not just a
+    tie-break; a player with 0%/no attendance on record scores 0
+    regardless of their other stats. The bowling bonus is (1000 /
+    (Bowling Avg x Economy)) when the player has a bowling record, 0
+    otherwise — additive, same shape and same has_bowling gate as power's
+    bowling term, so a real bowler is never worse off than an otherwise-
+    identical non-bowler.
+
+    This used to be a straight subtraction, (Bat + SR) - (Bowl + Econ),
+    which inverted the intended incentive: since a missing bowling record
+    defaults to 0 and subtracting 0 beats subtracting any real positive
+    number, a player who'd never bowled always scored at least as well as
+    an equally-batting teammate who actually bowled -- the better that
+    second player's bowling stats got, the MORE they were penalized
+    relative to doing nothing. Verified against real club data (a
+    part-time bowler with a genuinely good economy was ranking below a
+    similar batter who'd never bowled at all) before changing this.
 
     Tie-breakers (only reached when the primary index is exactly equal):
     1. Strike Rate / Economy (economy 0 or missing -> 0, not a crash)
@@ -180,7 +194,10 @@ def _release_rank_key(player, users_map):
         if has_bowling:
             primary += 1000 / (bowl * econ)
     else:  # classic
-        primary = ((bat + sr) - (bowl + econ)) * (attendance / 100)
+        primary = bat + sr
+        if has_bowling:
+            primary += 1000 / (bowl * econ)
+        primary *= attendance / 100
 
     efficiency_ratio = (sr / econ) if econ > 0 else 0
     return (primary, efficiency_ratio, attendance)
@@ -229,8 +246,8 @@ def _release_rank_description(player, users_map):
         )
     else:  # classic
         detail = (
-            f"Ranked by batting minus bowling, scaled by attendance — showing up matters here. "
-            f"Index: {index} (attendance {attendance}%)."
+            f"Ranked by batting, plus a bowling bonus if they have a bowling record, scaled by "
+            f"attendance — showing up matters here. Index: {index} (attendance {attendance}%)."
         )
 
     # This closing line used to live as a hardcoded, separate sentence in
