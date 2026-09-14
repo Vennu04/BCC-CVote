@@ -207,30 +207,47 @@ def _release_rank_description(player, users_map):
     index = round(primary, 1)
 
     if category in BATSMAN_ONLY_GROUPS:
-        return (
+        detail = (
             f"This is a pure-batting category — ranked by Batting Avg x Strike Rate. "
             f"Index: {bat} x {sr} = {index}."
         )
-    if category == "extra_power_allrounder":
+    elif category == "extra_power_allrounder":
         if has_bowling:
-            return (
+            detail = (
                 f"Ranked by batting output multiplied by a bowling bonus — the better the "
                 f"bowling, the bigger the multiplier. Index: {index}."
             )
-        return (
-            f"Ranked by batting output multiplied by a bowling bonus, but no bowling record "
-            f"is on file, so batting stands alone. Index: {index}."
-        )
-    if category == "power":
-        return (
+        else:
+            detail = (
+                f"Ranked by batting output multiplied by a bowling bonus, but no bowling record "
+                f"is on file, so batting stands alone. Index: {index}."
+            )
+    elif category == "power":
+        detail = (
             f"Ranked by batting and bowling contributions added together, so a pure batsman "
             f"or pure bowler still scores fully on their side. Index: {index}."
         )
-    # classic
-    return (
-        f"Ranked by batting minus bowling, scaled by attendance — showing up matters here. "
-        f"Index: {index} (attendance {attendance}%)."
+    else:  # classic
+        detail = (
+            f"Ranked by batting minus bowling, scaled by attendance — showing up matters here. "
+            f"Index: {index} (attendance {attendance}%)."
+        )
+
+    # This closing line used to live as a hardcoded, separate sentence in
+    # PlayerInsightsCard.jsx ("Admin only chooses which category to release
+    # from next...") describing the pre-auto-release manual flow. It went
+    # stale the same way the old RULE_TEXT strings did once auto-release
+    # shipped: admin's real remaining input is the category ASSIGNMENT made
+    # before the auction (Manage Players), not anything chosen live -- the
+    # manual "Release Next" button in the admin UI still exists as a
+    # fallback override, but auto-release normally beats it to every
+    # release, category advancement included. Folded in here so this line
+    # can't drift out of sync with the actual flow again either.
+    context = (
+        "Nobody chooses who comes up next — release order runs automatically once the "
+        "auction starts. The only human input was this player's category assignment beforehand."
     )
+    return f"{detail} {context}"
 
 
 def get_next_player_in_category(candidates, category, users_map):

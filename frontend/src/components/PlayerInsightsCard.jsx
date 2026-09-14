@@ -70,7 +70,7 @@ export default function PlayerInsightsCard({ player }) {
         </p>
         {ro.why && (
           <p className="mt-1">
-            <strong className="text-gray-700">Why here:</strong> {ro.why} Admin only chooses which category to release from next, never the specific player within it.
+            <strong className="text-gray-700">Why here:</strong> {ro.why}
           </p>
         )}
       </div>
