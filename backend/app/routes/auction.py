@@ -169,6 +169,16 @@ def _release_rank_key(player, users_map):
     part-time bowler with a genuinely good economy was ranking below a
     similar batter who'd never bowled at all) before changing this.
 
+    Classic is also the one category where a pure batsman and a genuine
+    bowler/all-rounder can both land in the same pool (every other category
+    is either batting-only or already selects for bowling ability), so it
+    gets an extra GROUP tier ahead of the index above: anyone with a
+    bowling record on file (a pure bowler or an all-rounder) is released
+    before every pure batsman in the category, full stop — a bowler's
+    lowest-index player still comes up before a batsman's highest-index
+    player. Within each of those two groups, ranking still runs on the
+    index described above.
+
     Tie-breakers (only reached when the primary index is exactly equal):
     1. Strike Rate / Economy (economy 0 or missing -> 0, not a crash)
     2. Attendance % descending
@@ -199,8 +209,12 @@ def _release_rank_key(player, users_map):
             primary += 1000 / (bowl * econ)
         primary *= attendance / 100
 
+    # Only classic splits into bowler/all-rounder-vs-batsman groups; every
+    # other category's group is a constant (1), so this tier changes
+    # nothing about their ranking — it just rides along in the tuple.
+    group = 1 if (category == "classic" and has_bowling) else 0
     efficiency_ratio = (sr / econ) if econ > 0 else 0
-    return (primary, efficiency_ratio, attendance)
+    return (group, primary, efficiency_ratio, attendance)
 
 
 # A plain-language "why is this player here" sentence for both captains,
@@ -220,7 +234,7 @@ def _release_rank_description(player, users_map):
     attendance = user.get("attendance_percentage") or 0
     has_bowling = bowl > 0 and econ > 0
     category = player["category"]
-    primary, _, _ = _release_rank_key(player, users_map)
+    _, primary, _, _ = _release_rank_key(player, users_map)
     index = round(primary, 1)
 
     if category in BATSMAN_ONLY_GROUPS:
@@ -245,10 +259,18 @@ def _release_rank_description(player, users_map):
             f"or pure bowler still scores fully on their side. Index: {index}."
         )
     else:  # classic
-        detail = (
-            f"Ranked by batting, plus a bowling bonus if they have a bowling record, scaled by "
-            f"attendance — showing up matters here. Index: {index} (attendance {attendance}%)."
-        )
+        if has_bowling:
+            detail = (
+                f"Classic releases bowlers and all-rounders before pure batsmen, so this player's "
+                f"bowling record puts them in the first group. Within that group, ranked by batting, "
+                f"plus a bowling bonus, scaled by attendance. Index: {index} (attendance {attendance}%)."
+            )
+        else:
+            detail = (
+                f"Classic releases bowlers and all-rounders before pure batsmen, and this player has "
+                f"no bowling record on file, so they're ranked here among the pure batsmen — by "
+                f"batting, scaled by attendance. Index: {index} (attendance {attendance}%)."
+            )
 
     # This closing line used to live as a hardcoded, separate sentence in
     # PlayerInsightsCard.jsx ("Admin only chooses which category to release
@@ -288,9 +310,9 @@ def get_next_player_in_category(candidates, category, users_map):
         # scored/unscored split needed since every player now gets a real
         # (if sometimes 0) score.
         def sort_key(p):
-            primary, efficiency_ratio, attendance = _release_rank_key({**p, "category": category}, users_map)
+            group, primary, efficiency_ratio, attendance = _release_rank_key({**p, "category": category}, users_map)
             name = users_map.get(p["user_id"], {}).get("name", "")
-            return (-primary, -efficiency_ratio, -attendance, name)
+            return (-group, -primary, -efficiency_ratio, -attendance, name)
         return sorted(group, key=sort_key)
 
     normal = ordered([p for p in candidates if not p.get("deprioritized")])
@@ -308,9 +330,9 @@ def get_next_player_in_category(candidates, category, users_map):
 # suggestion just takes the last one.
 def _order_voters_by_release_rank(voter_ids, category, users_map):
     def sort_key(uid):
-        primary, efficiency_ratio, attendance = _release_rank_key({"category": category, "user_id": uid}, users_map)
+        group, primary, efficiency_ratio, attendance = _release_rank_key({"category": category, "user_id": uid}, users_map)
         name = users_map.get(uid, {}).get("name", "")
-        return (-primary, -efficiency_ratio, -attendance, name)
+        return (-group, -primary, -efficiency_ratio, -attendance, name)
     return sorted(voter_ids, key=sort_key)
 
 

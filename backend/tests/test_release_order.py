@@ -18,7 +18,11 @@ Each category has its own admin-specified index formula:
     identical non-bowler. (Originally a straight subtraction of bowling
     stats; that inverted the incentive, since "no bowling record"
     defaults to 0 and beats subtracting any real positive number -- fixed
-    after it showed up in real club data.)
+    after it showed up in real club data.) Classic also splits into two
+    GROUPS ahead of that index: every bowler/all-rounder (has a bowling
+    record) is released before every pure batsman in the category, no
+    matter how the index compares across the two groups -- the index only
+    breaks ties within a group.
 
 Tie-break chain (only reached on an exact index tie): Strike Rate /
 Economy descending, then Attendance% descending, then name A-Z. A
@@ -205,6 +209,50 @@ def test_classic_bowling_bonus_scales_with_bowling_quality():
     candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
     winner = get_next_player_in_category(candidates, "classic", users_map)
     assert users_map[winner["user_id"]]["name"] == "GoodBowler"
+
+
+def test_classic_releases_every_bowler_or_allrounder_before_any_pure_batsman():
+    # Group tier sits above the index: a bowler/all-rounder with a WORSE
+    # index must still come up before a pure batsman with a BETTER index --
+    # classic mixes both player types and captains want bowling options
+    # available before the category runs out of them.
+    star_batsman = {"name": "StarBatsman", "batting_average": 60, "strike_rate": 220, "attendance_percentage": 100}
+    weak_bowler = {"name": "WeakBowler", "batting_average": 5, "strike_rate": 60,
+                   "bowling_average": 30, "economy": 11, "attendance_percentage": 20}
+    users_map = {"1": star_batsman, "2": weak_bowler}
+    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
+
+    order = []
+    remaining = candidates[:]
+    while remaining:
+        winner = get_next_player_in_category(remaining, "classic", users_map)
+        order.append(users_map[winner["user_id"]]["name"])
+        remaining = [c for c in remaining if c["user_id"] != winner["user_id"]]
+
+    assert order == ["WeakBowler", "StarBatsman"]
+
+
+def test_classic_ranks_normally_within_each_group():
+    # Inside the bowler/all-rounder group, and inside the pure-batsman
+    # group, the usual index (and its tie-breakers) still decides order --
+    # the group tier only matters ACROSS the two groups, not within one.
+    good_bowler = {"name": "GoodBowler", "batting_average": 15, "strike_rate": 90,
+                   "bowling_average": 12, "economy": 5, "attendance_percentage": 70}
+    weak_bowler = {"name": "WeakBowler", "batting_average": 15, "strike_rate": 90,
+                   "bowling_average": 25, "economy": 9, "attendance_percentage": 70}
+    strong_batsman = {"name": "StrongBatsman", "batting_average": 40, "strike_rate": 150, "attendance_percentage": 90}
+    weak_batsman = {"name": "WeakBatsman", "batting_average": 8, "strike_rate": 60, "attendance_percentage": 30}
+    users_map = {"1": good_bowler, "2": weak_bowler, "3": strong_batsman, "4": weak_batsman}
+    candidates = [_candidate("classic", uid) for uid in users_map]
+
+    order = []
+    remaining = candidates[:]
+    while remaining:
+        winner = get_next_player_in_category(remaining, "classic", users_map)
+        order.append(users_map[winner["user_id"]]["name"])
+        remaining = [c for c in remaining if c["user_id"] != winner["user_id"]]
+
+    assert order == ["GoodBowler", "WeakBowler", "StrongBatsman", "WeakBatsman"]
 
 
 # ── Tie-break: attendance_percentage descending ─────────────────────────────
