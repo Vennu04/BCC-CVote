@@ -9,16 +9,19 @@ Each category has its own admin-specified index formula:
   - power: (Batting Avg x Strike Rate / 100) + (1000 / (Bowling Avg x
     Economy)) -- additive; a pure batsman or pure bowler gets their side
     credited standalone
-  - classic: (Batting Avg + Strike Rate + bowling bonus) x (Attendance% /
-    100) -- attendance multiplies the whole index, so a player with no
-    attendance on record scores 0 here regardless of stats. The bowling
-    bonus is (1000 / (Bowling Avg x Economy)) when the player has a
-    bowling record, 0 otherwise -- additive, same shape as power's
-    bowling term, so a real bowler is never worse off than an otherwise-
-    identical non-bowler. (Originally a straight subtraction of bowling
-    stats; that inverted the incentive, since "no bowling record"
-    defaults to 0 and beats subtracting any real positive number -- fixed
-    after it showed up in real club data.) Classic also splits into two
+  - classic: Batting Avg + Strike Rate + bowling bonus -- batting/bowling
+    stats only, same as every other category. The bowling bonus is
+    (1000 / (Bowling Avg x Economy)) when the player has a bowling
+    record, 0 otherwise -- additive, same shape as power's bowling term,
+    so a real bowler is never worse off than an otherwise-identical
+    non-bowler. (Originally a straight subtraction of bowling stats; that
+    inverted the incentive, since "no bowling record" defaults to 0 and
+    beats subtracting any real positive number -- fixed after it showed
+    up in real club data. Later scaled the whole index by Attendance%,
+    which meant a player with no attendance on record scored 0 regardless
+    of stats -- removed for the same reason: a real batting/bowling stat
+    should never get zeroed out by a non-batting, non-bowling field.
+    Attendance is still tie-break #2 below.) Classic also splits into two
     GROUPS ahead of that index: every bowler/all-rounder (has a bowling
     record) is released before every pure batsman in the category, no
     matter how the index compares across the two groups -- the index only
@@ -157,10 +160,15 @@ def test_power_index_lets_a_strong_pure_bowler_outrank_a_weak_batsman():
     assert users_map[winner["user_id"]]["name"] == "StrongBowler"
 
 
-# ── classic: ((bat + sr) - (bowl + econ)) x (attendance% / 100) ───────────
+# ── classic: (bat + sr + bowling bonus) -- batting/bowling stats only ─────
 
-def test_classic_index_scales_by_attendance_percentage():
-    # Same raw (bat+sr)-(bowl+econ) = 100 for both; attendance scales it.
+def test_classic_index_ignores_attendance_entirely():
+    # Same batting/bowling on both; only attendance differs. If attendance
+    # were still part of the primary index, Frequent would win outright on
+    # the index itself. Instead the index ties exactly, so the outcome is
+    # decided by the tie-break chain (attendance is tie-break #2), which
+    # still picks Frequent -- proving attendance no longer scales the
+    # primary index while confirming it's still a valid tie-breaker.
     frequent = {"name": "Frequent", "batting_average": 20, "strike_rate": 100, "bowling_average": 10, "economy": 10, "attendance_percentage": 90}
     rare = {"name": "Rare", "batting_average": 20, "strike_rate": 100, "bowling_average": 10, "economy": 10, "attendance_percentage": 20}
     users_map = {"1": frequent, "2": rare}
@@ -169,16 +177,20 @@ def test_classic_index_scales_by_attendance_percentage():
     assert users_map[winner["user_id"]]["name"] == "Frequent"
 
 
-def test_classic_index_is_zero_with_no_attendance_on_record_regardless_of_stats():
-    # Attendance multiplies the WHOLE index here, not just a tie-break --
-    # a great player with no attendance record scores exactly 0, same as
-    # a player with no stats at all.
+def test_classic_ignores_missing_attendance_ranks_by_stats_only():
+    # Attendance used to multiply the WHOLE index, so a great player with no
+    # attendance record scored exactly 0 regardless of stats -- a real
+    # player (Raj Shekhar, real club data) got new batting/strike-rate
+    # figures recorded but stayed pinned at index 0.0 because attendance
+    # was still missing, silently discarding real data. Removed for the
+    # same reason the old subtraction formula was: a real batting/bowling
+    # stat should never get zeroed out by a non-batting, non-bowling field.
     great_no_attendance = {"name": "GreatNoAttendance", "batting_average": 50, "strike_rate": 200, "bowling_average": 5, "economy": 4}
     modest_with_attendance = {"name": "ModestWithAttendance", "batting_average": 10, "strike_rate": 80, "bowling_average": 15, "economy": 8, "attendance_percentage": 50}
     users_map = {"1": great_no_attendance, "2": modest_with_attendance}
     candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
     winner = get_next_player_in_category(candidates, "classic", users_map)
-    assert users_map[winner["user_id"]]["name"] == "ModestWithAttendance"
+    assert users_map[winner["user_id"]]["name"] == "GreatNoAttendance"
 
 
 def test_classic_bowling_is_a_bonus_never_a_penalty():
