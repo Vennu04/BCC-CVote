@@ -150,14 +150,18 @@ def _release_rank_key(player, users_map):
     pure bowler) defaults that side to 0 exactly as the spec says, letting
     the other side's contribution stand alone.
 
-    classic: (Batting Avg + Strike Rate + bowling bonus) x (Attendance% /
-    100) — attendance is a multiplier on the WHOLE index here, not just a
-    tie-break; a player with 0%/no attendance on record scores 0
-    regardless of their other stats. The bowling bonus is (1000 /
+    classic: Batting Avg + Strike Rate + bowling bonus — batting/bowling
+    stats only, same as every other category. The bowling bonus is (1000 /
     (Bowling Avg x Economy)) when the player has a bowling record, 0
     otherwise — additive, same shape and same has_bowling gate as power's
     bowling term, so a real bowler is never worse off than an otherwise-
-    identical non-bowler.
+    identical non-bowler. Attendance is NOT part of this index (it used to
+    scale the whole thing, which meant a player with no attendance record
+    scored 0 regardless of how good their batting/bowling actually was —
+    removed for the same reason the old subtraction formula was: real
+    batting/bowling stats should never get zeroed out by a field that
+    isn't a batting or bowling stat). Attendance still only shows up as
+    tie-breaker #2 below, same as it does for every other category.
 
     This used to be a straight subtraction, (Bat + SR) - (Bowl + Econ),
     which inverted the intended incentive: since a missing bowling record
@@ -207,7 +211,6 @@ def _release_rank_key(player, users_map):
         primary = bat + sr
         if has_bowling:
             primary += 1000 / (bowl * econ)
-        primary *= attendance / 100
 
     # Only classic splits into bowler/all-rounder-vs-batsman groups; every
     # other category's group is a constant (1), so this tier changes
@@ -231,7 +234,6 @@ def _release_rank_description(player, users_map):
     bowl = user.get("bowling_average") or 0
     sr = user.get("strike_rate") or 0
     econ = user.get("economy") or 0
-    attendance = user.get("attendance_percentage") or 0
     has_bowling = bowl > 0 and econ > 0
     category = player["category"]
     _, primary, _, _ = _release_rank_key(player, users_map)
@@ -262,14 +264,14 @@ def _release_rank_description(player, users_map):
         if has_bowling:
             detail = (
                 f"Classic releases bowlers and all-rounders before pure batsmen, so this player's "
-                f"bowling record puts them in the first group. Within that group, ranked by batting, "
-                f"plus a bowling bonus, scaled by attendance. Index: {index} (attendance {attendance}%)."
+                f"bowling record puts them in the first group. Within that group, ranked by batting "
+                f"plus a bowling bonus. Index: {index}."
             )
         else:
             detail = (
                 f"Classic releases bowlers and all-rounders before pure batsmen, and this player has "
                 f"no bowling record on file, so they're ranked here among the pure batsmen — by "
-                f"batting, scaled by attendance. Index: {index} (attendance {attendance}%)."
+                f"batting alone. Index: {index}."
             )
 
     # This closing line used to live as a hardcoded, separate sentence in
