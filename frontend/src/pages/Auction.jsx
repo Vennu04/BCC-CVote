@@ -225,7 +225,12 @@ export default function Auction() {
       return;
     }
     if (feed.length > feedBaselineRef.current) {
-      const newEntries = feed.slice(feedBaselineRef.current).filter((b) => b.action !== "drop");
+      // timeout_drop reaches the same silent end state a manual mutual drop
+      // already does (see the "drop" exclusion above it) -- no points/roster
+      // change, so no toast here either. It's still fully visible in the
+      // static Live Feed list below for anyone who wants to see why a
+      // player disappeared.
+      const newEntries = feed.slice(feedBaselineRef.current).filter((b) => b.action !== "drop" && b.action !== "timeout_drop");
       newEntries.forEach((b) => {
         const verb = b.action === "bid" ? `bid ${b.amount} on`
           : b.action === "free_pick" ? "free-picked"
@@ -514,6 +519,7 @@ export default function Auction() {
                   {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
                   {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
                   {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
+                  {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within 30s, moved to the back of the category</>}
                   <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
                 </div>
               ))}

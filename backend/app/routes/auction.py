@@ -23,6 +23,10 @@ POINTS_BUDGET = 17
 STARTING_PRICE = 8.5
 TARGET_ROSTER_SIZE = 11
 SESSION_MINUTES = 25
+# If a released player sits with NEITHER captain placing a single bid NOR a
+# single drop for this long, they're auto-dropped the same way an explicit
+# mutual pass already works — see _maybe_timeout_current_player.
+PLAYER_RELEASE_TIMEOUT_SECONDS = 30
 MIN_AUCTION_POOL_SIZE = 20  # a side can field 10, per admin's call — no longer requiring a full XI
 MAX_ROSTER_SIZE_PER_SIDE = 14  # 14+14 = 28 max auctioned players total, captains excluded
 
@@ -501,6 +505,68 @@ def _apply_timeout_fallback(auction):
         {"$set": {"status": "completed", "current_player_id": None}},
     )
     _close_linked_window_on_completion(auction)
+
+
+def _maybe_timeout_current_player(auction):
+    """If the player currently up for bidding has sat idle for
+    PLAYER_RELEASE_TIMEOUT_SECONDS with NEITHER captain placing a single bid
+    NOR a single drop, auto-drop them -- same end state as an explicit mutual
+    pass in _drop_core (stays "available", deprioritized: True, held to the
+    bottom of their category's queue by _next_release_candidate), and the
+    auction moves straight on to the next player. Checked lazily from
+    get_auction, same pattern as _apply_timeout_fallback right above and
+    _maybe_auto_release_next below -- no background scheduler needed, since
+    both captains' clients are already polling this endpoint every few
+    seconds in practice.
+
+    Deliberately narrower than "hasn't sold yet": this only fires when
+    NEITHER captain has taken ANY action (no bid, no drop) since this exact
+    release. A single captain dropping while the other stays silent is a
+    different, already-handled case (see _drop_core) and is left alone here
+    -- it still waits on the second captain or admin, same as before this
+    existed.
+
+    Compare-and-swap on current_player_id AND current_player_released_at
+    together, not a plain check-then-write -- same reasoning as
+    _claim_release's docstring above: gunicorn runs multiple real worker
+    processes, so this lazy check racing a captain's genuine last-second bid
+    or drop is a real, reachable condition. Matching released_at too (not
+    just current_player_id) guards against a stale call reaching in after
+    the timed-out player has already been re-released as someone else's turn.
+    """
+    if auction["status"] != "active" or auction.get("is_paused"):
+        return
+    player_id = auction.get("current_player_id")
+    released_at = auction.get("current_player_released_at")
+    if not player_id or not released_at:
+        return
+    if utcnow() - released_at < timedelta(seconds=PLAYER_RELEASE_TIMEOUT_SECONDS):
+        return
+
+    any_activity = mongo.db.auction_bids.find_one({
+        "auction_id": str(auction["_id"]), "player_id": player_id,
+        "created_at": {"$gte": released_at},
+    })
+    if any_activity:
+        return
+
+    result = mongo.db.auctions.update_one(
+        {"_id": auction["_id"], "current_player_id": player_id,
+         "current_player_released_at": released_at},
+        {"$set": {"current_player_id": None}},
+    )
+    if result.matched_count == 0:
+        return  # lost the race -- a bid/drop (or another poll) already resolved this player
+
+    mongo.db.auction_players.update_one(
+        {"_id": ObjectId(player_id)}, {"$set": {"deprioritized": True}},
+    )
+    mongo.db.auction_bids.insert_one({
+        "auction_id": str(auction["_id"]), "player_id": player_id,
+        "captain_id": None, "action": "timeout_drop", "amount": None,
+        "created_at": utcnow(),
+    })
+    _maybe_auto_release_next(str(auction["_id"]))
 
 
 # ── Admin: setup + control ──────────────────────────────────────────────────────
@@ -986,11 +1052,15 @@ def get_auction(auction_id):
     if auction["status"] == "active":
         _apply_timeout_fallback(auction)
         auction = _auction_or_404(auction_id)  # re-fetch in case the fallback just completed it
-        # Order matters: timeout-completion above must always win over
-        # auto-release advancing within the same request, and this doubles
-        # as the self-healing path for a captain refreshing mid-auction --
-        # if some earlier request's auto-release call got dropped by a
-        # network blip, the very next poll from anyone picks it back up.
+        # Order matters: timeout-completion above must always win over the
+        # per-player idle timeout, which must in turn win over auto-release
+        # advancing within the same request -- and this doubles as the
+        # self-healing path for a captain refreshing mid-auction -- if some
+        # earlier request's auto-release call got dropped by a network blip,
+        # the very next poll from anyone picks it back up.
+        if auction["status"] == "active":
+            _maybe_timeout_current_player(auction)
+            auction = _auction_or_404(auction_id)
         if auction["status"] == "active":
             _maybe_auto_release_next(auction_id)
             auction = _auction_or_404(auction_id)
@@ -1026,6 +1096,11 @@ def get_auction(auction_id):
     )}
 
     def captain_name(captain_id):
+        # None is the system-generated "timeout_drop" bid_feed entry (see
+        # _maybe_timeout_current_player) -- neither captain acted, so there's
+        # no real captain to attribute it to.
+        if captain_id is None:
+            return "Auto-drop"
         return users_map.get(captain_id, {}).get("name", "Unknown")
 
     # Once the auction is over, what each captain paid for whom becomes
