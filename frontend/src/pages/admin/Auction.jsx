@@ -808,7 +808,7 @@ export default function AdminAuction() {
                 {auction.current_player && (
                   <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
                     {auction.current_player.deprioritized ? (
-                      <>Re-offering <strong>{auction.current_player.name}</strong> — both captains passed on them earlier; everyone else in this category is done.</>
+                      <>Re-offering <strong>{auction.current_player.name}</strong> — both captains passed (or neither acted within 30 seconds) earlier; everyone else in this category is done.</>
                     ) : (
                       <>Currently bidding: <strong>{auction.current_player.name}</strong></>
                     )}
