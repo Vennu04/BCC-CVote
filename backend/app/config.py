@@ -26,6 +26,12 @@ class Config:
     # this is meant to be flipped back once that testing period is over, not
     # a permanent removal of the feature.
     DEVICE_LOCK_ENABLED = os.environ.get("DEVICE_LOCK_ENABLED", "true").lower() == "true"
+    # Temporary, per-match switch for Classic's "bowlers/all-rounders release
+    # before pure batsmen" tier (see _release_rank_key in routes/auction.py).
+    # Off by default so Classic goes back to ranking purely on its index;
+    # set CLASSIC_BOWLERS_FIRST=true (via the bcc-cvote-config configmap in
+    # prod) for the one match that wants it, then flip it back afterwards.
+    CLASSIC_BOWLERS_FIRST = os.environ.get("CLASSIC_BOWLERS_FIRST", "false").lower() == "true"
     # IST timezone (UTC+5:30)
     TIMEZONE = "Asia/Kolkata"
     # Default voting window schedule (IST)

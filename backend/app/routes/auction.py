@@ -1,6 +1,6 @@
 import logging
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app, has_app_context
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 from datetime import datetime, timedelta
@@ -126,6 +126,13 @@ def _check_leftover_award(auction, group):
         return  # only one side can hit quota first — nothing left to check for this group
 
 
+def _classic_bowlers_first():
+    """Whether Classic's bowlers-before-batsmen tier is switched on (the
+    CLASSIC_BOWLERS_FIRST config flag — meant to be on for a single match,
+    off otherwise). Outside an app context (bare unit-level calls) it's off."""
+    return has_app_context() and bool(current_app.config.get("CLASSIC_BOWLERS_FIRST", False))
+
+
 def _release_rank_key(player, users_map):
     """Sort key for one candidate within a category's release queue — the
     higher-is-better index each category is scored on (admin's explicit
@@ -179,8 +186,9 @@ def _release_rank_key(player, users_map):
 
     Classic is also the one category where a pure batsman and a genuine
     bowler/all-rounder can both land in the same pool (every other category
-    is either batting-only or already selects for bowling ability), so it
-    gets an extra GROUP tier ahead of the index above: anyone with a
+    is either batting-only or already selects for bowling ability), so when
+    the CLASSIC_BOWLERS_FIRST flag is on (a per-match switch, off by
+    default) it gets an extra GROUP tier ahead of the index above: anyone with a
     bowling record on file (a pure bowler or an all-rounder) is released
     before every pure batsman in the category, full stop — a bowler's
     lowest-index player still comes up before a batsman's highest-index
@@ -219,7 +227,7 @@ def _release_rank_key(player, users_map):
     # Only classic splits into bowler/all-rounder-vs-batsman groups; every
     # other category's group is a constant (1), so this tier changes
     # nothing about their ranking — it just rides along in the tuple.
-    group = 1 if (category == "classic" and has_bowling) else 0
+    group = 1 if (category == "classic" and has_bowling and _classic_bowlers_first()) else 0
     efficiency_ratio = (sr / econ) if econ > 0 else 0
     return (group, primary, efficiency_ratio, attendance)
 
@@ -264,7 +272,12 @@ def _release_rank_description(player, users_map):
             f"Ranked by batting and bowling contributions added together, so a pure batsman "
             f"or pure bowler still scores fully on their side. Index: {index}."
         )
-    else:  # classic
+    elif not _classic_bowlers_first():  # classic, plain index
+        detail = (
+            f"Ranked by batting, plus a bowling bonus if they have a bowling record. "
+            f"Index: {index}."
+        )
+    else:  # classic, bowlers-first match
         if has_bowling:
             detail = (
                 f"Classic releases bowlers and all-rounders before pure batsmen, so this player's "

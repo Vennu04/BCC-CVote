@@ -25,7 +25,9 @@ Each category has its own admin-specified index formula:
     GROUPS ahead of that index: every bowler/all-rounder (has a bowling
     record) is released before every pure batsman in the category, no
     matter how the index compares across the two groups -- the index only
-    breaks ties within a group.
+    breaks ties within a group. That group tier is a per-match switch
+    (CLASSIC_BOWLERS_FIRST config flag, off by default); with it off,
+    Classic ranks on the plain index alone.
 
 Tie-break chain (only reached on an exact index tie): Strike Rate /
 Economy descending, then Attendance% descending, then name A-Z. A
@@ -223,7 +225,30 @@ def test_classic_bowling_bonus_scales_with_bowling_quality():
     assert users_map[winner["user_id"]]["name"] == "GoodBowler"
 
 
-def test_classic_releases_every_bowler_or_allrounder_before_any_pure_batsman():
+@pytest.fixture()
+def bowlers_first(app):
+    # The group tier is a per-match switch (CLASSIC_BOWLERS_FIRST), off by
+    # default; the tests that exercise it turn it on for their own duration.
+    app.config["CLASSIC_BOWLERS_FIRST"] = True
+    with app.app_context():
+        yield
+    app.config["CLASSIC_BOWLERS_FIRST"] = False
+
+
+def test_classic_index_only_when_bowlers_first_switch_is_off(app):
+    # Default (flag off): no group tier, a strong pure batsman beats a weak
+    # bowler on the plain index, exactly as before the bowlers-first rule.
+    star_batsman = {"name": "StarBatsman", "batting_average": 45, "strike_rate": 160, "attendance_percentage": 90}
+    weak_bowler = {"name": "WeakBowler", "batting_average": 8, "strike_rate": 60,
+                   "bowling_average": 30, "economy": 9, "attendance_percentage": 90}
+    users_map = {"1": star_batsman, "2": weak_bowler}
+    candidates = [_candidate("classic", "1"), _candidate("classic", "2")]
+    with app.app_context():
+        winner = get_next_player_in_category(candidates, "classic", users_map)
+    assert users_map[winner["user_id"]]["name"] == "StarBatsman"
+
+
+def test_classic_releases_every_bowler_or_allrounder_before_any_pure_batsman(bowlers_first):
     # Group tier sits above the index: a bowler/all-rounder with a WORSE
     # index must still come up before a pure batsman with a BETTER index --
     # classic mixes both player types and captains want bowling options
@@ -244,7 +269,7 @@ def test_classic_releases_every_bowler_or_allrounder_before_any_pure_batsman():
     assert order == ["WeakBowler", "StarBatsman"]
 
 
-def test_classic_ranks_normally_within_each_group():
+def test_classic_ranks_normally_within_each_group(bowlers_first):
     # Inside the bowler/all-rounder group, and inside the pure-batsman
     # group, the usual index (and its tie-breakers) still decides order --
     # the group tier only matters ACROSS the two groups, not within one.
