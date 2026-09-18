@@ -7,7 +7,8 @@ import pytz
 
 from .. import mongo
 from ..utils.auth import admin_required
-from ..utils.time_utils import IST, utcnow
+from ..utils.time_utils import IST, utcnow, utc_to_ist, format_ist
+from .admin import _window_info, _window_status
 
 tournament_bp = Blueprint("tournament", __name__)
 
@@ -21,21 +22,58 @@ def _12h_display(value):
         return None
 
 
+class ScheduleError(Exception):
+    """A fixture's date/time/voting-open combination can't be scheduled —
+    the message is safe to show admin verbatim."""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
+
+
+def _object_id(raw):
+    try:
+        return ObjectId(raw)
+    except (InvalidId, TypeError):
+        return None
+
+
+def _parse_voting_opens(raw):
+    """Admin-picked "voting opens" moment ("YYYY-MM-DDTHH:MM", IST, straight
+    from an <input type="datetime-local">) as a naive UTC datetime, or None
+    when blank — blank means "open right away", the pre-scheduling default."""
+    if not raw:
+        return None
+    try:
+        return IST.localize(datetime.fromisoformat(raw)).astimezone(pytz.utc).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        raise ScheduleError("voting_opens_at must look like 2026-08-15T09:00")
+
+
 # A fixture only becomes a real votable/auctionable match once it has a date —
 # this creates the same match_slots + voting_windows documents the manual
 # admin.py add_slot()/set_window() flow would (so it shows up on the Window
 # Dashboard and the Auction page's "Compare Available Slots" exactly like any
 # other match), but triggered automatically from saving the fixture instead
-# of two separate manual admin actions. Voting opens immediately and closes
-# at the fixture's own kickoff time, so no extra date/duration picker is
-# needed in the Tournament admin UI. Guarded by match_slot_id so re-saving an
-# already-scheduled fixture (e.g. just updating the venue) never creates a
-# second slot/window for the same fixture.
-def _ensure_match_slot_and_window(fixture, team1, team2):
-    if fixture.get("match_slot_id") or not fixture.get("date"):
+# of two separate manual admin actions. Voting opens at voting_opens_at when
+# admin picked one (a scheduled open), otherwise immediately, and always
+# closes at the fixture's own kickoff time, so no separate close-time picker
+# is needed in the Tournament admin UI.
+#
+# Also handles rescheduling: once a fixture already has a slot, changing its
+# date/time/voting-open moves that same slot and its active window instead of
+# leaving them stuck on the original date. Refused once an auction exists for
+# the window, since that auction's voter pool was derived from the window.
+# Every validation happens before the first write, so a refusal leaves
+# everything untouched.
+def _sync_match_slot_and_window(fixture, team1, team2, voting_opens_at=None):
+    if not fixture.get("date"):
         return None
 
-    match_dt = datetime.fromisoformat(fixture["date"])
+    try:
+        match_dt = datetime.fromisoformat(fixture["date"])
+    except ValueError:
+        raise ScheduleError("date must look like 2026-08-15")
     time_str = fixture.get("time")
     if time_str:
         try:
@@ -46,59 +84,127 @@ def _ensure_match_slot_and_window(fixture, team1, team2):
     if not time_str:
         match_dt = match_dt.replace(hour=23, minute=59)  # end of match day, no kickoff time given
 
-    opens_at = utcnow()
+    now = utcnow()
     closes_at = IST.localize(match_dt).astimezone(pytz.utc).replace(tzinfo=None)
-    if closes_at <= opens_at:
-        # Fixture date/time is already in the past (or right now) — give it a
-        # short real window rather than opening a voting window that's
-        # instantly closed and unusable.
-        closes_at = opens_at + timedelta(hours=6)
 
-    last_slot = mongo.db.match_slots.find_one(sort=[("slot_number", -1)])
-    slot_doc = {
-        "slot_number": (last_slot["slot_number"] + 1) if last_slot else 1,
+    slot = None
+    window = None
+    slot_oid = _object_id(fixture.get("match_slot_id"))
+    if slot_oid:
+        slot = mongo.db.match_slots.find_one({"_id": slot_oid})
+    if slot:
+        window = mongo.db.voting_windows.find_one({"slot_id": str(slot["_id"]), "is_active": True})
+        if window and mongo.db.auctions.find_one({"window_id": str(window["_id"])}):
+            raise ScheduleError(
+                "An auction already exists for this match — its date/time can no longer be changed", 409
+            )
+        if window and window.get("is_cancelled"):
+            window = None  # a cancelled match is called off; scheduling it again starts a fresh window
+
+    if voting_opens_at is not None:
+        opens_at = voting_opens_at
+        if opens_at >= closes_at:
+            raise ScheduleError("Voting must open before the match starts")
+    else:
+        # Keep an already-scheduled open time when only the kickoff moved;
+        # otherwise open right now.
+        opens_at = window["opens_at"] if window and window["opens_at"] < closes_at else now
+        if closes_at <= opens_at:
+            # Fixture date/time is already in the past (or right now) — give it a
+            # short real window rather than opening a voting window that's
+            # instantly closed and unusable.
+            closes_at = opens_at + timedelta(hours=6)
+
+    slot_fields = {
         "day": datetime.fromisoformat(fixture["date"]).strftime("%A"),
         "time_of_day": "Evening" if (time_str and int(time_str.split(":")[0]) >= 16) else "Morning",
         "match_time": _12h_display(time_str) or "",
         "start_time": time_str,
-        "end_time": None,
         "description": fixture.get("venue") or "",
         "match_date": fixture["date"],
-        "is_adhoc": True,
-        "is_active": True,
-        "created_at": utcnow(),
         "team_a_id": str(team1["_id"]), "team_a_name": team1["name"],
         "team_b_id": str(team2["_id"]), "team_b_name": team2["name"],
-        "group": fixture["group"],
-        "tournament_fixture_id": str(fixture["_id"]),
     }
-    slot_id = mongo.db.match_slots.insert_one(slot_doc).inserted_id
+    if slot:
+        mongo.db.match_slots.update_one({"_id": slot["_id"]}, {"$set": slot_fields})
+        slot_id = slot["_id"]
+    else:
+        last_slot = mongo.db.match_slots.find_one(sort=[("slot_number", -1)])
+        slot_id = mongo.db.match_slots.insert_one({
+            **slot_fields,
+            "slot_number": (last_slot["slot_number"] + 1) if last_slot else 1,
+            "end_time": None,
+            "is_adhoc": True,
+            "is_active": True,
+            "created_at": now,
+            "group": fixture["group"],
+            "tournament_fixture_id": str(fixture["_id"]),
+        }).inserted_id
 
-    mongo.db.voting_windows.insert_one({
-        "slot_id": str(slot_id),
-        "opens_at": opens_at,
-        "closes_at": closes_at,
-        "is_active": True,
-        "created_at": utcnow(),
-    })
+    if window:
+        mongo.db.voting_windows.update_one(
+            {"_id": window["_id"]},
+            {"$set": {"opens_at": opens_at, "closes_at": closes_at}, "$unset": {"closed_early": ""}},
+        )
+    else:
+        mongo.db.voting_windows.update_many({"slot_id": str(slot_id)}, {"$set": {"is_active": False}})
+        mongo.db.voting_windows.insert_one({
+            "slot_id": str(slot_id),
+            "opens_at": opens_at,
+            "closes_at": closes_at,
+            "is_active": True,
+            "created_at": now,
+        })
     mongo.db.tournament_fixtures.update_one(
         {"_id": fixture["_id"]}, {"$set": {"match_slot_id": str(slot_id)}}
     )
     return str(slot_id)
 
 
-def _object_id(raw):
-    try:
-        return ObjectId(raw)
-    except (InvalidId, TypeError):
-        return None
-
-
 def _team_to_dict(t):
     return {"id": str(t["_id"]), "name": t["name"], "group": t["group"]}
 
 
-def _fixture_to_dict(f, teams_by_id):
+# Where each fixture is on the way to an auction — voting window state plus
+# the linked auction, resolved for all fixtures in two queries (windows, then
+# auctions) rather than a lookup per fixture. Reuses the Window Dashboard's own
+# status labels ("scheduled" / "open" / "closed" / "cancelled" /
+# "auction_completed") so both pages always agree; None when the fixture has no
+# schedule yet (or its slot was since removed).
+def _schedule_info_by_fixture(fixtures):
+    slot_ids = [f["match_slot_id"] for f in fixtures if f.get("match_slot_id")]
+    if not slot_ids:
+        return {}
+    windows = {
+        w["slot_id"]: w
+        for w in mongo.db.voting_windows.find({"slot_id": {"$in": slot_ids}, "is_active": True})
+    }
+    auction_by_window = {}
+    window_ids = [str(w["_id"]) for w in windows.values()]
+    if window_ids:
+        for a in mongo.db.auctions.find({"window_id": {"$in": window_ids}}).sort("created_at", -1):
+            auction_by_window.setdefault(a["window_id"], a)
+
+    info = {}
+    for f in fixtures:
+        window = windows.get(f.get("match_slot_id"))
+        if not window:
+            continue
+        window_info = _window_info(window)
+        auction = auction_by_window.get(str(window["_id"]))
+        info[str(f["_id"])] = {
+            "window_status": _window_status(window, window_info, auction),
+            # datetime-local's own format, so the admin form can prefill it as-is
+            "voting_opens_at": utc_to_ist(window["opens_at"]).strftime("%Y-%m-%dT%H:%M"),
+            "voting_opens_display": format_ist(window["opens_at"]),
+            "voting_closes_display": format_ist(window["closes_at"]),
+            "auction_id": str(auction["_id"]) if auction else None,
+            "auction_status": auction["status"] if auction else None,
+        }
+    return info
+
+
+def _fixture_to_dict(f, teams_by_id, schedule=None):
     team1 = teams_by_id.get(str(f["team1_id"]))
     team2 = teams_by_id.get(str(f["team2_id"]))
     return {
@@ -114,6 +220,7 @@ def _fixture_to_dict(f, teams_by_id):
         "venue": f.get("venue"),
         "result": f.get("result"),
         "match_slot_id": f.get("match_slot_id"),
+        **(schedule or {}),
     }
 
 
@@ -129,7 +236,10 @@ def list_teams():
 def list_fixtures():
     teams_by_id = {str(t["_id"]): t for t in mongo.db.tournament_teams.find()}
     fixtures = list(mongo.db.tournament_fixtures.find().sort([("group", 1), ("match_number", 1)]))
-    return jsonify({"fixtures": [_fixture_to_dict(f, teams_by_id) for f in fixtures]})
+    schedules = _schedule_info_by_fixture(fixtures)
+    return jsonify({
+        "fixtures": [_fixture_to_dict(f, teams_by_id, schedules.get(str(f["_id"]))) for f in fixtures]
+    })
 
 
 @tournament_bp.route("/admin/tournament/teams", methods=["POST"])
@@ -202,6 +312,10 @@ def create_fixture():
     team2 = mongo.db.tournament_teams.find_one({"_id": team2_oid})
     if not team1 or not team2:
         return jsonify({"error": "One or both teams not found"}), 404
+    try:
+        voting_opens_at = _parse_voting_opens((data.get("voting_opens_at") or "").strip())
+    except ScheduleError as e:
+        return jsonify({"error": str(e)}), e.status
     last = mongo.db.tournament_fixtures.find_one({"group": group}, sort=[("match_number", -1)])
     match_number = (last["match_number"] + 1) if last else 1
     doc = {
@@ -216,9 +330,14 @@ def create_fixture():
         "created_at": datetime.utcnow(),
     }
     doc["_id"] = mongo.db.tournament_fixtures.insert_one(doc).inserted_id
-    doc["match_slot_id"] = _ensure_match_slot_and_window(doc, team1, team2)
+    try:
+        doc["match_slot_id"] = _sync_match_slot_and_window(doc, team1, team2, voting_opens_at)
+    except ScheduleError as e:
+        mongo.db.tournament_fixtures.delete_one({"_id": doc["_id"]})  # nothing half-created on a bad schedule
+        return jsonify({"error": str(e)}), e.status
     teams_by_id = {str(team1["_id"]): team1, str(team2["_id"]): team2}
-    return jsonify({"fixture": _fixture_to_dict(doc, teams_by_id)}), 201
+    schedules = _schedule_info_by_fixture([doc])
+    return jsonify({"fixture": _fixture_to_dict(doc, teams_by_id, schedules.get(str(doc["_id"])))}), 201
 
 
 @tournament_bp.route("/admin/tournament/fixtures/<fixture_id>", methods=["PUT"])
@@ -226,6 +345,9 @@ def create_fixture():
 def update_fixture(fixture_id):
     fixture_oid = _object_id(fixture_id)
     if not fixture_oid:
+        return jsonify({"error": "Fixture not found"}), 404
+    fixture = mongo.db.tournament_fixtures.find_one({"_id": fixture_oid})
+    if not fixture:
         return jsonify({"error": "Fixture not found"}), 404
     data = request.get_json() or {}
     updates = {}
@@ -239,25 +361,42 @@ def update_fixture(fixture_id):
             if not oid:
                 return jsonify({"error": f"Invalid {field}"}), 400
             updates[field] = oid
-    if not updates:
+    voting_opens_raw = data.get("voting_opens_at")
+    if not updates and "voting_opens_at" not in data:
         return jsonify({"error": "No fields to update"}), 400
-    result = mongo.db.tournament_fixtures.update_one({"_id": fixture_oid}, {"$set": updates})
-    if result.matched_count == 0:
-        return jsonify({"error": "Fixture not found"}), 404
 
-    # A fixture created without a date yet (or one whose teams/date just
-    # changed) may only become schedulable right now — same auto-open as
-    # create_fixture, guarded the same way so an already-scheduled fixture
-    # never gets a second slot/window from a later, unrelated edit (e.g. just
-    # updating the venue or a result).
-    match_slot_id = None
-    if "date" in updates:
-        fixture = mongo.db.tournament_fixtures.find_one({"_id": fixture_oid})
-        team1 = mongo.db.tournament_teams.find_one({"_id": fixture["team1_id"]})
-        team2 = mongo.db.tournament_teams.find_one({"_id": fixture["team2_id"]})
+    # A fixture created without a date yet may only become schedulable right
+    # now, and one that already has a slot needs that slot/window moved along
+    # with any change to its date, time, or voting-open time — so those
+    # re-sync. The merged fixture is synced *before* the fixture's own update
+    # is saved, so a refused schedule (e.g. an auction already exists) leaves
+    # everything as it was. Venue/team/result-only edits never touch the
+    # window (so they keep working after an auction exists); the slot's own
+    # display fields just follow along.
+    match_slot_id = fixture.get("match_slot_id")
+    merged = {**fixture, **updates}
+    team1 = mongo.db.tournament_teams.find_one({"_id": merged["team1_id"]})
+    team2 = mongo.db.tournament_teams.find_one({"_id": merged["team2_id"]})
+    if any(k in data for k in ("date", "time", "voting_opens_at")):
         if team1 and team2:
-            match_slot_id = _ensure_match_slot_and_window(fixture, team1, team2) or fixture.get("match_slot_id")
+            try:
+                voting_opens_at = _parse_voting_opens(
+                    voting_opens_raw.strip() if isinstance(voting_opens_raw, str) else None
+                )
+                match_slot_id = _sync_match_slot_and_window(merged, team1, team2, voting_opens_at) or match_slot_id
+            except ScheduleError as e:
+                return jsonify({"error": str(e)}), e.status
+    elif match_slot_id and team1 and team2 and any(k in data for k in ("venue", "team1_id", "team2_id")):
+        slot_oid = _object_id(match_slot_id)
+        if slot_oid:
+            mongo.db.match_slots.update_one({"_id": slot_oid}, {"$set": {
+                "description": merged.get("venue") or "",
+                "team_a_id": str(team1["_id"]), "team_a_name": team1["name"],
+                "team_b_id": str(team2["_id"]), "team_b_name": team2["name"],
+            }})
 
+    if updates:
+        mongo.db.tournament_fixtures.update_one({"_id": fixture_oid}, {"$set": updates})
     return jsonify({"success": True, "match_slot_id": match_slot_id})
 
 
