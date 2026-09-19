@@ -7,6 +7,7 @@ import AvailabilityGrid from "../../components/AvailabilityGrid";
 import YetToVotePanel from "../../components/YetToVotePanel";
 import { LoadingState } from "../../components/LoadingState";
 import { STATUS_STYLES } from "../../utils/windowStatus";
+import { matchTeams, matchWhen } from "../../utils/matchLabel";
 import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList, CalendarDays } from "lucide-react";
 
 // Live vote counts matter most on this page (the Thu-Fri voting window is
@@ -106,7 +107,7 @@ export default function AdminDashboard() {
     [matrix, visibleSlotIds]
   );
   const slots = useMemo(
-    () => filteredMatrix[0]?.votes?.map((v) => ({ slot_number: parseInt(v.slot_label.replace("Slot ", "")), day: v.day, time_of_day: v.time_of_day })) || [],
+    () => filteredMatrix[0]?.votes?.map((v) => ({ ...v, slot_number: parseInt(v.slot_label.replace("Slot ", "")) })) || [],
     [filteredMatrix]
   );
 
@@ -191,7 +192,16 @@ export default function AdminDashboard() {
                 <div className="h-[3px] bg-sky-400" />
                 <div className="p-4">
                   <CalendarDays size={16} className="mx-auto text-white/30 mb-1" />
-                  <p className="text-xs font-medium text-white/45 uppercase">{slot.day} {slot.time_of_day}</p>
+                  {matchTeams(slot) ? (
+                    <>
+                      <p className="text-sm font-bold text-white leading-tight">{matchTeams(slot)}</p>
+                      <p className="text-[11px] font-medium text-white/45 mt-0.5">
+                        {slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs font-medium text-white/45 uppercase">{slot.day} {slot.time_of_day}</p>
+                  )}
                   <span className={`inline-block text-[10px] font-semibold rounded-full px-2.5 py-1 mt-1.5 border border-black/5 ${STATUS_STYLES[slot.window?.status]?.className || "bg-gray-100 text-gray-600"}`}>
                     {STATUS_STYLES[slot.window?.status]?.label || slot.window?.status || "UNKNOWN"}
                   </span>

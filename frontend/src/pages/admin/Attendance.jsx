@@ -6,6 +6,7 @@ import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
+import { matchLabel } from "../../utils/matchLabel";
 import attendancePhoto from "../../assets/dashboard-backgrounds/attendance.webp";
 import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp, UserCheck, AlertTriangle } from "lucide-react";
 
@@ -95,8 +96,8 @@ export default function Attendance() {
   const handleApplySuggested = () => {
     const eligible = suggestData?.eligible_count ?? 0;
     if (!eligible) return;
-    const matchLabel = `${suggestData.slot.day} ${suggestData.slot.match_time || suggestData.slot.time_of_day}`;
-    requestConfirm(`Credit attendance for ${eligible} player(s) who voted available for ${matchLabel}?`, async () => {
+    const matchName = matchLabel(suggestData.slot);
+    requestConfirm(`Credit attendance for ${eligible} player(s) who voted available for ${matchName}?`, async () => {
       setApplyingSuggest(true);
       try {
         const res = await api.post("/admin/attendance/suggest/apply", { slot_id: suggestSlotId });
@@ -269,7 +270,7 @@ export default function Attendance() {
               >
                 <option value="">Select a match…</option>
                 {slots.map(({ slot }) => (
-                  <option key={slot.id} value={slot.id}>{slot.day} {slot.match_time || slot.time_of_day}</option>
+                  <option key={slot.id} value={slot.id}>{matchLabel(slot)}</option>
                 ))}
               </select>
             </div>

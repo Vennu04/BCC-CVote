@@ -14,6 +14,7 @@ import AuctionChat from "../../components/AuctionChat";
 import { useAuth } from "../../context/AuthContext";
 import { useAuction } from "../../hooks/useAuction";
 import { STATUS_STYLES } from "../../utils/windowStatus";
+import { matchLabel, matchTeams, matchWhen } from "../../utils/matchLabel";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2, Scale } from "lucide-react";
 import { LoadingState } from "../../components/LoadingState";
 
@@ -480,7 +481,10 @@ export default function AdminAuction() {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="text-xs font-semibold text-gray-700">{slot.day} {slot.match_time || slot.time_of_day}</p>
+                    <div>
+                      {matchTeams(slot) && <p className="text-sm font-bold text-gray-900">{matchTeams(slot)}</p>}
+                      <p className="text-xs font-semibold text-gray-700">{matchWhen(slot)}</p>
+                    </div>
                     {win?.status && (
                       <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
                         {STATUS_STYLES[win.status]?.label || win.status}
@@ -509,7 +513,7 @@ export default function AdminAuction() {
                   <option value="">Select a slot…</option>
                   {slots.map(({ slot, window: win }) => (
                     <option key={slot.id} value={slot.id}>
-                      {slot.day} {slot.match_time || slot.time_of_day}
+                      {matchLabel(slot)}
                       {win?.closes_at ? ` — ${win.closes_at}` : ""}
                       {win?.status === "auction_completed" ? " — LIVE AUCTION COMPLETED" : ""}
                     </option>

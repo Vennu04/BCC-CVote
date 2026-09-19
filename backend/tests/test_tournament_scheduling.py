@@ -178,3 +178,37 @@ def test_scheduling_is_admin_only(client, make_user, auth_header):
     res = client.put(f"/api/admin/tournament/fixtures/{ObjectId()}", json={"venue": "x"},
                      headers=auth_header(captain))
     assert res.status_code in (401, 403)
+
+
+def test_admin_dashboard_identifies_a_fixture_match_by_teams_and_date(client, admin_headers):
+    """The Admin Dashboard's stat cards and vote matrix have to say *which*
+    match a slot is — both teams, group, real date and kickoff time — not just
+    "Saturday Morning"."""
+    team_ids = _teams_and_group(client, admin_headers)
+    kickoff = _ist(3, hour=6, minute=15)
+    _create(client, admin_headers, team_ids, date=kickoff.date().isoformat(), time="06:15")
+
+    body = client.get("/api/admin/dashboard", headers=admin_headers).get_json()
+
+    card = next(s for s in body["slots"] if s["team_a_name"] == "Alpha")
+    assert (card["team_a_name"], card["team_b_name"], card["group"]) == ("Alpha", "Bravo", "A")
+    assert card["resolved_match_date"] == kickoff.date().isoformat()
+    assert card["match_time"] == "06:15 AM"
+
+    # Same identity on the matrix columns, so the grid header can name the match.
+    from tests.conftest import _insert_user  # a voter row is needed for the matrix to have columns
+    _insert_user("captain", "CAP1", "cap1", name="Cap One")
+    matrix = client.get("/api/admin/dashboard", headers=admin_headers).get_json()["vote_matrix"]
+    cell = next(v for v in matrix[0]["votes"] if v["team_a_name"] == "Alpha")
+    assert cell["team_b_name"] == "Bravo"
+    assert cell["resolved_match_date"] == kickoff.date().isoformat()
+
+
+def test_admin_dashboard_leaves_teams_empty_for_a_slot_without_a_fixture(client, admin_headers):
+    mongo.db.match_slots.insert_one({
+        "slot_number": 1, "day": "Saturday", "time_of_day": "Morning",
+        "is_active": True, "is_adhoc": True, "match_date": _ist(2).date().isoformat(),
+    })
+    # No window yet -> not archived, so the card is listed with no team names.
+    card = client.get("/api/admin/dashboard", headers=admin_headers).get_json()["slots"][0]
+    assert card["team_a_name"] is None and card["team_b_name"] is None

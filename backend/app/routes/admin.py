@@ -154,6 +154,20 @@ def _parse_average(value):
     return parsed
 
 
+def _match_identity(slot):
+    """Which match a slot is, in words: the two fixture teams (None for the
+    fixed weekend / one-off slots, which have no teams) plus its real
+    calendar date and display time. Shared by the Admin Dashboard's stat
+    cards and vote matrix so both label a match identically."""
+    return {
+        "team_a_name": slot.get("team_a_name"),
+        "team_b_name": slot.get("team_b_name"),
+        "group": slot.get("group"),
+        "match_time": slot.get("match_time", ""),
+        "resolved_match_date": effective_match_date_str(slot),
+    }
+
+
 def _slot_to_dict(slot):
     return {
         "id": str(slot["_id"]),
@@ -262,6 +276,7 @@ def dashboard():
                 "slot_label": f"Slot {slot['slot_number']}",
                 "day": slot["day"],
                 "time_of_day": slot["time_of_day"],
+                **_match_identity(slot),
                 "availability": vote["availability"] if vote else None,
                 "voted_at": format_ist(vote["voted_at"]) if vote else None,
             })
@@ -285,6 +300,7 @@ def dashboard():
             "day": slot["day"],
             "time_of_day": slot["time_of_day"],
             "match_date": slot.get("match_date"),
+            **_match_identity(slot),
             "is_adhoc": slot.get("is_adhoc", False),
             "label": f"Slot {slot['slot_number']} — {slot['day']} {slot['time_of_day']}",
             "available": sum(1 for v in slot_votes if v["availability"] == "available"),

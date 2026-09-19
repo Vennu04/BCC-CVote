@@ -1,3 +1,5 @@
+import { matchTeams, matchWhen } from "../utils/matchLabel";
+
 const BADGE = {
   available:     "badge-available",
   not_available: "badge-not-available",
@@ -21,8 +23,17 @@ export default function AvailabilityGrid({ matrix, slots }) {
             <th className="text-left px-4 py-3 font-semibold text-white/60 border-b border-white/10">Team</th>
             {slots?.map((s) => (
               <th key={s.slot_number} className="px-4 py-3 font-semibold text-white/60 border-b border-white/10 text-center whitespace-nowrap">
-                <div className="text-xs text-white/35">{s.day}</div>
-                <div>{s.time_of_day}</div>
+                {matchTeams(s) ? (
+                  <>
+                    <div>{matchTeams(s)}</div>
+                    <div className="text-xs font-normal text-white/35">{matchWhen(s)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xs text-white/35">{s.day}</div>
+                    <div>{s.time_of_day}</div>
+                  </>
+                )}
               </th>
             ))}
           </tr>
