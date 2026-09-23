@@ -2,9 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import ManageHeader from "../../components/ManageHeader";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
-import auctionPhoto from "../../assets/dashboard-backgrounds/auction.webp";
 import { CalendarClock, Copy, RefreshCw, Check, X, Crown, UserCheck, ShieldCheck } from "lucide-react";
 import { COVERAGE, availableIn, buildRosterMessage, nameOf, shortDay, slotLabelOf } from "../../utils/duty";
 
@@ -41,20 +40,12 @@ export default function AuctionDuty() {
   };
 
   return (
-    <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundPhoto src={auctionPhoto} />
+    <div className="min-h-screen bg-brand-ground isolate">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-5">
-        <div className="flex items-start justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <CalendarClock size={22} className="text-pitch-600" /> Auction Duty
-            </h1>
-            <p className="text-sm text-gray-500 max-w-xl">
-              Each match&apos;s live auction runs the <b>evening before</b>, 7:30 – 10:30 PM. For weekend matches,
-              tick the slots you can cover — then one admin confirms a Lead and a Backup.
-            </p>
-          </div>
+      <ManageHeader hub="auction" sub="duty"
+        subtitle="Each auction runs the evening before its match, 7:30 – 10:30 PM. Weekend matches: tick the slots you can cover, then confirm a Lead and a Backup." />
+      <div className="max-w-4xl mx-auto px-4 py-4 space-y-5">
+        <div className="flex items-start justify-end flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <button onClick={() => { setLoading(true); fetchData(); }} className="btn-secondary flex items-center gap-1.5 text-sm">
               <RefreshCw size={14} /> Refresh

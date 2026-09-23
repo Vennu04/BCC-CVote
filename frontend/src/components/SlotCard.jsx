@@ -1,140 +1,119 @@
 import { useState } from "react";
-import VoteButton from "./VoteButton";
 import WeatherForecast from "./WeatherForecast";
+import { TeamsVs } from "./TeamCrest";
 import { useCountdown } from "../hooks/useCountdown";
 import { formatDateDisplay } from "../utils/formatDate";
-import { Sun, Sunset, Clock, Lock, AlertTriangle, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, Lock, AlertTriangle, Users, ChevronDown, ChevronUp, Check, X } from "lucide-react";
 
-// Royal-blue theme — SlotCard is only ever rendered inside VotingSlots,
-// which is only ever rendered on CaptainDashboard/PlayerDashboard (the 2
-// in-scope dashboard pages), so it's safe to reskin fully rather than keep
-// a light/dark split within one card.
-const TIME_ICONS = {
-  Morning: <Sun size={22} className="text-sky-400" />,
-  Evening: <Sunset size={22} className="text-amber-400" />,
-};
+// One match on Home, Stumps-style: teams face-off on top, status chip,
+// weather, then the two vote buttons. Same behaviour as before the redesign
+// — only the look changed.
 
 function WindowStatus({ windowInfo }) {
   const { hours, minutes, expired } = useCountdown(windowInfo?.seconds_remaining);
 
   if (windowInfo?.is_cancelled) {
     return (
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/30 rounded-full px-2.5 py-1">
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-red-700 bg-red-50 rounded-full px-2.5 py-1">
         <AlertTriangle size={11} />
-        <span>Match Cancelled{windowInfo.cancel_reason ? ` — ${windowInfo.cancel_reason}` : ""}</span>
-      </div>
+        Match Cancelled{windowInfo.cancel_reason ? ` — ${windowInfo.cancel_reason}` : ""}
+      </span>
     );
   }
 
   if (!windowInfo?.is_open) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-white/40 bg-white/5 border border-white/10 rounded-full px-2.5 py-1">
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
         <Lock size={11} />
-        <span>
-          {windowInfo?.closes_at ? `Closed — was open till ${windowInfo.closes_at}` : "Voting not open"}
-          {windowInfo?.can_revoke && windowInfo?.revoke_deadline ? ` · can withdraw until ${windowInfo.revoke_deadline}` : ""}
-        </span>
-      </div>
+        {windowInfo?.closes_at ? `Closed — was open till ${windowInfo.closes_at}` : "Voting not open"}
+        {windowInfo?.can_revoke && windowInfo?.revoke_deadline ? ` · can withdraw until ${windowInfo.revoke_deadline}` : ""}
+      </span>
     );
   }
 
   const urgency = !expired && hours === 0 && minutes < 30;
   return (
-    <div className={`flex items-center gap-1.5 text-xs font-bold rounded-full px-2.5 py-1 border ${
-      urgency ? "bg-red-500/10 text-red-400 border-red-500/30" : "bg-green-500/10 text-green-400 border-green-500/30"
-    }`}>
+    <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-2.5 py-1 ${
+      urgency ? "bg-red-50 text-red-700" : "bg-pitch-50 text-pitch-700"}`}>
       <Clock size={11} />
-      <span>Closes in {String(hours).padStart(2, "0")}:{String(minutes).padStart(2, "0")}</span>
-    </div>
+      Closes in {String(hours).padStart(2, "0")}:{String(minutes).padStart(2, "0")}
+    </span>
   );
 }
 
 export default function SlotCard({ slot, currentVote, onVote, disabled, loading, windowInfo, onRevoke, revoking, availablePlayers }) {
   const [showAvailable, setShowAvailable] = useState(false);
   const showRevoke = currentVote && windowInfo?.can_revoke;
+  const hasTeams = slot.team_a_name && slot.team_b_name;
+  const when = [
+    slot.day,
+    slot.resolved_match_date ? formatDateDisplay(slot.resolved_match_date) : "",
+    slot.match_time || slot.time_of_day,
+  ].filter(Boolean).join(" · ");
 
   return (
-    <div className="card-dark-light">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          {TIME_ICONS[slot.time_of_day]}
-          <div>
-            <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">
-              {slot.day}{slot.resolved_match_date ? ` · ${formatDateDisplay(slot.resolved_match_date)}` : ""}
-            </p>
-            <p className="font-extrabold text-white text-lg leading-tight">{slot.match_time || slot.time_of_day}</p>
-            <p className="text-xs text-white/40">{slot.time_of_day} Match</p>
-          </div>
-        </div>
-        {currentVote && (
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-            currentVote === "available"     ? "bg-green-500/10 text-green-400 border-green-500/30" :
-            currentVote === "not_available" ? "bg-red-500/10 text-red-400 border-red-500/30" :
-                                              "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
-          }`}>
-            {currentVote === "available"     ? "✅ Available" :
-             currentVote === "not_available" ? "❌ Not Available" :
-                                               "🤔 Maybe"}
-          </span>
-        )}
+    <div className="bg-white rounded-2xl shadow-soft p-4">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-gray-500 pt-1">
+          {slot.group ? `Group ${slot.group} · ` : ""}{when}
+        </p>
+        {windowInfo && <WindowStatus windowInfo={windowInfo} />}
       </div>
 
-      {/* Per-slot window status */}
-      {windowInfo && (
-        <div className="mb-3">
-          <WindowStatus windowInfo={windowInfo} />
-        </div>
+      {hasTeams ? (
+        <TeamsVs a={slot.team_a_name} b={slot.team_b_name} />
+      ) : (
+        <p className="font-extrabold text-gray-900 text-lg my-2">{slot.description || `${slot.time_of_day} Match`}</p>
       )}
 
-      {/* Forecast for the fixed venue, at this slot's date/time. Deliberately
-          left in its own original light styling — WeatherForecast is shared
-          with admin/VotingWindow.jsx (an out-of-scope page that keeps the
-          light theme), so it can't be recolored here without leaking dark
-          styles onto that other page. Small light card inside a dark one is
-          an accepted, contained exception. */}
-      <div className="rounded-lg overflow-hidden mb-3">
+      {currentVote && (
+        <p className={`text-xs font-bold mb-2 ${
+          currentVote === "available" ? "text-pitch-700" : currentVote === "not_available" ? "text-red-700" : "text-amber-700"}`}>
+          {currentVote === "available" ? "✅ You're in" : currentVote === "not_available" ? "❌ You can't play" : "🤔 Maybe"}
+        </p>
+      )}
+
+      <div className="rounded-lg overflow-hidden">
         <WeatherForecast weather={slot.weather} />
       </div>
 
-      {/* Vote buttons */}
-      <div className="flex gap-2 flex-wrap">
-        <VoteButton
-          label="Available"
-          emoji="✅"
-          value="available"
-          active={currentVote === "available"}
+      <div className="flex gap-2">
+        <button
+          type="button"
           onClick={() => onVote(slot.id, "available")}
           disabled={disabled || loading}
-          colorActive="bg-green-500 text-royal-950 border-green-500"
-          colorIdle="bg-green-500/5 text-green-400 border-green-500/30 hover:bg-green-500/15"
-        />
-        <VoteButton
-          label="Not Available"
-          emoji="❌"
-          value="not_available"
-          active={currentVote === "not_available"}
+          aria-pressed={currentVote === "available"}
+          className={`flex-1 min-h-[46px] rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 border-2 transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 ${
+            currentVote === "available" ? "bg-pitch-700 border-pitch-700 text-white" : "bg-white border-pitch-200 text-pitch-700 hover:bg-pitch-50"}`}
+        >
+          <Check size={16} /> I'm in
+        </button>
+        <button
+          type="button"
           onClick={() => onVote(slot.id, "not_available")}
           disabled={disabled || loading}
-          colorActive="bg-red-500 text-white border-red-500"
-          colorIdle="bg-red-500/5 text-red-400 border-red-500/30 hover:bg-red-500/15"
-        />
+          aria-pressed={currentVote === "not_available"}
+          className={`flex-1 min-h-[46px] rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 border-2 transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 ${
+            currentVote === "not_available" ? "bg-red-600 border-red-600 text-white" : "bg-white border-red-200 text-red-700 hover:bg-red-50"}`}
+        >
+          <X size={16} /> Can't play
+        </button>
       </div>
 
-      {/* Available players — only revealed once you've cast your own vote */}
+      {/* Who's in — only revealed once you've cast your own vote */}
       {availablePlayers && (
-        <div className="mt-3 pt-3 border-t border-white/10">
+        <div className="mt-3 pt-2 border-t border-gray-100">
           <button
             type="button"
             onClick={() => setShowAvailable((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-sky-400 hover:text-sky-300 active:text-sky-200 min-h-[44px] -my-2 transition-colors duration-150"
+            className="flex items-center gap-1.5 text-xs font-bold text-brand-navy min-h-[44px] -my-1"
           >
-            <Users size={13} />
-            Available Players ({availablePlayers.length})
+            <Users size={14} />
+            {availablePlayers.length} in
             {showAvailable ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
           {showAvailable && (
-            <p className="mt-2 text-xs text-white/45">
+            <p className="text-xs text-gray-600">
               {availablePlayers.length ? availablePlayers.join(", ") : "No one yet — be the first!"}
             </p>
           )}
@@ -147,7 +126,7 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           onClick={() => onRevoke(slot.id)}
           disabled={revoking}
           title={windowInfo.revoke_deadline ? `Available until ${windowInfo.revoke_deadline}` : undefined}
-          className="mt-3 w-full min-h-[44px] flex items-center justify-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl py-1.5 hover:bg-amber-500/20 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
+          className="mt-2 w-full min-h-[44px] flex items-center justify-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl hover:bg-amber-100 active:scale-[0.98] disabled:opacity-50 transition-all duration-150"
         >
           <AlertTriangle size={12} />
           {revoking ? "Withdrawing…" : "Emergency — Remove My Name"}

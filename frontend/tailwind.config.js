@@ -33,6 +33,14 @@ export default {
         // the pitch/cricket theme above untouched. Accent/brand blue is
         // Tailwind's own built-in `sky` scale (sky-400 == #38bdf8, matching
         // the mockup's accent exactly) — no new token needed for that part.
+        // Stumps-style app frame (2026-09 redesign): navy top bar, gold
+        // accents, light grey ground behind white cards.
+        brand: {
+          navy: "#132a52",
+          "navy-light": "#1d3a6b",
+          gold: "#f5b301",
+          ground: "#eef1f5",
+        },
         royal: {
           950: "#030d24", // deepest page background (Admin/Login)
           900: "#051836", // page background, mid gradient stop (Admin/Login); also Captain/Player's page bg

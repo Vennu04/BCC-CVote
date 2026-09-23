@@ -44,3 +44,12 @@ class TestViewerReachesResults:
         viewer = make_user("viewer", "RESVIEW", "resviewpass")
         resp = client.get("/api/votes/summary", headers=auth_header(viewer))
         assert resp.status_code == 200
+
+    def test_ranks_by_attendance_percentage_and_marks_me(self, client, make_user, auth_header):
+        me = make_user("player", "LBME", "pw", matches_present=6, total_matches=8, attendance_percentage=75.0)
+        make_user("player", "LBTOP", "pw", matches_present=8, total_matches=8, attendance_percentage=100.0)
+        board = client.get("/api/attendance/leaderboard", headers=auth_header(me)).get_json()["leaderboard"]
+        assert [e["name"] for e in board[:2]] == ["Lbtop", "Lbme"]
+        mine = next(e for e in board if e["is_me"])
+        assert (mine["name"], mine["matches_present"], mine["total_matches"], mine["attendance_percentage"]) == ("Lbme", 6, 8, 75.0)
+        assert sum(e["is_me"] for e in board) == 1

@@ -57,7 +57,7 @@ export default function AuctionRulesNote({ auction }) {
               <li>The entire auction runs itself once admin clicks <strong>Start</strong> — the first player releases automatically, and every player after that releases itself the moment the previous one's bidding resolves, moving on to the next category by itself once one runs out, all the way to completion. Who comes up next is always picked automatically (by batting/bowling average), never hand-picked.</li>
               <li>If both captains decline a player at the base price, that player becomes the <strong>last option</strong> in their category — offered again only after everyone else in it is resolved.</li>
               <li>The moment a captain's roster fills a category's quota, every remaining player in that category goes to the <strong>other</strong> captain for free.</li>
-              <li>If a captain's points hit 0, the opponent can claim any remaining Power/Classic player for free (<strong>Free Pick</strong>) without bidding against them.</li>
+              <li>If a captain's points hit 0, the opponent can claim any remaining player, in any category, for free (<strong>Free Pick</strong>) without bidding against them — but never more than their own half of that category.</li>
               <li>Each auction runs for <strong>{auction.session_minutes} minutes</strong>. Whatever's still unresolved when time's up is split free, alternating so both captains end up even in every category.</li>
               <li>Once the auction completes, prices paid are confidential — only the final team rosters (names) remain visible.</li>
             </ul>

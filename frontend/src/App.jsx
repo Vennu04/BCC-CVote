@@ -2,7 +2,8 @@ import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/AuthContext";
-import { ProtectedRoute, AdminRoute, CaptainRoute, PlayerRoute, homePathFor } from "./components/ProtectedRoute";
+import { ProtectedRoute, AdminRoute, VoterRoute, homePathFor } from "./components/ProtectedRoute";
+import { REDIRECTS } from "./utils/nav";
 import Footer from "./components/Footer";
 import NotificationPrompt from "./components/NotificationPrompt";
 // Login/ResetPassword stay eager — they're the very first thing almost every
@@ -15,12 +16,13 @@ import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
-const CaptainDashboard = lazy(() => import("./pages/CaptainDashboard"));
-const PlayerDashboard = lazy(() => import("./pages/PlayerDashboard"));
-const Results = lazy(() => import("./pages/Results"));
+const Home = lazy(() => import("./pages/Home"));
+const Matches = lazy(() => import("./pages/Matches"));
+const Stats = lazy(() => import("./pages/Stats"));
+const Me = lazy(() => import("./pages/Me"));
+const AuctionHome = lazy(() => import("./pages/AuctionHome"));
 const Auction = lazy(() => import("./pages/Auction"));
-const Tournament = lazy(() => import("./pages/Tournament"));
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const ControlCentre = lazy(() => import("./pages/admin/AdminDashboard"));
 const ManagePlayers = lazy(() => import("./pages/admin/ManagePlayers"));
 const Attendance = lazy(() => import("./pages/admin/Attendance"));
 const VotingWindow = lazy(() => import("./pages/admin/VotingWindow"));
@@ -62,22 +64,33 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
 
-          <Route path="/captain/dashboard" element={<CaptainRoute><CaptainDashboard /></CaptainRoute>} />
-          <Route path="/player/dashboard"  element={<PlayerRoute><PlayerDashboard /></PlayerRoute>} />
-          <Route path="/results"           element={<ProtectedRoute><Results /></ProtectedRoute>} />
-          <Route path="/auction/:id"       element={<ProtectedRoute><Auction /></ProtectedRoute>} />
-          <Route path="/tournament"        element={<ProtectedRoute><Tournament /></ProtectedRoute>} />
+          {/* Stumps-style tabs (2026-09 redesign) */}
+          <Route path="/home"            element={<VoterRoute><Home /></VoterRoute>} />
+          <Route path="/matches"         element={<ProtectedRoute><Matches /></ProtectedRoute>} />
+          <Route path="/matches/groups"  element={<ProtectedRoute><Matches /></ProtectedRoute>} />
+          <Route path="/matches/whos-in" element={<ProtectedRoute><Matches /></ProtectedRoute>} />
+          <Route path="/stats"           element={<ProtectedRoute><Stats /></ProtectedRoute>} />
+          <Route path="/stats/knockout"  element={<ProtectedRoute><Stats /></ProtectedRoute>} />
+          <Route path="/me"              element={<ProtectedRoute><Me /></ProtectedRoute>} />
+          <Route path="/auction"         element={<VoterRoute><AuctionHome /></VoterRoute>} />
+          <Route path="/auction/:id"     element={<ProtectedRoute><Auction /></ProtectedRoute>} />
 
-          <Route path="/admin"           element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-          <Route path="/admin/players"   element={<AdminRoute><ManagePlayers /></AdminRoute>} />
-          {/* Manage Captains + Manage Players merged into one page — redirect old links/bookmarks */}
-          <Route path="/admin/captains"  element={<Navigate to="/admin/players" replace />} />
-          <Route path="/admin/people"    element={<Navigate to="/admin/players" replace />} />
-          <Route path="/admin/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
-          <Route path="/admin/window"    element={<AdminRoute><VotingWindow /></AdminRoute>} />
-          <Route path="/admin/duty"      element={<AdminRoute><AuctionDuty /></AdminRoute>} />
-          <Route path="/admin/auction"   element={<AdminRoute><AdminAuction /></AdminRoute>} />
-          <Route path="/admin/tournament" element={<AdminRoute><AdminTournament /></AdminRoute>} />
+          {/* Manage hubs */}
+          <Route path="/manage"                     element={<AdminRoute><ControlCentre /></AdminRoute>} />
+          <Route path="/manage/matches"             element={<Navigate to="/manage/matches/fixtures" replace />} />
+          <Route path="/manage/matches/fixtures"    element={<AdminRoute><AdminTournament /></AdminRoute>} />
+          <Route path="/manage/matches/windows"     element={<AdminRoute><VotingWindow /></AdminRoute>} />
+          <Route path="/manage/auction"             element={<Navigate to="/manage/auction/run" replace />} />
+          <Route path="/manage/auction/run"         element={<AdminRoute><AdminAuction /></AdminRoute>} />
+          <Route path="/manage/auction/duty"        element={<AdminRoute><AuctionDuty /></AdminRoute>} />
+          <Route path="/manage/players"             element={<Navigate to="/manage/players/people" replace />} />
+          <Route path="/manage/players/people"      element={<AdminRoute><ManagePlayers /></AdminRoute>} />
+          <Route path="/manage/players/attendance"  element={<AdminRoute><Attendance /></AdminRoute>} />
+
+          {/* Pre-redesign addresses keep working (bookmarks, WhatsApp links) */}
+          {Object.entries(REDIRECTS).map(([from, to]) => (
+            <Route key={from} path={from} element={<Navigate to={to} replace />} />
+          ))}
 
           <Route path="/"   element={<ProtectedRoute><HomeRedirect /></ProtectedRoute>} />
           <Route path="*"   element={<NotFound />} />

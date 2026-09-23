@@ -6,8 +6,8 @@ import { canDoDestructive } from "../utils/roles";
 import { COVERAGE, nameOf, nextWeekendEvening, shortDay, slotLabelOf, todayIst } from "../utils/duty";
 import { CalendarClock } from "lucide-react";
 
-// One-line "who's on auction duty" strip. variant="dark" sits on the Admin
-// Dashboard (next weekend evening); variant="tonight" sits on the admin
+// One-line "who's on auction duty" strip. variant="dark" (the default) sits
+// on the Control Centre (next weekend evening); variant="tonight" sits on the admin
 // Auction page and only renders on an evening that actually has a rostered
 // auction. Full admins only — the endpoint 403s for organizers, so they
 // never see it. Non-critical: any failure just renders nothing.
@@ -46,13 +46,13 @@ export default function DutySummary({ variant = "dark" }) {
   }
 
   return (
-    <Link to="/admin/duty" className="card-dark flex items-center justify-between gap-3 flex-wrap mb-6 hover:bg-white/5 transition-colors duration-150">
+    <Link to="/manage/auction/duty" className="bg-white rounded-2xl shadow-soft p-4 flex items-center justify-between gap-3 flex-wrap hover:bg-gray-50 transition-colors duration-150">
       <div className="flex items-start gap-3">
-        <CalendarClock size={20} className="text-amber-400 mt-0.5 shrink-0" />
+        <CalendarClock size={20} className="text-amber-600 mt-0.5 shrink-0" />
         <div>
-          <p className="text-xs font-bold tracking-wide text-white/50 uppercase">Next auction duty · {shortDay(evening.auction_date)}</p>
-          <p className="text-sm font-semibold text-white">{evening.match_label}</p>
-          <p className="text-xs text-white/60">{who}</p>
+          <p className="text-[11px] font-bold tracking-wider text-gray-500 uppercase">Next auction duty · {shortDay(evening.auction_date)}</p>
+          <p className="text-sm font-bold text-gray-900">{evening.match_label}</p>
+          <p className="text-xs text-gray-600">{who}</p>
         </div>
       </div>
       <span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${coverage.className}`}>{coverage.label}</span>

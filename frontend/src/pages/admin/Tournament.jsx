@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
+import ManageHeader from "../../components/ManageHeader";
 import { LoadingState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -180,16 +181,10 @@ export default function AdminTournament() {
   }
 
   return (
-    <div className="min-h-screen bg-cricket-cream">
+    <div className="min-h-screen bg-brand-ground">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-2 mb-6">
-          <Trophy className="text-pitch-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Manage Tournament</h1>
-            <p className="text-sm text-gray-500">Teams, groups, and fixture schedule</p>
-          </div>
-        </div>
+      <ManageHeader hub="matches" sub="fixtures" subtitle="Teams, groups and the fixture schedule — saving a date creates the match and opens voting" />
+      <div className="max-w-4xl mx-auto px-4 py-4">
 
         <div className="flex gap-2 mb-6">
           {GROUPS.map((g) => (
@@ -352,7 +347,7 @@ export default function AdminTournament() {
                     </button>
                     {f.match_slot_id && f.window_status && f.window_status !== "cancelled" && (
                       <>
-                        <Link to="/admin/window" className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 flex items-center gap-1 min-h-[32px]">
+                        <Link to="/manage/matches/windows" className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 flex items-center gap-1 min-h-[32px]">
                           <Vote size={13} /> Voting window
                         </Link>
                         {f.auction_id ? (
@@ -360,7 +355,7 @@ export default function AdminTournament() {
                             <Gavel size={13} /> Open auction
                           </Link>
                         ) : f.window_status === "closed" ? (
-                          <Link to="/admin/auction" className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 flex items-center gap-1 min-h-[32px]">
+                          <Link to="/manage/auction/run" className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 flex items-center gap-1 min-h-[32px]">
                             <Gavel size={13} /> Set up auction
                           </Link>
                         ) : null}
