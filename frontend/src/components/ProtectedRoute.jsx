@@ -1,15 +1,10 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { isStaff } from "../utils/roles";
-export { isVoter } from "../utils/roles";
+import { isStaff, isVoter } from "../utils/roles";
+import { homePathFor } from "../utils/nav";
 
-export function homePathFor(user) {
-  if (!user) return "/login";
-  if (isStaff(user)) return "/admin";
-  if (user.role === "viewer") return "/results";
-  if (user.role === "player") return "/player/dashboard";
-  return "/captain/dashboard";
-}
+// Where each role lands after login — see utils/nav.js.
+export { homePathFor };
 
 function RequireAuth({ role, children }) {
   const { user, loading } = useAuth();
@@ -65,6 +60,20 @@ export function PlayerRoute({ children }) {
     return <Navigate to={homePathFor(user)} replace />;
   }
   // A default-password account must reset it before touching anything else.
+  if (user.must_change_password && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
+  return children;
+}
+
+// Screens that only make sense for someone who votes (Home, the Auction tab):
+// captains, players, and admin/organizer accounts flagged to vote.
+export function VoterRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
+  if (!isVoter(user)) return <Navigate to={homePathFor(user)} replace />;
   if (user.must_change_password && location.pathname !== "/change-password") {
     return <Navigate to="/change-password" replace />;
   }

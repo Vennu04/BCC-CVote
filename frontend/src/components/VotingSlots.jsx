@@ -1,6 +1,7 @@
 import SlotCard from "./SlotCard";
 import { CheckCircle, RefreshCw, XCircle, AlertTriangle } from "lucide-react";
 
+// Home's list of match cards + the "not playing this weekend" shortcut.
 export default function VotingSlots({ voting }) {
   const {
     rows, loading, error, submitting, revoking, votedCount,
@@ -9,29 +10,22 @@ export default function VotingSlots({ voting }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-48">
         <div className="text-center">
           <div className="text-4xl mb-2">🏏</div>
-          <p className="text-white/40">Loading slots…</p>
+          <p className="text-gray-500">Loading slots…</p>
         </div>
       </div>
     );
   }
 
-  // Distinguish "the fetch failed" from "there's genuinely nothing to show" —
-  // both used to render the same empty-state card, which misleadingly read
-  // as "the organizer hasn't set up this weekend's slots" even when it was
-  // actually a network/server error with a one-click fix (retry).
   if (error && rows.length === 0) {
     return (
-      <div className="card-dark-light text-center py-12">
-        <AlertTriangle className="mx-auto text-amber-400 mb-3" size={40} />
-        <p className="text-white font-medium">Couldn't load your voting slots</p>
-        <p className="text-white/40 text-sm mt-1 mb-4">Check your connection and try again</p>
-        <button
-          onClick={fetchVotes}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl border border-sky-400/20 text-white/80 hover:bg-sky-400/10 transition-all duration-150"
-        >
+      <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
+        <AlertTriangle className="mx-auto text-amber-500 mb-3" size={36} />
+        <p className="text-gray-900 font-semibold">Couldn't load your voting slots</p>
+        <p className="text-gray-500 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <button onClick={fetchVotes} className="btn-secondary inline-flex items-center gap-1.5">
           <RefreshCw size={14} /> Retry
         </button>
       </div>
@@ -43,50 +37,35 @@ export default function VotingSlots({ voting }) {
 
   return (
     <>
-      {/* All voted banner */}
-      {allVoted && (
-        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 text-green-400 rounded-xl px-4 py-3 mb-4 text-sm font-medium">
-          <CheckCircle size={18} />
-          <span>All slots voted!</span>
-        </div>
-      )}
-
-      {/* Not available this week button */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <span className="text-sm text-white/40">{votedCount} / {rows.length} slots voted</span>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <h2 className="text-xs font-black uppercase tracking-wider text-gray-500">Your matches</h2>
+        <div className="flex items-center gap-1">
           {error && (
-            <span className="flex items-center gap-1 text-xs text-amber-400" title="Showing last known data — refresh failed">
+            <span className="flex items-center gap-1 text-xs text-amber-700" title="Showing last known data — refresh failed">
               <AlertTriangle size={13} /> Refresh failed
             </span>
           )}
-          <button
-            onClick={handleNotAvailableWeek}
-            disabled={submitting === "all" || !anyOpen}
-            className="flex items-center gap-1.5 text-sm px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/15 active:scale-[0.97] font-medium transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
-            title={anyOpen ? "" : "No voting windows are open right now"}
-          >
-            <XCircle size={15} />
-            {submitting === "all" ? "Submitting…" : "Not Available This Week"}
-          </button>
-          <button
-            onClick={fetchVotes}
-            className="icon-btn text-white/40 hover:text-sky-400 hover:bg-sky-400/10"
-          >
-            <RefreshCw size={15} />
+          <button onClick={fetchVotes} className="icon-btn text-gray-500 hover:text-brand-navy" aria-label="Refresh matches">
+            <RefreshCw size={16} />
           </button>
         </div>
       </div>
 
-      {/* Slot cards */}
+      {allVoted && (
+        <div className="flex items-center gap-2 bg-pitch-50 text-pitch-800 rounded-xl px-4 py-2.5 mb-3 text-sm font-semibold">
+          <CheckCircle size={17} />
+          <span>All slots voted!</span>
+        </div>
+      )}
+
       {rows.length === 0 ? (
-        <div className="card-dark-light text-center py-12">
+        <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
           <div className="text-5xl mb-3">🏏</div>
-          <p className="text-white/70 font-medium">No slots available yet</p>
-          <p className="text-white/40 text-sm mt-1">The organizer hasn't set up this weekend's slots</p>
+          <p className="text-gray-800 font-semibold">No slots available yet</p>
+          <p className="text-gray-500 text-sm mt-1">The organizer hasn't set up this weekend's slots</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {rows.map(({ slot, availability, window, available_players }) => (
             <SlotCard
               key={slot.id}
@@ -101,6 +80,20 @@ export default function VotingSlots({ voting }) {
               availablePlayers={available_players}
             />
           ))}
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="text-center mt-4">
+          <button
+            onClick={handleNotAvailableWeek}
+            disabled={submitting === "all" || !anyOpen}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-700 px-4 min-h-[44px] rounded-xl hover:bg-red-50 disabled:opacity-40"
+            title={anyOpen ? "Marks every open match as 'can't play'" : "No voting windows are open right now"}
+          >
+            <XCircle size={15} />
+            {submitting === "all" ? "Submitting…" : "Not Available This Week"}
+          </button>
         </div>
       )}
     </>

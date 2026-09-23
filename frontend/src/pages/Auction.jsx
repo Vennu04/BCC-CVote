@@ -132,6 +132,7 @@ export default function Auction() {
     placeBid, dropCurrentPlayer, freePick, sendChatMessage, refetch,
   } = useAuction(id);
   const [amount, setAmount] = useState("");
+  const [activePanel, setActivePanel] = useState("teams");
 
   const isParticipant = useMemo(() => {
     if (!auction || !user) return false;
@@ -296,7 +297,7 @@ export default function Auction() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-cricket-cream">
+      <div className="min-h-screen bg-brand-ground">
         <Navbar />
         <div className="max-w-3xl mx-auto px-4 py-8 text-gray-500 text-sm">Loading auction…</div>
       </div>
@@ -308,7 +309,7 @@ export default function Auction() {
     // failed fetch (network/server error), not a bad/stale auction link,
     // and deserves a retry action instead of a dead-end message.
     return (
-      <div className="min-h-screen bg-cricket-cream">
+      <div className="min-h-screen bg-brand-ground">
         <Navbar />
         <div className="max-w-3xl mx-auto px-4 py-8">
           <div className="card text-center py-12">
@@ -326,7 +327,7 @@ export default function Auction() {
 
   if (!auction) {
     return (
-      <div className="min-h-screen bg-cricket-cream">
+      <div className="min-h-screen bg-brand-ground">
         <Navbar />
         <div className="max-w-3xl mx-auto px-4 py-8 text-gray-500 text-sm">Auction not found.</div>
       </div>
@@ -335,18 +336,27 @@ export default function Auction() {
 
   const canBid = isParticipant && auction.status === "active" && auction.current_player;
 
+  const panels = [
+    { key: "teams", label: "Teams" },
+    ...(auction.status !== "completed" ? [{ key: "pool", label: "Pool" }, { key: "feed", label: "Feed" }] : []),
+    { key: "chat", label: "Chat" },
+    { key: "rules", label: "Rules" },
+  ];
+  const panel = panels.some((p) => p.key === activePanel) ? activePanel : "teams";
+
   return (
-    <div className="min-h-screen bg-cricket-cream">
+    <div className="min-h-screen bg-brand-ground">
       <Navbar />
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <Gavel className="text-pitch-600" size={24} />
-            <h1 className="text-2xl font-bold text-gray-900">Player Auction</h1>
+      <div className="bg-brand-navy text-white">
+        <div className="max-w-3xl mx-auto px-4 pt-3 pb-4 flex items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-black leading-tight">{auction.status === "completed" ? "Auction result" : "Live auction"}</h1>
+            <p className="text-sm text-white/60">{auction.is_test ? "Practice auction" : auction.match_label || ""}</p>
           </div>
           <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at_iso : null} />
         </div>
-
+      </div>
+      <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
         {needsMyTurn && (
           <div className="flex items-center gap-2 bg-amber-400 border-2 border-amber-500 text-amber-950 rounded-lg px-4 py-3 text-sm font-bold animate-pulse">
             <Zap size={18} className="shrink-0" />
@@ -355,7 +365,6 @@ export default function Auction() {
               : `${auction.current_player?.name} is up — bid or drop now!`}
           </div>
         )}
-
         {isParticipant && notifPermission === "default" && (
           <button
             type="button"
@@ -365,43 +374,29 @@ export default function Auction() {
             <Bell size={14} /> Enable turn alerts (notifies you even if you switch apps)
           </button>
         )}
-
         {auction.is_test && (
           <div className="flex items-center gap-2 bg-amber-100 border-2 border-amber-400 text-amber-900 rounded-lg px-4 py-2.5 text-sm font-semibold">
             <FlaskConical size={16} /> PRACTICE AUCTION — no real votes, budgets, or player stats are affected
           </div>
         )}
-
-        <AuctionRulesNote auction={auction} />
-
-        {auction.status !== "completed" && <FairnessBanner />}
-
         {auction.status === "pending" && (
           <div className="card text-center py-8 text-gray-600">Waiting for the admin to start the auction…</div>
         )}
-
         {auction.status === "completed" && (
           <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm font-medium">
             <Trophy size={18} /> Auction complete — final rosters below.
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <CaptainCard summary={auction.captain_a} isYou={auction.captain_a?.captain_id === user?.id} startingPrice={auction.starting_price} />
-          <CaptainCard summary={auction.captain_b} isYou={auction.captain_b?.captain_id === user?.id} startingPrice={auction.starting_price} />
-        </div>
-
-        {auction.status !== "completed" && <AvailablePlayersPool auction={auction} />}
-
         {auction.status === "active" && (
-          <div className="card">
+          <div className="rounded-2xl bg-brand-navy text-white p-4 shadow-soft">
             {auction.current_player ? (
               <>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <p className="inline-block text-[11px] font-black uppercase tracking-wide bg-brand-gold text-brand-navy rounded-full px-2.5 py-0.5">
                   {GROUP_LABELS[auction.current_player.category] || auction.current_player.category}
                 </p>
-                <h2 className="text-xl font-bold text-gray-900 mb-2">{auction.current_player.name}</h2>
-                <p className="text-sm text-gray-600 mb-4">
+                <h2 className="text-2xl font-black mt-1.5 mb-1">{auction.current_player.name}</h2>
+                <p className="text-sm text-white/70">
                   {/* current_high_bid is the full price (base + extra) — only the extra
                       counts against anyone's 17-pt budget, so it's spelled out here too. */}
                   Current bid: <strong>{auction.current_player.current_high_bid}</strong>
@@ -409,6 +404,88 @@ export default function Auction() {
                   {auction.current_player.current_high_bidder && ` — ${auction.current_player.current_high_bidder}`}
                 </p>
 
+              </>
+            ) : (
+              <p className="text-white/70 text-sm text-center py-3">Waiting for the admin to release the next player…</p>
+            )}
+          </div>
+        )}
+
+        {auction.current_player && <PlayerInsightsCard player={auction.current_player} />}
+
+        {freePickable.length > 0 && (
+          <div className="card border-2 border-amber-300 bg-amber-50">
+            <div className="flex items-center gap-2 mb-2">
+              <Gift size={18} className="text-amber-700" />
+              <h3 className="font-bold text-amber-900">Free Pick Available</h3>
+            </div>
+            <p className="text-xs text-amber-700 mb-3">
+              The other captain's points are drained — claim any remaining player, in any category, for free (still capped at your own quota per category).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {freePickable.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => freePick(p.id)}
+                  disabled={freePicking === p.id}
+                  className="text-sm py-1.5 px-3 rounded-lg border border-amber-400 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {freePicking === p.id ? "Picking…" : `${p.name} — ${GROUP_LABELS[p.category] || p.category}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {auction.status !== "completed" && <FairnessBanner />}
+
+        <div className="flex gap-1 bg-white rounded-2xl shadow-soft p-1 overflow-x-auto scroll-touch" role="tablist">
+          {panels.map((p) => (
+            <button key={p.key} type="button" role="tab" aria-selected={panel === p.key} onClick={() => setActivePanel(p.key)}
+              className={`flex-1 shrink-0 min-h-[40px] px-3 rounded-xl text-sm font-bold transition-colors duration-150 ${
+                panel === p.key ? "bg-brand-navy text-white" : "text-gray-600 hover:bg-gray-50"}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {panel === "teams" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <CaptainCard summary={auction.captain_a} isYou={auction.captain_a?.captain_id === user?.id} startingPrice={auction.starting_price} />
+          <CaptainCard summary={auction.captain_b} isYou={auction.captain_b?.captain_id === user?.id} startingPrice={auction.starting_price} />
+          </div>
+        )}
+        {panel === "pool" && <AvailablePlayersPool auction={auction} />}
+        {panel === "feed" && (
+          <>
+          <div className="card">
+            <h3 className="font-bold text-gray-900 mb-3 text-sm">Live Feed</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {(auction.bid_feed || []).length === 0 && (
+                <p className="text-xs text-gray-400">No bids yet.</p>
+              )}
+              {(auction.bid_feed || []).map((b, i) => (
+                <div key={i} className="text-sm bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="font-semibold">{b.captain_name}</span>{" "}
+                  {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
+                  {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
+                  {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
+                  {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
+                  {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within 30s, moved to the back of the category</>}
+                  <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+            {auction.status !== "pending" && <ReleaseOrderLog auctionId={id} />}
+          </>
+        )}
+        {panel === "chat" && <AuctionChat chatFeed={auction.chat_feed} currentUserId={user?.id} onSend={sendChatMessage} sending={sendingChat} />}
+        {panel === "rules" && <AuctionRulesNote auction={auction} />}
+        {panel !== "feed" && auction.status === "completed" && <ReleaseOrderLog auctionId={id} />}
+
+        {auction.status === "active" && auction.current_player && (
+          <div className="sticky bottom-[calc(64px+env(safe-area-inset-bottom,0px))] lg:bottom-4 z-30 bg-white rounded-2xl shadow-soft-lg border border-gray-200 p-3">
                 {canBid ? (
                   <div className="flex flex-wrap items-center gap-3">
                     {/* Native <input type="number"> spinner arrows don't render on most
@@ -472,64 +549,8 @@ export default function Auction() {
                     {isParticipant ? "Waiting…" : "Only the two assigned captains can bid."}
                   </p>
                 )}
-              </>
-            ) : (
-              <p className="text-gray-500 text-sm text-center py-4">Waiting for the admin to release the next player…</p>
-            )}
           </div>
         )}
-
-        {auction.current_player && <PlayerInsightsCard player={auction.current_player} />}
-
-        {freePickable.length > 0 && (
-          <div className="card border-2 border-amber-300 bg-amber-50">
-            <div className="flex items-center gap-2 mb-2">
-              <Gift size={18} className="text-amber-700" />
-              <h3 className="font-bold text-amber-900">Free Pick Available</h3>
-            </div>
-            <p className="text-xs text-amber-700 mb-3">
-              The other captain's points are drained — claim any remaining player, in any category, for free (still capped at your own quota per category).
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {freePickable.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => freePick(p.id)}
-                  disabled={freePicking === p.id}
-                  className="text-sm py-1.5 px-3 rounded-lg border border-amber-400 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50"
-                >
-                  {freePicking === p.id ? "Picking…" : `${p.name} — ${GROUP_LABELS[p.category] || p.category}`}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {auction.status !== "completed" && (
-          <div className="card">
-            <h3 className="font-bold text-gray-900 mb-3 text-sm">Live Feed</h3>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {(auction.bid_feed || []).length === 0 && (
-                <p className="text-xs text-gray-400">No bids yet.</p>
-              )}
-              {(auction.bid_feed || []).map((b, i) => (
-                <div key={i} className="text-sm bg-gray-50 rounded-lg px-3 py-2">
-                  <span className="font-semibold">{b.captain_name}</span>{" "}
-                  {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
-                  {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
-                  {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
-                  {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
-                  {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within 30s, moved to the back of the category</>}
-                  <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <AuctionChat chatFeed={auction.chat_feed} currentUserId={user?.id} onSend={sendChatMessage} sending={sendingChat} />
-
-        {auction.status !== "pending" && <ReleaseOrderLog auctionId={id} />}
       </div>
     </div>
   );

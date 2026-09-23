@@ -223,7 +223,7 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
       {!compact && data.uncategorizedConfirmed > 0 && (
         <p className="text-xs text-red-600 mt-2">
           ⚠️ {data.uncategorizedConfirmed} confirmed player(s) have no category set.{" "}
-          <Link to="/admin/players" className="underline">Manage Players</Link>
+          <Link to="/manage/players/people" className="underline">Players</Link>
         </p>
       )}
 

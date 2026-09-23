@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
-import auctionPhoto from "../../assets/dashboard-backgrounds/auction.webp";
+import ManageHeader from "../../components/ManageHeader";
 import AuctionRulesNote from "../../components/AuctionRulesNote";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
 import CountdownBadge from "../../components/CountdownBadge";
@@ -57,6 +57,13 @@ function buildWhatsAppSummary(auction) {
 }
 
 export default function AdminAuction() {
+  const location = useLocation();
+  // "Practice" sub-tab = this page scrolled to the rehearsal card.
+  useEffect(() => {
+    if (location.hash === "#practice") {
+      setTimeout(() => document.getElementById("practice")?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    }
+  }, [location.hash]);
   const { user } = useAuth();
   const [slots, setSlots] = useState([]);
   const [voteMatrix, setVoteMatrix] = useState([]);
@@ -433,15 +440,11 @@ export default function AdminAuction() {
   };
 
   return (
-    <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundPhoto src={auctionPhoto} />
+    <div className="min-h-screen bg-brand-ground isolate">
       <Navbar />
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <Gavel className="text-pitch-600" size={24} />
-            <h1 className="text-2xl font-bold text-gray-900">Player Auction</h1>
-          </div>
+      <ManageHeader hub="auction" sub={location.hash === "#practice" ? "practice" : "run"} subtitle="Set up, start and run a match's live auction — or rehearse one in Practice" />
+      <div className="max-w-3xl mx-auto px-4 py-4 space-y-5">
+        <div className="flex items-center justify-end flex-wrap gap-2 empty:hidden">
           <div className="flex items-center gap-3">
             {auction?.status === "active" && <CountdownBadge endsAtIso={auction.ends_at_iso} />}
             {auctionId && (
@@ -616,7 +619,7 @@ export default function AdminAuction() {
         )}
 
         {!auctionId && (
-          <div className="card border-2 border-amber-200">
+          <div id="practice" className="card border-2 border-amber-200 scroll-mt-20">
             <div className="flex items-center gap-2 mb-1">
               <FlaskConical size={16} className="text-amber-600" />
               <h2 className="font-bold text-gray-900">Practice Auction (Rehearsal)</h2>

@@ -1,173 +1,136 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { homePathFor } from "./ProtectedRoute";
-import { canDoDestructive } from "../utils/roles";
-import api from "../utils/api";
-import toast from "react-hot-toast";
-import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck, KeyRound, Trophy, CalendarClock } from "lucide-react";
+import { useMyAuction } from "../hooks/useMyAuction";
+import { tabsFor, tabKeyFor, hubsFor, homePathFor } from "../utils/nav";
+import { isStaff, isVoter } from "../utils/roles";
 import { TOURNAMENT_NAME } from "../config/appMeta";
+import { Home, Trophy, Gavel, BarChart3, UserCircle, LayoutDashboard, Users } from "lucide-react";
 
-const MY_AUCTION_POLL_MS = 10000;
+const TAB_ICONS = { home: Home, matches: Trophy, auction: Gavel, stats: BarChart3, manage: LayoutDashboard, me: UserCircle };
+const HUB_ICONS = { control: LayoutDashboard, matches: Trophy, auction: Gavel, players: Users };
+const ROLE_LABEL = { admin: "Admin", organizer: "Organizer", viewer: "Viewer", player: "Player", captain: "Captain" };
 
-// The 3 dashboard routes that get the new royal-blue chrome (per the
-// approved mockup) — every other route keeps the existing cricket-navy
-// Navbar exactly as it was. Login has no navbar at all (public route), so
-// it isn't listed here.
-const DARK_THEME_ROUTES = ["/admin", "/captain/dashboard", "/player/dashboard"];
-
+// The app frame, Stumps-style: a slim navy top bar, a bottom tab bar on
+// phones, and the same destinations as a left sidebar on laptops. Every
+// page renders <Navbar /> at the top, so this one component is the whole
+// navigation — the tab list itself lives in utils/nav.js.
 export default function Navbar() {
-  const { user, logout, isAdmin, isVoter } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const location = useLocation();
-  const [myAuctionId, setMyAuctionId] = useState(null);
-  const dark = DARK_THEME_ROUTES.includes(location.pathname);
+  const liveAuctionId = useMyAuction();
+  const tabs = tabsFor(user);
+  const activeTab = tabKeyFor(location.pathname);
 
-  // Highlights whichever nav link matches the current route, so a fast-scanning
-  // admin always has an at-a-glance answer to "which admin page am I on".
-  const navLinkClass = (path) => {
-    const isActive = location.pathname === path;
-    if (dark) {
-      return `flex items-center gap-1.5 transition-colors duration-150 whitespace-nowrap py-2 px-1 min-h-[44px] border-b-2 ${
-        isActive
-          ? "text-white font-extrabold border-sky-400"
-          : "text-white/45 hover:text-white font-bold border-transparent"
-      }`;
-    }
-    return `flex items-center gap-1.5 transition-colors duration-150 whitespace-nowrap py-2 px-1 min-h-[44px] rounded-lg ${
-      isActive
-        ? "text-cricket-gold font-semibold bg-white/10"
-        : "text-white/85 hover:text-cricket-gold active:bg-white/10"
-    }`;
-  };
-
-  // Lets a captain (or an admin who's also flagged as a voter) discover "I'm
-  // in a live auction right now" without needing a manually-shared link —
-  // polled from here so it surfaces on every page.
+  // Room for the fixed tab bar / sidebar, set once for whichever page is showing.
   useEffect(() => {
-    if (!user || !isVoter) return;
-    let cancelled = false;
-    const check = () => {
-      api.get("/auction/my-active")
-        .then((res) => { if (!cancelled) setMyAuctionId(res.data?.auction_id || null); })
-        .catch(() => {});
-    };
-    check();
-    const interval = setInterval(check, MY_AUCTION_POLL_MS);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [user, isVoter]);
+    document.body.classList.add("has-shell");
+    return () => document.body.classList.remove("has-shell");
+  }, []);
 
-  const handleLogout = async () => {
-    await logout();
-    toast.success("Logged out");
-    navigate("/login");
-  };
+  const tabTarget = (tab) => (tab.key === "auction" && liveAuctionId ? `/auction/${liveAuctionId}` : tab.to);
 
   return (
-    <nav className={`sticky top-0 z-40 text-white safe-top ${
-      dark
-        ? "bg-royal-800 border-b border-sky-400/10"
-        : "bg-gradient-to-b from-cricket-navy to-cricket-navy-light shadow-soft"
-    }`}>
-      <div className="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between flex-wrap gap-y-2">
-        {/* Logo */}
-        <Link to={homePathFor(user)} className="flex items-center gap-2 font-bold text-lg tracking-tight min-h-[44px]">
-          {dark ? (
-            <span className="font-black">BCC<span className="text-sky-400">CVote</span></span>
-          ) : (
-            <>
-              <span className="text-2xl">🏏</span>
-              <span className="flex flex-col leading-tight">
-                <span>BCC<span className="text-cricket-gold">-CVote</span></span>
-                <span className="hidden sm:block text-[10px] font-medium text-white/60 tracking-wide">{TOURNAMENT_NAME}</span>
-              </span>
-            </>
-          )}
-        </Link>
-
-        {/* Nav links */}
-        <div className="order-3 sm:order-none w-full sm:w-auto flex items-center gap-x-3 gap-y-1 text-sm overflow-x-auto scroll-touch flex-wrap sm:flex-nowrap">
-          {user && (
-            <Link to="/tournament" className={navLinkClass("/tournament")}>
-              <Trophy size={15} /> Tournament
-            </Link>
-          )}
-          {isAdmin && (
-            <>
-              <Link to="/admin" className={navLinkClass("/admin")}>
-                <LayoutDashboard size={15} /> Admin
-              </Link>
-              <Link to="/admin/players" className={navLinkClass("/admin/players")}>
-                <Users size={15} /> Players
-              </Link>
-              <Link to="/admin/window" className={navLinkClass("/admin/window")}>
-                <Settings size={15} /> Window
-              </Link>
-              <Link to="/admin/attendance" className={navLinkClass("/admin/attendance")}>
-                <ClipboardCheck size={15} /> Attendance
-              </Link>
-              {canDoDestructive(user) && (
-                // Full admins only, matching the backend — organizers never see it.
-                <Link to="/admin/duty" className={navLinkClass("/admin/duty")}>
-                  <CalendarClock size={15} /> Duty
-                </Link>
-              )}
-              <Link to="/admin/auction" className={navLinkClass("/admin/auction")}>
-                <Gavel size={15} /> Auction
-              </Link>
-              <Link to="/admin/tournament" className={navLinkClass("/admin/tournament")}>
-                <Trophy size={15} /> Manage Tournament
-              </Link>
-            </>
-          )}
-          {user?.role === "admin" && isVoter && (
-            // Specifically for role=="admin" (flagged is_player) — their logo
-            // link goes to /admin, so they need an explicit way to their own
-            // vote via /player/dashboard. A captain/player flagged is_admin
-            // is the reverse case: their logo link already goes to their own
-            // dashboard (homePathFor is unchanged), so they don't need this —
-            // and /player/dashboard would be wrong for one whose role is
-            // actually "captain".
-            <Link to="/player/dashboard" className={navLinkClass("/player/dashboard")}>
-              <UserCircle size={15} /> My Votes
-            </Link>
-          )}
-          {isVoter && (
-            <>
-              <Link to="/results" className={navLinkClass("/results")}>
-                Results
-              </Link>
-              {myAuctionId && (
-                <Link
-                  to={`/auction/${myAuctionId}`}
-                  className="flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-b from-cricket-gold to-cricket-gold-dark text-cricket-navy rounded-full px-3.5 py-2 min-h-[36px] whitespace-nowrap shadow-soft animate-pulse active:scale-95 transition-transform duration-150"
-                >
-                  <Gavel size={13} /> Join Auction
-                </Link>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* User + logout */}
-        <div className="flex items-center gap-1.5">
-          <div className="text-right hidden sm:block mr-1">
-            <p className="text-xs text-gray-300">
-              {{ admin: "Admin", organizer: "Organizer", viewer: "Viewer", player: "Player" }[user?.role] || "Captain"}
-            </p>
-            <p className="text-sm font-semibold">{user?.name}</p>
-          </div>
-          <span className="bg-gradient-to-b from-pitch-500 to-pitch-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-soft">
-            {user?.team_code}
-          </span>
-          <Link to="/change-password" className="icon-btn text-white/85 hover:text-cricket-gold" title="Change Password">
-            <KeyRound size={18} />
+    <>
+      <header className="sticky top-0 z-40 bg-brand-navy text-white safe-top shadow-soft">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <Link to={homePathFor(user)} className="lg:invisible flex flex-col leading-tight min-h-[44px] justify-center">
+            <span className="font-black text-lg tracking-tight">BCC<span className="text-brand-gold">-CVote</span></span>
+            <span className="text-[10px] font-medium text-white/55 tracking-wide hidden sm:block">{TOURNAMENT_NAME}</span>
           </Link>
-          <button onClick={handleLogout} className="icon-btn text-white/85 hover:text-cricket-gold" title="Logout">
-            <LogOut size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {liveAuctionId && (
+              <Link to={`/auction/${liveAuctionId}`}
+                className="flex items-center gap-1.5 text-xs font-bold bg-red-600 text-white rounded-full px-3 py-1.5 min-h-[36px] animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-white" /> LIVE AUCTION
+              </Link>
+            )}
+            <Link to="/me" className="flex items-center gap-2 min-h-[44px]" title="Your profile">
+              <span className="text-right hidden sm:block leading-tight">
+                <span className="block text-[11px] text-white/60">{ROLE_LABEL[user?.role] || "Captain"}{user?.is_admin && user?.role !== "admin" ? " · Admin" : ""}</span>
+                <span className="block text-sm font-semibold">{user?.name}</span>
+              </span>
+              <span className="w-9 h-9 rounded-full bg-brand-gold text-brand-navy grid place-items-center text-xs font-black">
+                {initials(user?.name)}
+              </span>
+            </Link>
+          </div>
         </div>
-      </div>
-    </nav>
+      </header>
+
+      {/* Laptop: left sidebar */}
+      <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-56 z-50 bg-white border-r border-gray-200 flex-col pb-4 gap-1 overflow-y-auto">
+        <Link to={homePathFor(user)} className="h-14 shrink-0 bg-brand-navy text-white flex flex-col justify-center px-5 mb-3">
+          <span className="font-black text-lg tracking-tight leading-tight">BCC<span className="text-brand-gold">-CVote</span></span>
+          <span className="text-[10px] font-medium text-white/55 tracking-wide leading-tight">{TOURNAMENT_NAME}</span>
+        </Link>
+        <div className="px-3 flex flex-col gap-1 flex-1">
+        <SideSection title={isStaff(user) ? "Play" : null}>
+          {isVoter(user) && <SideLink to="/home" icon={Home} label="Home" />}
+          <SideLink to="/matches" icon={Trophy} label="Matches" />
+          {isVoter(user) && <SideLink to={liveAuctionId ? `/auction/${liveAuctionId}` : "/auction"} match="/auction" icon={Gavel} label="Auction" live={!!liveAuctionId} />}
+          <SideLink to="/stats" icon={BarChart3} label="Stats" />
+        </SideSection>
+        {isStaff(user) && (
+          <SideSection title="Manage">
+            {hubsFor(user).map((h) => (
+              <SideLink key={h.key} to={h.to} match={h.key === "control" ? "/manage" : `/manage/${h.key}`} exact={h.key === "control"}
+                icon={HUB_ICONS[h.key]} label={h.label} />
+            ))}
+          </SideSection>
+        )}
+        <div className="mt-auto pt-2 border-t border-gray-100">
+          <SideLink to="/me" icon={UserCircle} label="Me" />
+        </div>
+        </div>
+      </aside>
+
+      {/* Phone: bottom tab bar */}
+      <nav aria-label="Main" className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 safe-bottom">
+        <div className="flex justify-around">
+          {tabs.map((tab) => {
+            const Icon = TAB_ICONS[tab.key];
+            const on = activeTab === tab.key;
+            return (
+              <Link key={tab.key} to={tabTarget(tab)} aria-current={on ? "page" : undefined}
+                className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-bold transition-colors duration-150 ${on ? "text-pitch-700" : "text-gray-500"}`}>
+                <Icon size={21} strokeWidth={on ? 2.4 : 1.9} />
+                {tab.label}
+                {tab.key === "auction" && liveAuctionId && <span className="absolute top-2 right-[calc(50%-16px)] w-2 h-2 rounded-full bg-red-600" aria-label="live" />}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 }
+
+function SideSection({ title, children }) {
+  return (
+    <div className="mb-3">
+      {title && <p className="px-3 mb-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">{title}</p>}
+      <div className="flex flex-col gap-0.5">{children}</div>
+    </div>
+  );
+}
+
+function SideLink({ to, match, exact, icon: Icon, label, live }) {
+  const location = useLocation();
+  const base = match || to;
+  const on = exact ? location.pathname === base : location.pathname === base || location.pathname.startsWith(`${base}/`);
+  return (
+    <NavLink to={to} className={`flex items-center gap-3 rounded-xl px-3 min-h-[42px] text-sm font-semibold transition-colors duration-150 ${
+      on ? "bg-pitch-50 text-pitch-700" : "text-gray-600 hover:bg-gray-50"}`}>
+      <Icon size={18} /> <span className="flex-1">{label}</span>
+      {live && <span className="w-2 h-2 rounded-full bg-red-600" />}
+    </NavLink>
+  );
+}
+
+function initials(name) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+}
+

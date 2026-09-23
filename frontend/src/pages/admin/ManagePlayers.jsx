@@ -2,11 +2,10 @@ import { Fragment, useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import ManageHeader from "../../components/ManageHeader";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
-import playersPhoto from "../../assets/dashboard-backgrounds/players.webp";
 import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp, Search, Copy } from "lucide-react";
 
 // Both password-generation flows (Add Player's default password, Reset
@@ -362,23 +361,12 @@ export default function ManagePlayers() {
   );
 
   return (
-    <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundPhoto src={playersPhoto} />
+    <div className="min-h-screen bg-brand-ground isolate">
       <Navbar />
-      <div className="max-w-7xl mx-auto px-4 py-8">
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Manage Players</h1>
-            <p className="text-sm text-gray-500">
-              {players.length} players who can cast an availability vote ({captainCount} captains + {playerCount} players)
-            </p>
-          </div>
-          <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2">
-            <UserPlus size={16} /> Add Player
-          </button>
-        </div>
+      <ManageHeader hub="players" sub="people"
+        subtitle={`${players.length} people who can vote · ${captainCount} captains + ${playerCount} players`}
+        actions={<button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2"><UserPlus size={16} /> Add Player</button>} />
+      <div className="max-w-7xl mx-auto px-4 py-4">
 
         {/* Add player form */}
         {showForm && (

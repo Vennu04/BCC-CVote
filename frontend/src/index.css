@@ -59,7 +59,7 @@
   }
 
   body {
-    @apply font-sans text-gray-900 bg-cricket-cream min-h-screen;
+    @apply font-sans text-gray-900 bg-brand-ground min-h-screen;
     /* Themed tap highlight instead of the default gray flash on Android/iOS
        Safari's fallback — real pressed feedback comes from each button's own
        :active state below, this is just a subtle brand-colored fallback. */
@@ -218,4 +218,14 @@
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-extrabold
       bg-red-500/10 border border-red-500/35 text-red-400;
   }
+}
+
+/* ── App frame (redesign) ────────────────────────────────────────────────
+   Navbar adds .has-shell to <body>: leave room for the fixed bottom tab bar
+   on phones and the fixed left sidebar on laptops. */
+@media (max-width: 1023px) {
+  body.has-shell { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (min-width: 1024px) {
+  body.has-shell { padding-left: 14rem; }
 }

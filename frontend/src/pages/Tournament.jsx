@@ -1,18 +1,21 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
-import Navbar from "../components/Navbar";
 import { LoadingState } from "../components/LoadingState";
-import { Trophy, Users, Calendar, MapPin, AlertTriangle, RefreshCw } from "lucide-react";
-import { TOURNAMENT_NAME } from "../config/appMeta";
+import TeamCrest, { TeamsVs } from "../components/TeamCrest";
+import { formatDateDisplay } from "../utils/formatDate";
+import { MapPin, AlertTriangle, RefreshCw } from "lucide-react";
+import { todayIst } from "../utils/duty";
 
 const GROUPS = ["A", "B", "C"];
 
-export default function Tournament() {
+// Matches › Fixtures and Matches › Groups — the public tournament view
+// (formerly the standalone Tournament page), rendered inside Matches.jsx.
+export function TournamentView({ view }) {
   const [teams, setTeams] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [activeGroup, setActiveGroup] = useState("A");
+  const [group, setGroup] = useState("all");
 
   const fetchData = () => {
     setLoading(true);
@@ -28,128 +31,119 @@ export default function Tournament() {
 
   useEffect(fetchData, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen">
-        <Navbar />
-        <div className="flex items-center justify-center h-64"><LoadingState label="Loading tournament…" /></div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center h-48"><LoadingState label="Loading tournament…" /></div>;
 
   if (error) {
     return (
-      <div className="min-h-screen bg-cricket-cream">
-        <Navbar />
-        <div className="max-w-3xl mx-auto px-4 py-8">
-          <div className="card text-center py-12">
-            <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
-            <p className="text-gray-700 font-medium">Couldn't load tournament data</p>
-            <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
-            <button onClick={fetchData} className="btn-secondary inline-flex items-center gap-1.5">
-              <RefreshCw size={14} /> Retry
-            </button>
-          </div>
-        </div>
+      <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
+        <AlertTriangle className="mx-auto text-amber-500 mb-3" size={36} />
+        <p className="text-gray-800 font-semibold">Couldn't load tournament data</p>
+        <p className="text-gray-500 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <button onClick={fetchData} className="btn-secondary inline-flex items-center gap-1.5"><RefreshCw size={14} /> Retry</button>
       </div>
     );
   }
 
-  const groupTeams = teams.filter((t) => t.group === activeGroup);
-  const groupFixtures = fixtures.filter((f) => f.group === activeGroup);
+  if (teams.length === 0) {
+    return <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4 text-gray-500">Tournament data hasn't been set up yet — check back soon.</div>;
+  }
+
+  const chips = (
+    <div className="flex gap-2 mb-4 overflow-x-auto scroll-touch -mx-1 px-1">
+      {(view === "groups" ? GROUPS : ["all", ...GROUPS]).map((g) => {
+        const on = view === "groups" ? g === (group === "all" ? "A" : group) : g === group;
+        return (
+          <button key={g} type="button" onClick={() => setGroup(g)} aria-pressed={on}
+            className={`shrink-0 px-4 min-h-[40px] rounded-full text-sm font-bold transition-colors duration-150 ${
+              on ? "bg-brand-navy text-white" : "bg-white text-gray-600 shadow-soft"}`}>
+            {g === "all" ? "All groups" : `Group ${g}`}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (view === "groups") {
+    const g = group === "all" ? "A" : group;
+    const groupTeams = teams.filter((t) => t.group === g);
+    const played = fixtures.filter((f) => f.group === g && f.result).length;
+    const total = fixtures.filter((f) => f.group === g).length;
+    return (
+      <>
+        {chips}
+        <div className="bg-white rounded-2xl shadow-soft p-4">
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="font-black text-gray-900">Group {g}</h2>
+            <span className="text-xs text-gray-500">{groupTeams.length} teams · {played}/{total} matches played</span>
+          </div>
+          {groupTeams.length === 0 ? (
+            <p className="text-sm text-gray-500">No teams in this group yet.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {groupTeams.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 py-2.5">
+                  <TeamCrest name={t.name} size={30} />
+                  <span className="font-semibold text-gray-900">{t.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  const today = todayIst();
+  const shown = fixtures.filter((f) => group === "all" || f.group === group);
+  const upcoming = shown.filter((f) => f.date && !f.result && f.date >= today).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+  const results = shown.filter((f) => f.result || (f.date && f.date < today)).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const tbd = shown.filter((f) => !f.date && !f.result);
 
   return (
-    <div className="min-h-screen bg-cricket-cream">
-      <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-2 mb-6">
-          <Trophy className="text-pitch-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{TOURNAMENT_NAME}</h1>
-            <p className="text-sm text-gray-500">27 Teams · 3 Groups · 20 Overs · Hard Tennis Ball</p>
-          </div>
+    <>
+      {chips}
+      <FixtureSection title="Upcoming" items={upcoming} empty="No upcoming matches scheduled." />
+      <FixtureSection title="Results" items={results} />
+      <FixtureSection title="Not scheduled yet" items={tbd} />
+    </>
+  );
+}
+
+function FixtureSection({ title, items, empty }) {
+  if (items.length === 0 && !empty) return null;
+  return (
+    <section className="mb-5">
+      <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">{title}</h2>
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-500 bg-white rounded-2xl shadow-soft px-4 py-3">{empty}</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {items.map((f) => <FixtureCard key={f.id} f={f} />)}
         </div>
+      )}
+    </section>
+  );
+}
 
-        {teams.length === 0 ? (
-          <div className="card text-center py-12">
-            <p className="text-gray-500">Tournament data hasn't been set up yet — check back soon.</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex gap-2 mb-6">
-              {GROUPS.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setActiveGroup(g)}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm min-h-[44px] transition-colors duration-150 ${
-                    activeGroup === g ? "bg-pitch-600 text-white" : "bg-white text-gray-600 border border-gray-200"
-                  }`}
-                >
-                  Group {g}
-                </button>
-              ))}
-            </div>
-
-            <div className="card mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Users size={18} className="text-pitch-600" />
-                <h2 className="font-bold text-gray-900">Group {activeGroup} Teams</h2>
-                <span className="text-xs text-gray-400 ml-auto">{groupTeams.length} teams</span>
-              </div>
-              {groupTeams.length === 0 ? (
-                <p className="text-sm text-gray-400">No teams in this group yet.</p>
-              ) : (
-                <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-                  {groupTeams.map((t, i) => (
-                    <li key={t.id} className="text-gray-700">
-                      <span className="text-gray-400 w-5 inline-block">{i + 1}.</span> {t.name}
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="flex items-center gap-2 mb-3">
-                <Calendar size={18} className="text-pitch-600" />
-                <h2 className="font-bold text-gray-900">Group {activeGroup} Fixtures</h2>
-                <span className="text-xs text-gray-400 ml-auto">{groupFixtures.length} matches</span>
-              </div>
-              {groupFixtures.length === 0 ? (
-                <p className="text-sm text-gray-400">No fixtures in this group yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {groupFixtures.map((f) => (
-                    <div key={f.id} className="border border-gray-100 rounded-xl px-4 py-3">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-xs font-semibold text-gray-400 w-16 shrink-0">Match {f.match_number}</span>
-                          <span className="font-medium text-gray-900">{f.team1_name}</span>
-                          <span className="text-gray-400">vs</span>
-                          <span className="font-medium text-gray-900">{f.team2_name}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-                          {f.date ? (
-                            <span className="flex items-center gap-1">
-                              <Calendar size={12} /> {f.date}{f.time ? ` · ${f.time}` : ""}
-                            </span>
-                          ) : (
-                            <span className="text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 font-medium">TBD</span>
-                          )}
-                          {f.venue && (
-                            <span className="flex items-center gap-1"><MapPin size={12} /> {f.venue}</span>
-                          )}
-                        </div>
-                      </div>
-                      {f.result && <p className="text-xs text-pitch-700 font-medium mt-2">{f.result}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
+function FixtureCard({ f }) {
+  const chip = f.result
+    ? { label: "Result", cls: "bg-amber-50 text-amber-800" }
+    : f.date
+      ? { label: f.date < todayIst() ? "Played" : "Scheduled", cls: "bg-gray-100 text-gray-600" }
+      : { label: "TBD", cls: "bg-amber-50 text-amber-800" };
+  return (
+    <div className="bg-white rounded-2xl shadow-soft p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-500">
+          Group {f.group} · Match {f.match_number}
+          {f.date ? ` · ${formatDateDisplay(f.date)}${f.time ? ` · ${f.time}` : ""}` : ""}
+        </span>
+        <span className={`text-[11px] font-bold rounded-full px-2.5 py-0.5 ${chip.cls}`}>{chip.label}</span>
+      </div>
+      <TeamsVs a={f.team1_name} b={f.team2_name} />
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+        {f.venue && <span className="flex items-center gap-1"><MapPin size={12} /> {f.venue}</span>}
+        {f.result && <span className="text-pitch-700 font-semibold">{f.result}</span>}
       </div>
     </div>
   );

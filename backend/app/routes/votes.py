@@ -266,16 +266,25 @@ def attendance_leaderboard():
         for voter_id in match.get("attendee_ids", []):
             counts[voter_id] = counts.get(voter_id, 0) + 1
 
+    # Ranked by the same per-player attendance the admin Attendance page
+    # maintains (matches_present / total_matches, credited from votes) —
+    # league_matches is the older record and is nearly empty in practice.
+    # attendance_count is kept for older clients.
+    me = str(get_current_user()["_id"])
     leaderboard = sorted(
         (
             {
                 "name": v["name"],
                 "attendance_count": counts.get(str(v["_id"]), 0),
                 "knockout_eligible": v.get("knockout_eligible", False),
+                "matches_present": v.get("matches_present") or 0,
+                "total_matches": v.get("total_matches") or 0,
+                "attendance_percentage": v.get("attendance_percentage"),
+                "is_me": str(v["_id"]) == me,
             }
             for v in voters
         ),
-        key=lambda e: (-e["attendance_count"], e["name"]),
+        key=lambda e: (-(e["attendance_percentage"] or 0), -e["matches_present"], -e["attendance_count"], e["name"]),
     )
     return jsonify({
         "leaderboard": leaderboard,

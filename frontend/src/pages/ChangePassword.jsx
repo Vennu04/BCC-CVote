@@ -45,7 +45,7 @@ export default function ChangePassword() {
   };
 
   return (
-    <div className="min-h-screen bg-cricket-cream">
+    <div className="min-h-screen bg-brand-ground">
       <Navbar />
       <div className="max-w-sm mx-auto px-4 py-8">
         <div className="card">

@@ -44,6 +44,20 @@ MAX_ROSTER_SIZE_PER_SIDE = 14  # 14+14 = 28 max auctioned players total, captain
 BATSMAN_ONLY_GROUPS = ("extra_power_batsman",)
 
 
+def _auction_match_label(auction):
+    """"Hawks vs Royals" (or the slot's day + time for fixed slots) — lets
+    the live auction screen say which match it's for."""
+    try:
+        slot = mongo.db.match_slots.find_one({"_id": ObjectId(auction.get("slot_id"))})
+    except Exception:
+        slot = None
+    if not slot:
+        return None
+    if slot.get("team_a_name") and slot.get("team_b_name"):
+        return f"{slot['team_a_name']} vs {slot['team_b_name']}"
+    return f"{slot.get('day', '')} {slot.get('match_time') or slot.get('time_of_day', '')}".strip()
+
+
 def _get_active_window(slot_id):
     return mongo.db.voting_windows.find_one({"slot_id": slot_id, "is_active": True})
 
@@ -1268,6 +1282,7 @@ def get_auction(auction_id):
         "id": auction_id,
         "status": auction["status"],
         "is_test": auction.get("is_test", False),
+        "match_label": _auction_match_label(auction),
         "ends_at": format_ist(auction["ends_at"]) if auction.get("ends_at") else None,
         "ends_at_iso": to_iso_utc(auction.get("ends_at")),
         "points_budget": auction["points_budget"],

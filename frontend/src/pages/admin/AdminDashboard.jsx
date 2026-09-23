@@ -1,70 +1,75 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
+import ManageHeader from "../../components/ManageHeader";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
 import YetToVotePanel from "../../components/YetToVotePanel";
 import DutySummary from "../../components/DutySummary";
+import { TeamsVs } from "../../components/TeamCrest";
 import { LoadingState } from "../../components/LoadingState";
 import { STATUS_STYLES } from "../../utils/windowStatus";
-import { matchTeams, matchWhen } from "../../utils/matchLabel";
-import { Download, RefreshCw, Users, BarChart2, Settings, ClipboardList, CalendarDays } from "lucide-react";
+import { matchWhen } from "../../utils/matchLabel";
+import { Download, RefreshCw, Users, BarChart2, ClipboardList, CalendarDays, ChevronDown, ChevronUp, ChevronRight, CheckCircle2 } from "lucide-react";
 
-// Live vote counts matter most on this page (the Thu-Fri voting window is
-// actively running), so it polls in the background — same pattern as
-// useAuction.js's bidding loop and VotingWindow's turnout poll, just a
-// slower interval since a full captain×slot matrix is a bigger payload.
-// Silent (no toast) so it doesn't spam every 10s — the toast is reserved
-// for the explicit manual Refresh click below.
+// Live vote counts matter most here while a voting window is running, so it
+// polls silently in the background; the Refresh button is the loud version.
 const POLL_INTERVAL_MS = 10000;
 
-export default function AdminDashboard() {
+const STEP_LABELS = { voting: "Voting", attendance: "Attendance", categories: "Categories", auction: "Auction" };
+const TODO_DOT = { red: "bg-red-600", gold: "bg-amber-500", blue: "bg-sky-600", info: "bg-gray-400" };
+
+// Control Centre — formerly the Admin Dashboard. A to-do list worked out by
+// the server (/admin/overview), each match's progress through voting →
+// attendance → categories → auction, live turnout with "set a vote for
+// someone", the full votes table, insights and exports.
+export default function ControlCentre() {
   const [data, setData] = useState(null);
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Separate from `data` — insights query heavier aggregates (attendance
-  // trend, auction spend, participation history) that don't need to move
-  // every 10s like the live vote matrix does, so this fetches once on mount
-  // rather than joining the polling loop below.
   const [insights, setInsights] = useState(null);
+  const [showGrid, setShowGrid] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await api.get("/admin/dashboard");
-      setData(res.data);
+      const [dash, ov] = await Promise.all([api.get("/admin/dashboard"), api.get("/admin/overview")]);
+      setData(dash.data);
+      setOverview(ov.data);
     } catch {
-      toast.error("Failed to load dashboard");
+      toast.error("Failed to load the Control Centre");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
   useEffect(() => {
     const interval = setInterval(fetchData, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
-
   useEffect(() => {
-    api.get("/admin/dashboard/insights")
-      .then((res) => setInsights(res.data))
-      .catch(() => {}); // Non-critical — the rest of the dashboard works fine without it.
+    api.get("/admin/dashboard/insights").then((res) => setInsights(res.data)).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!exportOpen) return;
+    const close = (e) => { if (!exportRef.current?.contains(e.target)) setExportOpen(false); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [exportOpen]);
 
-  // fetchData alone gave no feedback on click — it silently refetches, so if
-  // nothing on screen happens to change, admin has no way to tell the button
-  // did anything at all. Wrapping it with a spinner + toast makes the refresh
-  // visibly happen every time, whether or not the underlying numbers moved.
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchData();
-    toast.success("Dashboard refreshed");
+    toast.success("Refreshed");
     setRefreshing(false);
   };
 
   const downloadFile = async (endpoint, filenamePrefix, ext) => {
+    setExportOpen(false);
     try {
       const res = await api.get(endpoint, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -81,242 +86,212 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleExport = (format = "excel") => {
-    const endpoint = format === "excel" ? "/admin/export/excel" : "/admin/export/csv";
-    downloadFile(endpoint, "BCC-Availability", format === "excel" ? "xlsx" : "csv");
-  };
-
-  const handleExportAvailablePlayers = () => {
-    downloadFile("/admin/export/available-players", "BCC-Available-Players", "xlsx");
-  };
-
   const matrix = useMemo(() => data?.vote_matrix || [], [data]);
-
-  // Every active match slot shows here, not just ones with an open window —
-  // admin also wants to see closed/completed matches (e.g. to check turnout
-  // after an offline auction) and not-yet-open upcoming ones side by side,
-  // not just the ones still accepting votes right now.
   const visibleSlots = useMemo(() => data?.slots || [], [data]);
   const visibleSlotIds = useMemo(() => new Set(visibleSlots.map((s) => s.slot_id)), [visibleSlots]);
-
-  // Row filtering alone would misalign AvailabilityGrid's header columns
-  // against each row's cells (they're matched by slot_id, not position), so
-  // both the matrix's per-row votes and the derived header slots are built
-  // from the same filtered set.
   const filteredMatrix = useMemo(
     () => matrix.map((row) => ({ ...row, votes: row.votes.filter((v) => visibleSlotIds.has(v.slot_id)) })),
     [matrix, visibleSlotIds]
   );
-  const slots = useMemo(
+  const gridSlots = useMemo(
     () => filteredMatrix[0]?.votes?.map((v) => ({ ...v, slot_number: parseInt(v.slot_label.replace("Slot ", "")) })) || [],
     [filteredMatrix]
   );
+  const stepsBySlot = useMemo(() => Object.fromEntries((overview?.matches || []).map((m) => [m.slot_id, m])), [overview]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-gradient-to-br from-royal-950 via-royal-900 to-royal-950"><Navbar />
-      <div className="flex items-center justify-center h-64"><LoadingState /></div>
-    </div>
+  const actions = (
+    <>
+      <button onClick={handleRefresh} disabled={refreshing}
+        className="flex items-center gap-1.5 text-sm px-3 min-h-[40px] rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50">
+        <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> {refreshing ? "Refreshing…" : "Refresh"}
+      </button>
+      <div className="relative" ref={exportRef}>
+        <button onClick={() => setExportOpen((o) => !o)} aria-expanded={exportOpen}
+          className="flex items-center gap-1.5 text-sm font-bold px-3 min-h-[40px] rounded-xl bg-brand-gold text-brand-navy">
+          <Download size={15} /> Export <ChevronDown size={14} />
+        </button>
+        {exportOpen && (
+          <div className="absolute right-0 mt-1 w-56 bg-white text-gray-800 rounded-xl shadow-soft-lg border border-gray-100 py-1 z-50">
+            <MenuItem icon={ClipboardList} onClick={() => downloadFile("/admin/export/available-players", "BCC-Available-Players", "xlsx")}>Available Players (Excel)</MenuItem>
+            <MenuItem icon={Download} onClick={() => downloadFile("/admin/export/excel", "BCC-Availability", "xlsx")}>All votes (Excel)</MenuItem>
+            <MenuItem icon={Download} onClick={() => downloadFile("/admin/export/csv", "BCC-Availability", "csv")}>All votes (CSV)</MenuItem>
+          </div>
+        )}
+      </div>
+    </>
   );
 
-  // Real-data ticker strip — no invented numbers, just a compact restatement
-  // of what's already fetched above (open windows, voter turnout, top
-  // auction category by spend), styled as the mockup's scoreboard ticker.
-  const topCategory = insights?.auction_spend_by_category
-    ? Object.entries(insights.auction_spend_by_category).sort((a, b) => b[1] - a[1])[0]
-    : null;
-  const tickerItems = [
-    { label: "WINDOWS", value: `${data?.open_count ?? 0} OPEN OF ${data?.total_slots ?? 0}`, color: "text-red-400" },
-    { label: "VOTERS", value: `${data?.captains_voted ?? 0} OF ${data?.captains_total ?? 0} VOTED`, color: "text-green-400" },
-    ...(topCategory ? [{ label: "TOP AUCTION CATEGORY", value: `${topCategory[0].toUpperCase()} · ${topCategory[1]} PTS`, color: "text-amber-400" }] : []),
-  ];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-royal-950 via-royal-900 to-royal-950 isolate">
+    <div className="min-h-screen bg-brand-ground">
       <Navbar />
+      <ManageHeader hub="control" sub={null} actions={actions}
+        subtitle={data ? `${data.open_count ?? 0} of ${data.total_slots ?? 0} voting windows open · ${data.captains_voted ?? 0} of ${data.captains_total ?? 0} voters have voted` : "Loading…"} />
 
-      {/* Live ticker strip */}
-      <div className="bg-royal-700 border-b border-sky-400/10 flex items-center overflow-x-auto scroll-touch">
-        {(data?.open_count ?? 0) > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-red-500 flex-shrink-0">
-            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span className="text-[10.5px] font-black tracking-wide text-white">LIVE</span>
-          </div>
-        )}
-        <div className="flex items-center flex-wrap gap-x-1">
-          {tickerItems.map((t, i) => (
-            <div key={t.label} className={`flex items-center gap-2 px-4 py-2 whitespace-nowrap ${i > 0 ? "border-l border-white/10" : ""}`}>
-              <span className={`text-[11px] font-extrabold ${t.color}`}>{t.label}</span>
-              <span className="text-[11px] font-medium text-white/50">{t.value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+        {loading ? <LoadingState /> : (
+          <>
+            {/* To do */}
+            <section className="bg-white rounded-2xl shadow-soft p-4">
+              <h2 className="font-black text-gray-900 mb-1">To do</h2>
+              {(overview?.todos || []).length === 0 ? (
+                <p className="flex items-center gap-2 text-sm text-pitch-700 font-semibold py-1"><CheckCircle2 size={16} /> Nothing needs you right now.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {overview.todos.map((t, i) => (
+                    <li key={i}>
+                      <Link to={t.link} className="flex items-start gap-3 py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg">
+                        <span className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${TODO_DOT[t.level]}`} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-bold text-gray-900">{t.title}</span>
+                          <span className="block text-xs text-gray-500">{t.detail}</span>
+                        </span>
+                        <ChevronRight size={16} className="text-gray-400 mt-1" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
+            <DutySummary variant="dark" />
 
-        {/* Title */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-black text-white">Admin Dashboard</h1>
-            <p className="text-sm text-white/45 mt-0.5">
-              🟢 {data?.open_count ?? 0} of {data?.total_slots ?? 0} voting windows open
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 text-sm py-2 px-4 min-h-[44px] rounded-xl border border-white/15 text-white/70 hover:bg-white/5 transition-all duration-150 disabled:opacity-50">
-              <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> {refreshing ? "Refreshing…" : "Refresh"}
-            </button>
-            <Link to="/admin/window" className="flex items-center gap-1.5 text-sm py-2 px-4 min-h-[44px] rounded-xl border border-white/15 text-white/70 hover:bg-white/5 transition-all duration-150">
-              <Settings size={15} /> Manage Windows
-            </Link>
-            <button onClick={handleExportAvailablePlayers} className="btn-primary-dark flex items-center gap-1.5 text-sm py-2 px-4">
-              <ClipboardList size={15} /> Available Players
-            </button>
-            <button onClick={() => handleExport("excel")} className="flex items-center gap-1.5 text-sm py-2 px-4 min-h-[44px] rounded-xl border border-white/15 text-white/70 hover:bg-white/5 transition-all duration-150">
-              <Download size={15} /> Export Excel
-            </button>
-            <button onClick={() => handleExport("csv")} className="flex items-center gap-1.5 text-sm py-2 px-4 min-h-[44px] rounded-xl border border-white/15 text-white/70 hover:bg-white/5 transition-all duration-150">
-              <Download size={15} /> Export CSV
-            </button>
-          </div>
-        </div>
-
-        <DutySummary variant="dark" />
-
-        {/* Stats row — every active match slot */}
-        {visibleSlots.length === 0 ? (
-          <div className="card-dark text-center py-8 mb-8 text-white/40 text-sm">
-            No match slots to show.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-            {visibleSlots.map((slot) => (
-              <div key={slot.slot_id} className="card-dark text-center relative overflow-hidden !p-0">
-                <div className="h-[3px] bg-sky-400" />
-                <div className="p-4">
-                  <CalendarDays size={16} className="mx-auto text-white/30 mb-1" />
-                  {matchTeams(slot) ? (
-                    <>
-                      <p className="text-sm font-bold text-white leading-tight">{matchTeams(slot)}</p>
-                      <p className="text-[11px] font-medium text-white/45 mt-0.5">
-                        {slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs font-medium text-white/45 uppercase">{slot.day} {slot.time_of_day}</p>
-                  )}
-                  <span className={`inline-block text-[10px] font-semibold rounded-full px-2.5 py-1 mt-1.5 border border-black/5 ${STATUS_STYLES[slot.window?.status]?.className || "bg-gray-100 text-gray-600"}`}>
-                    {STATUS_STYLES[slot.window?.status]?.label || slot.window?.status || "UNKNOWN"}
-                  </span>
-                  {/* Compact weather glance — full forecast card lives on the
-                      voting page and Voting Windows page; this dashboard's cards
-                      are too small for the 4-line version, so just temp + rain%. */}
-                  {slot.weather?.status === "ok" && (
-                    <p className="text-[11px] text-white/45 mt-1">
-                      {Math.round(slot.weather.temp_c)}°C 🌧️{slot.weather.rain_chance_pct}%
-                    </p>
-                  )}
-                  <p className="text-3xl font-black text-white mt-1">{slot.available}</p>
-                  <p className="text-xs text-white/35">Available</p>
-                  <div className="flex justify-center gap-2 mt-2 text-xs text-white/45">
-                    <span className="text-yellow-400">🤔 {slot.maybe}</span>
-                    <span className="text-red-400">❌ {slot.not_available}</span>
-                    <YetToVotePanel
-                      matrix={matrix}
-                      slotId={slot.slot_id}
-                      noResponseCount={slot.no_response}
-                      onVoteSet={fetchData}
-                    />
-                  </div>
+            {/* Matches */}
+            <section>
+              <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Matches</h2>
+              {visibleSlots.length === 0 ? (
+                <p className="bg-white rounded-2xl shadow-soft px-4 py-6 text-center text-sm text-gray-500">No match slots to show.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {visibleSlots.map((slot) => (
+                    <MatchProgressCard key={slot.slot_id} slot={slot} ov={stepsBySlot[slot.slot_id]} matrix={matrix} onVoteSet={fetchData} />
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </section>
 
-        {/* Voted count */}
-        <div className="flex items-center gap-2 text-sm text-white/60 mb-4 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 w-fit">
-          <Users size={16} className="text-sky-400" />
-          <span><strong className="text-white">{data?.captains_voted}</strong> of <strong className="text-white">{data?.captains_total}</strong> voters have voted</span>
-        </div>
+            {/* Full votes table */}
+            <section className="rounded-2xl overflow-hidden bg-royal-600 shadow-soft">
+              <button onClick={() => setShowGrid((v) => !v)} aria-expanded={showGrid}
+                className="w-full flex items-center gap-2 px-4 min-h-[52px] text-white bg-royal-800">
+                <BarChart2 size={18} className="text-sky-400" />
+                <span className="font-semibold flex-1 text-left">Votes table — every voter × every match</span>
+                {showGrid ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              {showGrid && <div className="p-3"><AvailabilityGrid matrix={filteredMatrix} slots={gridSlots} /></div>}
+            </section>
 
-        {/* Full matrix */}
-        <div className="card-dark overflow-hidden !p-0">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-white/10 bg-royal-800">
-            <BarChart2 size={18} className="text-sky-400" />
-            <h2 className="font-semibold text-white">Captain × Slot Availability</h2>
-          </div>
-          <div className="p-4">
-            <AvailabilityGrid matrix={filteredMatrix} slots={slots} />
-          </div>
-        </div>
-
-        {/* Broader insights — attendance trend, auction spend, participation
-            history. Plain-divs bar charts (no charting library in this app's
-            dependencies) to stay consistent with everything else here. */}
-        {insights && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-            <InsightBarCard
-              title="Attendance Trend"
-              icon={<Users size={16} className="text-sky-400" />}
-              items={insights.attendance_trend.map((m) => ({ label: m.label, value: m.attendee_count }))}
-              emptyLabel="No league matches recorded yet"
-              valueSuffix=" present"
-            />
-            <InsightBarCard
-              title="Auction Spend by Category (pts)"
-              icon={<BarChart2 size={16} className="text-sky-400" />}
-              items={Object.entries(insights.auction_spend_by_category).map(([label, value]) => ({ label, value }))}
-              emptyLabel="No auctioned players sold yet"
-              // This app's auction is a points budget (POINTS_BUDGET=17,
-              // STARTING_PRICE=8.5 — see auction.py), not a currency purse —
-              // no "₹" here, matching how the live auction page itself shows
-              // prices (plain numbers, "pts" suffix on budget figures).
-              valueSuffix=" pts"
-            />
-            <InsightBarCard
-              title="Voting Participation %"
-              icon={<CalendarDays size={16} className="text-sky-400" />}
-              items={insights.participation_trend.map((w) => ({
-                label: w.opens_at ? w.opens_at.split(",")[0] : w.window_id.slice(-6),
-                value: w.participation_pct,
-              }))}
-              emptyLabel="No voting windows yet"
-              valueSuffix="%"
-            />
-          </div>
+            {/* Insights */}
+            {insights && (
+              <section>
+                <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Insights</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                  <InsightBarCard title="Attendance Trend" icon={<Users size={16} className="text-brand-navy" />}
+                    items={insights.attendance_trend.map((m) => ({ label: m.label, value: m.attendee_count }))}
+                    emptyLabel="No league matches recorded yet" valueSuffix=" present" />
+                  <InsightBarCard title="Auction Spend by Category (pts)" icon={<BarChart2 size={16} className="text-brand-navy" />}
+                    items={Object.entries(insights.auction_spend_by_category).map(([label, value]) => ({ label, value }))}
+                    emptyLabel="No auctioned players sold yet" valueSuffix=" pts" />
+                  <InsightBarCard title="Voting Participation %" icon={<CalendarDays size={16} className="text-brand-navy" />}
+                    items={insights.participation_trend.map((w) => ({
+                      label: w.opens_at ? w.opens_at.split(",")[0] : w.window_id.slice(-6),
+                      value: w.participation_pct,
+                    }))}
+                    emptyLabel="No voting windows yet" valueSuffix="%" />
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
-// Small horizontal bar chart — each item as a labeled row scaled to the max
-// value in the set. Deliberately not a new dependency; this app has no
-// charting library and these three cards don't need one.
+function MenuItem({ icon: Icon, onClick, children }) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-2 px-3 min-h-[42px] text-sm text-left hover:bg-gray-50">
+      <Icon size={15} className="text-gray-500" /> {children}
+    </button>
+  );
+}
+
+function MatchProgressCard({ slot, ov, matrix, onVoteSet }) {
+  const status = STATUS_STYLES[slot.window?.status];
+  return (
+    <div className="bg-white rounded-2xl shadow-soft overflow-hidden">
+      <div className="p-4 pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-500">{slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}</span>
+          <span className={`text-[10px] font-bold rounded-full px-2.5 py-1 border border-black/5 shrink-0 ${status?.className || "bg-gray-100 text-gray-600"}`}>
+            {status?.label || slot.window?.status || "NO WINDOW"}
+          </span>
+        </div>
+        {slot.team_a_name && slot.team_b_name
+          ? <TeamsVs a={slot.team_a_name} b={slot.team_b_name} />
+          : <p className="font-extrabold text-gray-900 my-2">{slot.day} {slot.time_of_day}</p>}
+        {ov && (
+          <>
+            <div className="flex gap-1 mt-1" aria-label="Progress">
+              {ov.steps.map((s) => (
+                <span key={s.key} title={`${STEP_LABELS[s.key]}: ${s.state}`}
+                  className={`flex-1 h-1.5 rounded-full ${s.state === "done" ? "bg-pitch-600" : s.state === "current" ? "bg-brand-gold" : "bg-gray-200"}`} />
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              {ov.steps.map((s) => (
+                <span key={s.key} className={s.state === "current" ? "font-bold text-gray-800" : ""}>
+                  {STEP_LABELS[s.key]}{s.key !== "auction" ? " ▸ " : ""}
+                </span>
+              ))}
+            </p>
+            {ov.odd_groups.length > 0 && (
+              <p className="text-[11px] font-bold text-red-700 mt-1">Odd: {ov.odd_groups.map((g) => `${g.replaceAll("_", " ")} (${ov.counts.by_group[g]})`).join(", ")}</p>
+            )}
+          </>
+        )}
+        {slot.weather?.status === "ok" && (
+          <p className="text-[11px] text-gray-500 mt-1">☀ {Math.round(slot.weather.temp_c)}°C · 🌧 {slot.weather.rain_chance_pct}% rain</p>
+        )}
+      </div>
+      {/* Scoreboard strip */}
+      <div className="bg-brand-navy text-white px-4 py-2.5 flex items-center gap-4">
+        <span className="text-center">
+          <span className="block text-2xl font-black leading-none tabular-nums">{slot.available}</span>
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-white/55">Available</span>
+        </span>
+        <span className="text-xs text-white/70 flex-1 flex gap-3 flex-wrap">
+          <span>🤔 {slot.maybe} maybe</span>
+          <span>❌ {slot.not_available} out</span>
+        </span>
+      </div>
+      <div className="px-4 py-2 text-xs">
+        <YetToVotePanel matrix={matrix} slotId={slot.slot_id} noResponseCount={slot.no_response} onVoteSet={onVoteSet} />
+      </div>
+    </div>
+  );
+}
+
+// Small horizontal bar chart — plain divs, no charting library in this app.
 function InsightBarCard({ title, icon, items, emptyLabel, valuePrefix = "", valueSuffix = "" }) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
-    <div className="card-dark">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="bg-white rounded-2xl shadow-soft p-4">
+      <div className="flex items-center gap-2 mb-3">
         {icon}
-        <h3 className="font-semibold text-white text-sm">{title}</h3>
+        <h3 className="font-bold text-gray-900 text-sm">{title}</h3>
       </div>
       {items.length === 0 ? (
-        <p className="text-xs text-white/35 text-center py-4">{emptyLabel}</p>
+        <p className="text-xs text-gray-500 text-center py-4">{emptyLabel}</p>
       ) : (
         <div className="space-y-2">
           {items.map((item, i) => (
             <div key={`${item.label}-${i}`} className="text-xs">
-              <div className="flex justify-between text-white/60 mb-0.5">
+              <div className="flex justify-between text-gray-600 mb-0.5">
                 <span className="truncate pr-2">{item.label}</span>
-                <span className="font-medium text-white shrink-0">{valuePrefix}{item.value}{valueSuffix}</span>
+                <span className="font-bold text-gray-900 shrink-0">{valuePrefix}{item.value}{valueSuffix}</span>
               </div>
-              <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-sky-400 rounded-full"
-                  style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }}
-                />
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-brand-navy rounded-full" style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }} />
               </div>
             </div>
           ))}

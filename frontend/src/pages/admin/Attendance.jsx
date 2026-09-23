@@ -2,12 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import ManageHeader from "../../components/ManageHeader";
 import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import { matchLabel } from "../../utils/matchLabel";
-import attendancePhoto from "../../assets/dashboard-backgrounds/attendance.webp";
 import { ClipboardCheck, Trophy, Plus, Search, ChevronDown, ChevronUp, UserCheck, AlertTriangle } from "lucide-react";
 
 // Mirrors the same role-aware endpoint pattern used on Manage Players —
@@ -209,20 +208,13 @@ export default function Attendance() {
   };
 
   return (
-    <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundPhoto src={attendancePhoto} />
+    <div className="min-h-screen bg-brand-ground isolate">
       <Navbar />
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <ManageHeader hub="players" sub="attendance"
+        subtitle={'Ranked by attendance % — green rows are eligible for knockout matches. Credit a match from votes, or "+1" one person.'} />
+      <div className="max-w-5xl mx-auto px-4 py-4">
 
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <ClipboardCheck size={22} /> Knockout Attendance
-            </h1>
-            <p className="text-sm text-gray-500">
-              Ranked by Attendance % — green rows are currently eligible for knockout matches. Click "+1" after a match to credit whoever played.
-            </p>
-          </div>
+        <div className="flex items-center justify-end mb-4 flex-wrap gap-3">
           <div className="flex items-center gap-3">
             {dirty && !saving && (
               <span className="flex items-center gap-1 text-xs font-medium text-amber-600">

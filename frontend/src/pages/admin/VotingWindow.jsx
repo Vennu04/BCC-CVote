@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
-import PageBackgroundPhoto from "../../components/PageBackgroundPhoto";
+import ManageHeader from "../../components/ManageHeader";
 import WeatherForecast from "../../components/WeatherForecast";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
 import { LoadingState } from "../../components/LoadingState";
@@ -12,7 +12,6 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateDisplay } from "../../utils/formatDate";
 import { matchTeams, matchWhen } from "../../utils/matchLabel";
 import MatchStartCountdown from "../../components/MatchStartCountdown";
-import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Calendar, Clock, Save, XCircle, CalendarPlus, Trash2, Pencil, RotateCcw, Ban } from "lucide-react";
 
@@ -214,17 +213,10 @@ export default function VotingWindow() {
   };
 
   return (
-    <div className="min-h-screen bg-cricket-cream isolate">
-      <PageBackgroundPhoto src={windowPhoto} />
+    <div className="min-h-screen bg-brand-ground isolate">
       <Navbar />
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-2 mb-6">
-          <Calendar className="text-pitch-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Voting Windows</h1>
-            <p className="text-sm text-gray-500">Each match has its own window — set when it opens and closes</p>
-          </div>
-        </div>
+      <ManageHeader hub="matches" sub="windows" subtitle="Each match has its own voting window — open, close early or cancel it here, and add one-off matches" />
+      <div className="max-w-3xl mx-auto px-4 py-4">
 
         <div className="card mb-6">
           <div className="flex items-center gap-2 mb-3">
@@ -452,7 +444,7 @@ export default function VotingWindow() {
                               required
                             />
                           </div>
-                          <div className="sm:col-span-2 flex gap-3">
+                          <div className="sm:col-span-2 flex flex-wrap gap-3">
                             <button type="submit" disabled={savingSlot === slot.id} className="btn-primary flex items-center gap-2 text-sm py-2 px-4">
                               <Save size={14} /> {savingSlot === slot.id ? "Saving…" : "Save Window"}
                             </button>

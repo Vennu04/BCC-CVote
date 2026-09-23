@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
-import Navbar from "../components/Navbar";
-import { BarChart2, Lock, ChevronDown, ChevronUp, Users, AlertTriangle, RefreshCw, Trophy } from "lucide-react";
+import { TeamsVs } from "../components/TeamCrest";
+import { formatDateDisplay } from "../utils/formatDate";
+import { Lock, ChevronDown, ChevronUp, Users, AlertTriangle, RefreshCw } from "lucide-react";
 import { LoadingState } from "../components/LoadingState";
 
 const AVAILABILITY_COLOR = {
@@ -41,42 +42,9 @@ function AttendanceList({ attendance }) {
   );
 }
 
-// Attendance leaderboard — same data admin's Attendance page shows, but a
-// read-only ranked subset any authenticated account can see (including the
-// viewer role, which has no admin-console access at all). Fetched once, not
-// polled — attendance changes only after admin records a completed match.
-function AttendanceLeaderboard() {
-  const [board, setBoard] = useState(null);
-
-  useEffect(() => {
-    api.get("/attendance/leaderboard").then((res) => setBoard(res.data)).catch(() => {});
-  }, []);
-
-  if (!board || board.leaderboard.length === 0) return null;
-
-  return (
-    <div className="card mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <Trophy className="text-pitch-600" size={18} />
-        <h2 className="font-semibold text-gray-800">Attendance Leaderboard</h2>
-        <span className="text-xs text-gray-400 ml-auto">{board.total_matches_organized} matches recorded</span>
-      </div>
-      <ol className="space-y-1.5 text-sm">
-        {board.leaderboard.slice(0, 15).map((entry, i) => (
-          <li key={entry.name} className="flex items-center justify-between">
-            <span className="text-gray-700">
-              <span className="text-gray-400 w-5 inline-block">{i + 1}.</span> {entry.name}
-              {entry.knockout_eligible && <span className="ml-1.5 text-[10px] bg-pitch-100 text-pitch-700 rounded-full px-1.5 py-0.5">Eligible</span>}
-            </span>
-            <span className="font-medium text-gray-900">{entry.attendance_count}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-export default function Results() {
+// Matches › Who's in — availability per match (formerly the Results page),
+// rendered inside Matches.jsx.
+export function WhosInView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -94,11 +62,7 @@ export default function Results() {
 
   useEffect(fetchResults, []);
 
-  if (loading) return (
-    <div className="min-h-screen"><Navbar />
-      <div className="flex items-center justify-center h-64"><LoadingState label="Loading results…" /></div>
-    </div>
-  );
+  if (loading) return <div className="flex items-center justify-center h-48"><LoadingState label="Loading results…" /></div>;
 
   // Distinguish "the fetch failed" from "there's genuinely nothing to show
   // yet" -- same fix VotingSlots.jsx already has, applied here since both
@@ -107,18 +71,13 @@ export default function Results() {
   // server error with a one-click fix (retry).
   if (error && !data) {
     return (
-      <div className="min-h-screen bg-cricket-cream">
-        <Navbar />
-        <div className="max-w-3xl mx-auto px-4 py-8">
-          <div className="card text-center py-12">
-            <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
-            <p className="text-gray-700 font-medium">Couldn't load results</p>
-            <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
-            <button onClick={fetchResults} className="btn-secondary inline-flex items-center gap-1.5">
-              <RefreshCw size={14} /> Retry
-            </button>
-          </div>
-        </div>
+      <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
+        <AlertTriangle className="mx-auto text-amber-500 mb-3" size={36} />
+        <p className="text-gray-800 font-semibold">Couldn't load results</p>
+        <p className="text-gray-500 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <button onClick={fetchResults} className="btn-secondary inline-flex items-center gap-1.5">
+          <RefreshCw size={14} /> Retry
+        </button>
       </div>
     );
   }
@@ -126,19 +85,8 @@ export default function Results() {
   const summary = data?.summary || [];
 
   return (
-    <div className="min-h-screen bg-cricket-cream">
-      <Navbar />
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-2 mb-6">
-          <BarChart2 className="text-pitch-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Availability Results</h1>
-            <p className="text-sm text-gray-500">Each match has its own voting window</p>
-          </div>
-        </div>
-
-        <AttendanceLeaderboard />
-
+    <div>
+        <p className="text-xs text-gray-500 mb-3">Who can play in each match. Each match has its own voting window.</p>
         {summary.length === 0 ? (
           <div className="card text-center py-12">
             <p className="text-gray-500">No results yet. Voting hasn't started.</p>
@@ -150,16 +98,18 @@ export default function Results() {
               const pct = (v) => total_captains > 0 ? Math.round((v / total_captains) * 100) : 0;
 
               return (
-                <div key={slot.id} className="card">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{slot.day}</p>
-                      <p className="font-bold text-gray-900">{slot.time_of_day}</p>
-                    </div>
-                    <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-3 py-1 border border-gray-200">
+                <div key={slot.id} className="bg-white rounded-2xl shadow-soft p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500">
+                      {slot.group ? `Group ${slot.group} · ` : ""}{slot.day}{slot.resolved_match_date ? ` · ${formatDateDisplay(slot.resolved_match_date)}` : ""} · {slot.match_time || slot.time_of_day}
+                    </span>
+                    <span className="text-[11px] font-bold bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 shrink-0">
                       {total_voted}/{total_captains} voted
                     </span>
                   </div>
+                  {slot.team_a_name && slot.team_b_name
+                    ? <TeamsVs a={slot.team_a_name} b={slot.team_b_name} />
+                    : <p className="font-extrabold text-gray-900 my-2">{slot.description || `${slot.time_of_day} Match`}</p>}
 
                   {window && (
                     <p className={`text-xs mb-3 ${window.is_open ? "text-green-600" : "text-gray-400"}`}>
@@ -213,7 +163,6 @@ export default function Results() {
             })}
           </div>
         )}
-      </div>
     </div>
   );
 }
