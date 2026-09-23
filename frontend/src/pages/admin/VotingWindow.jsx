@@ -10,6 +10,7 @@ import { LoadingState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import { formatDateDisplay } from "../../utils/formatDate";
+import { matchTeams, matchWhen } from "../../utils/matchLabel";
 import MatchStartCountdown from "../../components/MatchStartCountdown";
 import windowPhoto from "../../assets/dashboard-backgrounds/window.webp";
 import { STATUS_STYLES } from "../../utils/windowStatus";
@@ -320,8 +321,19 @@ export default function VotingWindow() {
                       <div key={slot.id} className="card">
                         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                           <div>
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
-                            <h2 className="font-bold text-gray-900">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
+                            {matchTeams(slot) ? (
+                              <>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                  {slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}
+                                </p>
+                                <h2 className="font-bold text-gray-900">{matchTeams(slot)}</h2>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
+                                <h2 className="font-bold text-gray-900">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
+                              </>
+                            )}
                             {!slot.is_adhoc && (
                               <div className="mt-1">
                                 {editingDateSlot === slot.id ? (
