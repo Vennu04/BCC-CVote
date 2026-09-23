@@ -26,6 +26,7 @@ const Attendance = lazy(() => import("./pages/admin/Attendance"));
 const VotingWindow = lazy(() => import("./pages/admin/VotingWindow"));
 const AdminAuction = lazy(() => import("./pages/admin/Auction"));
 const AdminTournament = lazy(() => import("./pages/admin/Tournament"));
+const AuctionDuty = lazy(() => import("./pages/admin/AuctionDuty"));
 
 function RouteLoading() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/admin/people"    element={<Navigate to="/admin/players" replace />} />
           <Route path="/admin/attendance" element={<AdminRoute><Attendance /></AdminRoute>} />
           <Route path="/admin/window"    element={<AdminRoute><VotingWindow /></AdminRoute>} />
+          <Route path="/admin/duty"      element={<AdminRoute><AuctionDuty /></AdminRoute>} />
           <Route path="/admin/auction"   element={<AdminRoute><AdminAuction /></AdminRoute>} />
           <Route path="/admin/tournament" element={<AdminRoute><AdminTournament /></AdminRoute>} />
 

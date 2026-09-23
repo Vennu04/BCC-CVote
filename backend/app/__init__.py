@@ -84,6 +84,7 @@ def create_app(config_name: str = None) -> Flask:
     from .routes.auction import auction_bp
     from .routes.push import push_bp
     from .routes.tournament import tournament_bp
+    from .routes.duty import duty_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(votes_bp, url_prefix="/api")
@@ -91,6 +92,7 @@ def create_app(config_name: str = None) -> Flask:
     app.register_blueprint(auction_bp, url_prefix="/api")
     app.register_blueprint(push_bp, url_prefix="/api")
     app.register_blueprint(tournament_bp, url_prefix="/api")
+    app.register_blueprint(duty_bp, url_prefix="/api")
 
     # Polls for voting windows that just opened and pushes a "cast your
     # vote" notification to every subscribed captain/player — see
