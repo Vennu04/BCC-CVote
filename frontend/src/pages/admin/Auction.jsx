@@ -17,6 +17,7 @@ import { STATUS_STYLES } from "../../utils/windowStatus";
 import { matchLabel, matchTeams, matchWhen } from "../../utils/matchLabel";
 import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, FlaskConical, Link2, Scale } from "lucide-react";
 import { LoadingState } from "../../components/LoadingState";
+import DutySummary from "../../components/DutySummary";
 
 const STORAGE_KEY = "bcc_active_auction_id";
 
@@ -450,6 +451,8 @@ export default function AdminAuction() {
             )}
           </div>
         </div>
+
+        {!auctionId && <DutySummary variant="tonight" />}
 
         {!auctionId && slots.length > 0 && (
           <div className="card">

@@ -69,6 +69,12 @@ def start_scheduler(app):
                 _check_and_notify()
             except Exception:
                 logger.exception("notification_scheduler: check failed")
+            # Separate try so a failure in one check never skips the other.
+            try:
+                from ..routes.duty import send_due_duty_reminders
+                send_due_duty_reminders()
+            except Exception:
+                logger.exception("notification_scheduler: auction duty reminder check failed")
 
     scheduler.add_job(job, "interval", seconds=CHECK_INTERVAL_SECONDS, id="voting_window_notify")
     scheduler.start()

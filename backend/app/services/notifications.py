@@ -106,6 +106,14 @@ EVENT_MESSAGES = {
     "auction_started": lambda ctx: (
         "🏏 Auction started!", f"The live auction for {ctx.get('label', 'the match')} has begun — join now."
     ),
+    "auction_duty_assigned": lambda ctx: (
+        "🗓️ You're on auction duty", f"{ctx.get('label', 'A match')} — {ctx.get('when', 'see the Auction Duty page')}."
+    ),
+    "auction_duty_reminder": lambda ctx: (
+        "⏰ Auction duty in 1 hour",
+        f"You're on duty for {ctx.get('label', 'tonight')} ({ctx.get('when', 'tonight')}). "
+        "Close voting early and check both captains are ready.",
+    ),
     "player_sold": lambda ctx: (
         "🏏 Player sold!",
         f"{ctx.get('player_name', 'A player')} was sold to {ctx.get('team_name', 'a team')}"

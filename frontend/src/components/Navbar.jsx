@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homePathFor } from "./ProtectedRoute";
+import { canDoDestructive } from "../utils/roles";
 import api from "../utils/api";
 import toast from "react-hot-toast";
-import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck, KeyRound, Trophy } from "lucide-react";
+import { LogOut, LayoutDashboard, Users, UserCircle, Settings, Gavel, ClipboardCheck, KeyRound, Trophy, CalendarClock } from "lucide-react";
 import { TOURNAMENT_NAME } from "../config/appMeta";
 
 const MY_AUCTION_POLL_MS = 10000;
@@ -105,6 +106,12 @@ export default function Navbar() {
               <Link to="/admin/attendance" className={navLinkClass("/admin/attendance")}>
                 <ClipboardCheck size={15} /> Attendance
               </Link>
+              {canDoDestructive(user) && (
+                // Full admins only, matching the backend — organizers never see it.
+                <Link to="/admin/duty" className={navLinkClass("/admin/duty")}>
+                  <CalendarClock size={15} /> Duty
+                </Link>
+              )}
               <Link to="/admin/auction" className={navLinkClass("/admin/auction")}>
                 <Gavel size={15} /> Auction
               </Link>

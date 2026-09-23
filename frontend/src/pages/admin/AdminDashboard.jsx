@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
 import YetToVotePanel from "../../components/YetToVotePanel";
+import DutySummary from "../../components/DutySummary";
 import { LoadingState } from "../../components/LoadingState";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { matchTeams, matchWhen } from "../../utils/matchLabel";
@@ -179,6 +180,8 @@ export default function AdminDashboard() {
             </button>
           </div>
         </div>
+
+        <DutySummary variant="dark" />
 
         {/* Stats row — every active match slot */}
         {visibleSlots.length === 0 ? (
