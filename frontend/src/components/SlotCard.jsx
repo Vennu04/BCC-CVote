@@ -21,6 +21,15 @@ function WindowStatus({ windowInfo }) {
     );
   }
 
+  if (windowInfo?.not_yet_open) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sky-800 bg-sky-50 rounded-full px-2.5 py-1">
+        <Clock size={11} />
+        Voting opens {windowInfo.opens_at}
+      </span>
+    );
+  }
+
   if (!windowInfo?.is_open) {
     return (
       <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
