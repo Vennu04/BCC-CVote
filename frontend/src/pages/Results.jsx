@@ -112,8 +112,8 @@ export function WhosInView() {
                     : <p className="font-extrabold text-gray-900 my-2">{slot.description || `${slot.time_of_day} Match`}</p>}
 
                   {window && (
-                    <p className={`text-xs mb-3 ${window.is_open ? "text-green-600" : "text-gray-400"}`}>
-                      {window.is_open ? `🟢 Open — closes ${window.closes_at}` : window.closes_at ? `🔴 Closed — was ${window.opens_at} to ${window.closes_at}` : "No window set"}
+                    <p className={`text-xs mb-3 ${window.is_open ? "text-green-600" : window.not_yet_open ? "text-sky-700" : "text-gray-400"}`}>
+                      {window.is_open ? `🟢 Open — closes ${window.closes_at}` : window.not_yet_open ? `🕒 Voting opens ${window.opens_at}` : window.closes_at ? `🔴 Closed — was ${window.opens_at} to ${window.closes_at}` : "No window set"}
                     </p>
                   )}
 

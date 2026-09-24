@@ -56,6 +56,15 @@ function buildWhatsAppSummary(auction) {
   return lines.join("\n");
 }
 
+// "Auction created — 24 players: 4 EP All-rounders · 6 EP Batsmen · 8 Power · 6 Classic"
+export function auctionCreatedMessage(groupCounts) {
+  const counts = groupCounts || {};
+  const names = { extra_power_allrounder: "EP All-rounders", extra_power_batsman: "EP Batsmen", power: "Power", classic: "Classic" };
+  const parts = Object.keys(names).filter((k) => counts[k]).map((k) => `${counts[k]} ${names[k]}`);
+  const total = Object.values(counts).reduce((a, b) => a + (Number(b) || 0), 0);
+  return parts.length ? `Auction created — ${total} players: ${parts.join(" · ")}` : "Auction created";
+}
+
 export default function AdminAuction() {
   const location = useLocation();
   // "Practice" sub-tab = this page scrolled to the rehearsal card.
@@ -268,7 +277,7 @@ export default function AdminAuction() {
         slot_id: selectedSlotId, captain_a_id: captainAId, captain_b_id: captainBId,
         exclude_voter_ids: Object.values(holdoutChoices),
       });
-      toast.success(`Auction created — ${JSON.stringify(res.data.group_counts)}`);
+      toast.success(auctionCreatedMessage(res.data.group_counts));
       localStorage.setItem(STORAGE_KEY, res.data.auction_id);
       setAuctionId(res.data.auction_id);
     } catch (err) {

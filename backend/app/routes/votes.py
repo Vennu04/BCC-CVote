@@ -40,12 +40,16 @@ def _visible_slots(user):
 
 def _window_info(window, slot=None):
     if not window:
-        return {"is_open": False, "opens_at": None, "closes_at": None, "seconds_remaining": 0,
+        return {"is_open": False, "not_yet_open": False, "opens_at": None, "closes_at": None, "seconds_remaining": 0,
                 "can_revoke": False, "revoke_deadline": None,
                 "is_cancelled": False, "cancel_reason": None}
     is_open = is_voting_window_open(window["opens_at"], window["closes_at"])
     info = {
         "is_open": is_open,
+        # Scheduled for later (e.g. a fixture saved with a future "voting
+        # opens" time) — distinct from closed, so the card can say when it
+        # opens instead of "Closed — was open till …".
+        "not_yet_open": not is_open and utcnow() < window["opens_at"],
         "opens_at": format_ist(window["opens_at"]),
         "closes_at": format_ist(window["closes_at"]),
         "seconds_remaining": seconds_until_close(window["closes_at"]) if is_open else 0,
