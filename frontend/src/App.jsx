@@ -22,7 +22,10 @@ const Stats = lazy(() => import("./pages/Stats"));
 const Me = lazy(() => import("./pages/Me"));
 const AuctionHome = lazy(() => import("./pages/AuctionHome"));
 const Auction = lazy(() => import("./pages/Auction"));
-const ControlCentre = lazy(() => import("./pages/admin/AdminDashboard"));
+const VotesInsights = lazy(() => import("./pages/admin/AdminDashboard"));
+const ThisWeek = lazy(() => import("./pages/admin/ThisWeek"));
+const GuidedStep = lazy(() => import("./pages/admin/GuidedSteps"));
+const AllTools = lazy(() => import("./pages/admin/AllTools"));
 const ManagePlayers = lazy(() => import("./pages/admin/ManagePlayers"));
 const Attendance = lazy(() => import("./pages/admin/Attendance"));
 const VotingWindow = lazy(() => import("./pages/admin/VotingWindow"));
@@ -76,7 +79,10 @@ export default function App() {
           <Route path="/auction/:id"     element={<ProtectedRoute><Auction /></ProtectedRoute>} />
 
           {/* Manage hubs */}
-          <Route path="/manage"                     element={<AdminRoute><ControlCentre /></AdminRoute>} />
+          <Route path="/manage"                     element={<AdminRoute><ThisWeek /></AdminRoute>} />
+          <Route path="/manage/step/:step"          element={<AdminRoute><GuidedStep /></AdminRoute>} />
+          <Route path="/manage/tools"               element={<AdminRoute><AllTools /></AdminRoute>} />
+          <Route path="/manage/tools/votes"         element={<AdminRoute><VotesInsights /></AdminRoute>} />
           <Route path="/manage/matches"             element={<Navigate to="/manage/matches/fixtures" replace />} />
           <Route path="/manage/matches/fixtures"    element={<AdminRoute><AdminTournament /></AdminRoute>} />
           <Route path="/manage/matches/windows"     element={<AdminRoute><VotingWindow /></AdminRoute>} />

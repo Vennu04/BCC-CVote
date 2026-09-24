@@ -5,10 +5,10 @@ import { useMyAuction } from "../hooks/useMyAuction";
 import { tabsFor, tabKeyFor, hubsFor, homePathFor } from "../utils/nav";
 import { isStaff, isVoter } from "../utils/roles";
 import { TOURNAMENT_NAME } from "../config/appMeta";
-import { Home, Trophy, Gavel, BarChart3, UserCircle, LayoutDashboard, Users } from "lucide-react";
+import { Home, Trophy, Gavel, BarChart3, UserCircle, LayoutDashboard, Users, Wrench } from "lucide-react";
 
 const TAB_ICONS = { home: Home, matches: Trophy, auction: Gavel, stats: BarChart3, manage: LayoutDashboard, me: UserCircle };
-const HUB_ICONS = { control: LayoutDashboard, matches: Trophy, auction: Gavel, players: Users };
+const HUB_ICONS = { control: LayoutDashboard, tools: Wrench, matches: Trophy, auction: Gavel, players: Users };
 const ROLE_LABEL = { admin: "Admin", organizer: "Organizer", viewer: "Viewer", player: "Player", captain: "Captain" };
 
 // The app frame, Stumps-style: a slim navy top bar, a bottom tab bar on

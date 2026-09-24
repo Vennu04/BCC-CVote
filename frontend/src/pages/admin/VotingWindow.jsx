@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
 import Navbar from "../../components/Navbar";
@@ -31,6 +31,16 @@ export default function VotingWindow() {
   const [loading, setLoading] = useState(true);
   const [savingSlot, setSavingSlot] = useState(null);
   const [newSlot, setNewSlot] = useState(EMPTY_NEW_SLOT);
+  // The extra-match form is rarely needed, so it stays folded behind a
+  // button — opened straight away when arriving from All tools › Extra match.
+  const location = useLocation();
+  const [showExtra, setShowExtra] = useState(location.hash === "#extra");
+  useEffect(() => {
+    if (location.hash === "#extra") {
+      setShowExtra(true);
+      setTimeout(() => document.getElementById("extra")?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    }
+  }, [location.hash]);
   const [addingSlot, setAddingSlot] = useState(false);
   const [editingDateSlot, setEditingDateSlot] = useState(null); // slot_id currently showing the date-override input
   const [dateEdits, setDateEdits] = useState({}); // slot_id -> pending date value
@@ -215,16 +225,23 @@ export default function VotingWindow() {
   return (
     <div className="min-h-screen bg-brand-ground isolate">
       <Navbar />
-      <ManageHeader hub="matches" sub="windows" subtitle="Each match has its own voting window — open, close early or cancel it here, and add one-off matches" />
+      <ManageHeader hub="matches" sub="windows" subtitle="Each match has its own voting time — open it, close it early or cancel the match here" />
       <div className="max-w-3xl mx-auto px-4 py-4">
 
-        <div className="card mb-6">
+        {!showExtra ? (
+          <button type="button" onClick={() => setShowExtra(true)}
+            className="w-full mb-5 flex items-center justify-center gap-2 min-h-[52px] rounded-2xl border-2 border-dashed border-gray-300 bg-white text-brand-navy font-bold">
+            <CalendarPlus size={18} /> Add an extra match (any date)
+          </button>
+        ) : (
+        <div id="extra" className="card mb-6 scroll-mt-20">
           <div className="flex items-center gap-2 mb-3">
             <CalendarPlus size={18} className="text-pitch-600" />
-            <h2 className="font-bold text-gray-900">Add Ad-hoc Match</h2>
+            <h2 className="font-bold text-gray-900 flex-1">Add an extra match</h2>
+            <button type="button" onClick={() => setShowExtra(false)} className="text-sm font-semibold text-gray-500 min-h-[44px] px-2">Close</button>
           </div>
           <p className="text-xs text-gray-500 mb-3">
-            For a weather-driven date or an Indian public holiday — any day, not just the usual weekend slots.
+            For a rain day or a public holiday — any date, not just the usual weekend matches.
           </p>
           <form onSubmit={handleAddSlot} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -294,6 +311,7 @@ export default function VotingWindow() {
             </div>
           </form>
         </div>
+        )}
 
         {loading ? (
           <LoadingState />

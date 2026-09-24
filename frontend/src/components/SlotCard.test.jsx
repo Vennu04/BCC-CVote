@@ -10,11 +10,11 @@ describe("SlotCard voting status", () => {
   it("says when voting opens for a window that hasn't opened yet", () => {
     render(<SlotCard slot={slot} onVote={() => {}} windowInfo={{ ...base, not_yet_open: true, opens_at: "26 Sep 2026 06:00 PM IST" }} />);
     expect(screen.getByText(/Voting opens 26 Sep 2026 06:00 PM IST/)).toBeInTheDocument();
-    expect(screen.queryByText(/Closed — was open till/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Voting closed/)).not.toBeInTheDocument();
   });
   it("still says closed once the window has closed", () => {
     render(<SlotCard slot={slot} onVote={() => {}} windowInfo={{ ...base, not_yet_open: false, opens_at: "25 Sep 2026 06:00 PM IST" }} />);
-    expect(screen.getByText(/Closed — was open till 27 Sep 2026 03:30 PM IST/)).toBeInTheDocument();
+    expect(screen.getByText(/Voting closed 27 Sep 2026 03:30 PM IST/)).toBeInTheDocument();
   });
 });
 

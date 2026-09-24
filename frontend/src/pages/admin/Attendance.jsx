@@ -230,7 +230,7 @@ export default function Attendance() {
         {/* Knockout cutoff */}
         <div className="card mb-6 flex flex-wrap items-end gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Knockout Cutoff (Top N)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">How many make the knockouts?</label>
             <input
               type="number" min={0}
               className="input-field py-1.5 text-sm w-32"

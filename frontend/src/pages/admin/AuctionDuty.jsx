@@ -74,7 +74,7 @@ export default function AuctionDuty() {
   );
 }
 
-function EveningCard({ evening, data, onChanged }) {
+export function EveningCard({ evening, data, onChanged }) {
   const coverage = COVERAGE[evening.coverage] || COVERAGE.nobody;
   return (
     <section className="card space-y-4" aria-label={`Auction for ${evening.match_label}`}>

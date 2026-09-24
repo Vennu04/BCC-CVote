@@ -19,7 +19,7 @@ import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, Fl
 import { LoadingState } from "../../components/LoadingState";
 import DutySummary from "../../components/DutySummary";
 
-const STORAGE_KEY = "bcc_active_auction_id";
+import { buildWhatsAppSummary, ACTIVE_AUCTION_KEY as STORAGE_KEY } from "../../utils/auctionShare";
 
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
@@ -32,29 +32,6 @@ const GROUP_LABELS = {
 // enough to watch confirmations land live while deciding which slot to run,
 // without the overhead the 2.5s in-auction bidding poll needs once it's live.
 const SLOT_POLL_INTERVAL_MS = 5000;
-
-// Plain-text summary for pasting into WhatsApp once an auction is done —
-// prices are deliberately left out (they're confidential post-completion,
-// same as the on-screen rosters), just team/captain/player names. Category
-// (Power/Classic/etc.) is internal auction bookkeeping, not shown here.
-function buildWhatsAppSummary(auction) {
-  const teamBlock = (label, captain) => {
-    const heading = captain.team_name ? `${label} — ${captain.team_name}` : label;
-    const lines = [`*${heading}*`, `Captain: ${captain.name}`, ""];
-    (captain.roster || []).forEach((p, i) => lines.push(`${i + 1}. ${p.name}`));
-    return lines.join("\n").trim();
-  };
-
-  const lines = [
-    "🏏 *BCC-CVote Auction Results*",
-    "",
-    teamBlock("Team A", auction.captain_a),
-    "",
-    teamBlock("Team B", auction.captain_b),
-  ];
-  if (auction.is_test) lines.unshift("🧪 TEST DATA — DO NOT SHARE AS A REAL RESULT", "");
-  return lines.join("\n");
-}
 
 // "Auction created — 24 players: 4 EP All-rounders · 6 EP Batsmen · 8 Power · 6 Classic"
 export function auctionCreatedMessage(groupCounts) {
@@ -407,10 +384,13 @@ export default function AdminAuction() {
   };
 
   const handleClose = async () => {
-    if (!confirm("Force-close this auction now?")) return;
+    const question = auction?.is_complete
+      ? "Finish the auction? Everyone has been sold."
+      : "Stop the auction now? Players not sold yet are shared out free and equally. This can't be undone.";
+    if (!confirm(question)) return;
     try {
       await api.post(`/admin/auction/${auctionId}/close`);
-      toast.success("Auction closed");
+      toast.success(auction?.is_complete ? "Auction finished — now copy the teams" : "Auction stopped");
       refetch();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to close auction");
@@ -740,8 +720,9 @@ export default function AdminAuction() {
             {auction.status !== "completed" && <FairnessBanner />}
 
             {auction.is_complete && (
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm font-medium">
-                <CheckCircle2 size={18} /> Live auction complete — close it below, then copy the teams for WhatsApp.
+              <div className="bg-green-50 border border-green-200 text-green-900 rounded-2xl px-4 py-3">
+                <p className="flex items-center gap-2 font-bold"><CheckCircle2 size={18} /> Everyone has been sold.</p>
+                <button onClick={handleClose} className="btn-primary w-full mt-2 text-base">Finish auction</button>
               </div>
             )}
 
@@ -756,7 +737,7 @@ export default function AdminAuction() {
                       Practice auctions don't show up in the navbar — use "Copy Practice Link" above and send it to both captains directly.
                     </span>
                   ) : (
-                    <span className="text-gray-500">Waiting for both captains to open "Join Auction" from their navbar…</span>
+                    <span className="text-gray-500">Waiting for both captains — tell them to open the app and tap the red LIVE button.</span>
                   )}
                 </p>
                 <div className="flex items-center justify-center gap-5 mb-4 text-sm">
@@ -787,7 +768,7 @@ export default function AdminAuction() {
             {auction.status === "active" && (
               <div className="card">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <h2 className="font-bold text-gray-900">Release a Player</h2>
+                  <h2 className="font-black text-gray-900 text-lg">Running the auction</h2>
                   <div className="flex items-center gap-3">
                     {auction.auto_release_category && (
                       auction.is_paused ? (
@@ -796,7 +777,7 @@ export default function AdminAuction() {
                           disabled={resuming}
                           className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-xl border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
                         >
-                          <PlayCircle size={13} /> {resuming ? "Resuming…" : "Resume Auto-Release"}
+                          <PlayCircle size={15} /> {resuming ? "Resuming…" : "Resume"}
                         </button>
                       ) : (
                         <button
@@ -804,44 +785,44 @@ export default function AdminAuction() {
                           disabled={pausing}
                           className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-xl border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150"
                         >
-                          <Pause size={13} /> {pausing ? "Pausing…" : "Pause Auto-Release"}
+                          <Pause size={15} /> {pausing ? "Pausing…" : "Pause"}
                         </button>
                       )
                     )}
-                    <button onClick={handleClose} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 active:text-red-800 min-h-[44px] px-2 -my-2 transition-colors duration-150">
-                      <StopCircle size={13} /> Force Close
-                    </button>
+                    {!auction.is_complete && (
+                      <button onClick={handleClose} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 active:text-red-800 min-h-[44px] px-2 -my-2 transition-colors duration-150">
+                        <StopCircle size={13} /> Stop now (emergency)
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {auction.auto_release_category && (
                   <p className="text-xs text-gray-500 mb-3">
                     {auction.is_paused ? (
-                      <>Paused — currently on <strong>{GROUP_LABELS[auction.auto_release_category]}</strong>. Resume to continue automatically through the rest of the auction.</>
+                      <>⏸ Paused on <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> — no new player comes up until you press Resume.</>
                     ) : (
-                      <>Auto-releasing <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> — every player comes up on its own as each one's bidding resolves, and the auction moves on to the next category by itself once this one's done. No further clicks needed.</>
+                      <>Now on <strong>{GROUP_LABELS[auction.auto_release_category]}</strong>. Players come up by themselves — you don't need to press anything.</>
                     )}
                   </p>
                 )}
 
                 {auction.current_player && (
-                  <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
-                    {auction.current_player.deprioritized ? (
-                      <>Re-offering <strong>{auction.current_player.name}</strong> — both captains passed (or neither acted within 30 seconds) earlier; everyone else in this category is done.</>
-                    ) : (
-                      <>Currently bidding: <strong>{auction.current_player.name}</strong></>
-                    )}
-                  </p>
+                  <div className="rounded-2xl bg-brand-navy text-white px-4 py-3 mb-3">
+                    <p className="text-xs font-bold text-white/60 uppercase tracking-wide">Up now</p>
+                    <p className="text-2xl font-black">{auction.current_player.name}</p>
+                    <p className="text-sm text-white/70">
+                      {auction.current_player.deprioritized ? "Offered again — both captains passed on this player earlier. " : ""}
+                      Bid {auction.current_player.current_high_bid}{auction.current_player.current_high_bidder ? ` · ${auction.current_player.current_high_bidder}` : " · nobody yet"}
+                    </p>
+                  </div>
                 )}
 
                 {auction.current_player && (
                   <div className="border border-gray-200 rounded-lg p-3 mb-3 space-y-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                      Record on a captain's behalf
-                    </p>
+                    <p className="font-black text-gray-900">Bid for a captain</p>
                     <p className="text-xs text-gray-500">
-                      For captains bidding out loud / over chat instead of using this page themselves —
-                      enter what they said and it's recorded under the exact same rules a real click would use.
+                      For a captain bidding out loud or on a call. Same rules as their own tap.
                     </p>
                     <p className="text-xs text-gray-600">
                       Current bid: <strong>{auction.current_player.current_high_bid}</strong>
@@ -874,7 +855,7 @@ export default function AdminAuction() {
                               type="button"
                               onClick={() => handleProxyBid(c.captain_id)}
                               disabled={proxying === `${c.captain_id}:bid`}
-                              className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
+                              className="text-sm font-bold py-1.5 px-3 min-h-[44px] rounded-xl border border-pitch-300 text-pitch-700 bg-white hover:bg-pitch-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
                             >
                               {proxying === `${c.captain_id}:bid` ? "…" : "Bid"}
                             </button>
@@ -882,9 +863,9 @@ export default function AdminAuction() {
                               type="button"
                               onClick={() => handleProxyDrop(c.captain_id)}
                               disabled={proxying === `${c.captain_id}:drop`}
-                              className="text-sm py-1.5 px-3 min-h-[36px] rounded-lg border border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
+                              className="text-sm font-bold py-1.5 px-3 min-h-[44px] rounded-xl border border-red-200 text-red-700 bg-white hover:bg-red-50 active:scale-[0.97] disabled:opacity-50 transition-all duration-150 whitespace-nowrap"
                             >
-                              {proxying === `${c.captain_id}:drop` ? "…" : "Drop"}
+                              {proxying === `${c.captain_id}:drop` ? "…" : "Pass"}
                             </button>
                           </div>
                           <div className="flex items-center gap-1.5 pl-[5.5rem]">
@@ -895,7 +876,7 @@ export default function AdminAuction() {
                                 onClick={() => handleProxyBid(c.captain_id, amt)}
                                 disabled={isCurrentLeader || proxying === `${c.captain_id}:bid`}
                                 title={`Bid ${amt}`}
-                                className="text-xs py-1 px-2 min-h-[28px] rounded-md border border-gray-200 text-gray-600 bg-gray-50 hover:bg-pitch-50 hover:border-pitch-300 hover:text-pitch-700 active:scale-[0.97] disabled:opacity-40 disabled:hover:bg-gray-50 disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-all duration-150 whitespace-nowrap"
+                                className="text-sm font-bold py-1 px-3 min-h-[44px] rounded-xl border border-gray-200 text-gray-700 bg-gray-50 hover:bg-pitch-50 hover:border-pitch-300 hover:text-pitch-700 active:scale-[0.97] disabled:opacity-40 disabled:hover:bg-gray-50 disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-all duration-150 whitespace-nowrap"
                               >
                                 +{[0.5, 1, 2][i]} → {amt}
                               </button>
@@ -906,6 +887,9 @@ export default function AdminAuction() {
                     })}
                   </div>
                 )}
+                <details className="rounded-xl border border-gray-200 px-3 py-2 mt-1">
+                  <summary className="text-sm font-semibold text-gray-600 cursor-pointer min-h-[36px] flex items-center">Release a player by hand (not needed normally)</summary>
+                  <div className="pt-2">
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
                   const count = (auction.available_players || []).filter((p) => p.category === group).length;
                   if (count === 0) return null;
@@ -922,8 +906,10 @@ export default function AdminAuction() {
                     </div>
                   );
                 })}
+                  </div>
+                </details>
                 {(auction.available_players || []).length === 0 && (
-                  <p className="text-sm text-gray-500">All players have been sold or assigned.</p>
+                  <p className="text-sm text-gray-500 mt-2">All players have been sold or given out.</p>
                 )}
               </div>
             )}
@@ -932,7 +918,7 @@ export default function AdminAuction() {
 
             {auction.status === "completed" && (
               <div className="card text-center py-6 text-green-700 font-medium space-y-3">
-                <p>Auction completed.</p>
+                <p className="text-lg font-black">Auction finished ✓</p>
                 <button
                   onClick={handleCopyTeams}
                   className="btn-secondary inline-flex items-center gap-2 text-sm py-2 px-4"

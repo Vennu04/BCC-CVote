@@ -20,11 +20,11 @@ const POLL_INTERVAL_MS = 10000;
 const STEP_LABELS = { voting: "Voting", attendance: "Attendance", categories: "Categories", auction: "Auction" };
 const TODO_DOT = { red: "bg-red-600", gold: "bg-amber-500", blue: "bg-sky-600", info: "bg-gray-400" };
 
-// Control Centre — formerly the Admin Dashboard. A to-do list worked out by
-// the server (/admin/overview), each match's progress through voting →
-// attendance → categories → auction, live turnout with "set a vote for
-// someone", the full votes table, insights and exports.
-export default function ControlCentre() {
+// All tools › Votes & insights (was the Control Centre, before This week
+// became the Manage landing page). Cross-match checks from /admin/overview,
+// each match's progress, live turnout with "set a vote for someone", the
+// full votes table, insights and exports.
+export default function VotesInsights() {
   const [data, setData] = useState(null);
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -124,7 +124,7 @@ export default function ControlCentre() {
   return (
     <div className="min-h-screen bg-brand-ground">
       <Navbar />
-      <ManageHeader hub="control" sub={null} actions={actions}
+      <ManageHeader hub="tools" title="Votes & insights" sub={null} actions={actions}
         subtitle={data ? `${data.open_count ?? 0} of ${data.total_slots ?? 0} voting windows open · ${data.captains_voted ?? 0} of ${data.captains_total ?? 0} voters have voted` : "Loading…"} />
 
       <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
@@ -132,7 +132,7 @@ export default function ControlCentre() {
           <>
             {/* To do */}
             <section className="bg-white rounded-2xl shadow-soft p-4">
-              <h2 className="font-black text-gray-900 mb-1">To do</h2>
+              <h2 className="font-black text-gray-900 mb-1">Things to check across all matches</h2>
               {(overview?.todos || []).length === 0 ? (
                 <p className="flex items-center gap-2 text-sm text-pitch-700 font-semibold py-1"><CheckCircle2 size={16} /> Nothing needs you right now.</p>
               ) : (

@@ -13,10 +13,10 @@ const AVAILABILITY_COLOR = {
 };
 
 const AVAILABILITY_LABEL = {
-  available:     "Available",
-  not_available: "Not Available",
+  available:     "Playing",
+  not_available: "Not playing",
   maybe:         "Maybe",
-  no_response:   "No Response",
+  no_response:   "No answer yet",
 };
 
 const AVAILABILITY_ORDER = ["available", "maybe", "not_available", "no_response"];
@@ -132,10 +132,10 @@ export function WhosInView() {
 
                   {/* Legend */}
                   <div className="flex flex-wrap gap-3 text-xs">
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />{counts.available} Available</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />{counts.maybe} Maybe</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />{counts.not_available} Not Available</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" />{counts.no_response} No Response</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />{counts.available} Playing</span>
+                    {counts.maybe > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />{counts.maybe} Maybe</span>}
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />{counts.not_available} Not playing</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" />{counts.no_response} No answer yet</span>
                   </div>
 
                   {you_voted ? (
