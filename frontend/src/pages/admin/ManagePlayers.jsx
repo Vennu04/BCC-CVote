@@ -774,17 +774,17 @@ export default function ManagePlayers() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-500">Auction Category</span>
-                          <select
-                            value={p.auction_category || ""}
-                            onChange={e => handleAuctionCategoryChange(p, e.target.value)}
-                            className="text-xs font-medium rounded-lg px-2 py-2.5 min-h-[44px] border border-gray-200 bg-white text-gray-700"
-                          >
-                            {AUCTION_CATEGORY_OPTIONS.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <div>
+                          <span className="block text-gray-700 font-semibold mb-1.5">Which group is {p.name.split(" ")[0]} in?</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {AUCTION_CATEGORY_OPTIONS.filter(opt => opt.value).map(opt => (
+                              <button key={opt.value} type="button" onClick={() => handleAuctionCategoryChange(p, opt.value)}
+                                aria-pressed={p.auction_category === opt.value}
+                                className={`min-h-[48px] rounded-xl border-2 text-sm font-bold ${p.auction_category === opt.value ? "border-pitch-600 bg-pitch-50 text-pitch-800" : "border-gray-200 bg-white text-gray-700"}`}>
+                                {opt.label}
+                              </button>
                             ))}
-                          </select>
+                          </div>
                         </div>
 
                         {isCaptain && (

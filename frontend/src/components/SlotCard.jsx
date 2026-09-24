@@ -34,8 +34,8 @@ function WindowStatus({ windowInfo }) {
     return (
       <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
         <Lock size={11} />
-        {windowInfo?.closes_at ? `Closed — was open till ${windowInfo.closes_at}` : "Voting not open"}
-        {windowInfo?.can_revoke && windowInfo?.revoke_deadline ? ` · can withdraw until ${windowInfo.revoke_deadline}` : ""}
+        {windowInfo?.closes_at ? `Voting closed ${windowInfo.closes_at}` : "Voting not open"}
+        {windowInfo?.can_revoke && windowInfo?.revoke_deadline ? ` · you can still pull out until ${windowInfo.revoke_deadline}` : ""}
       </span>
     );
   }
@@ -45,7 +45,7 @@ function WindowStatus({ windowInfo }) {
     <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-2.5 py-1 ${
       urgency ? "bg-red-50 text-red-700" : "bg-pitch-50 text-pitch-700"}`}>
       <Clock size={11} />
-      Closes in {String(hours).padStart(2, "0")}:{String(minutes).padStart(2, "0")}
+      Voting closes in {hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`}
     </span>
   );
 }
@@ -138,7 +138,7 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           className="mt-2 w-full min-h-[44px] flex items-center justify-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl hover:bg-amber-100 active:scale-[0.98] disabled:opacity-50 transition-all duration-150"
         >
           <AlertTriangle size={12} />
-          {revoking ? "Withdrawing…" : "Emergency — Remove My Name"}
+          {revoking ? "Removing…" : "I can't come any more"}
         </button>
       )}
     </div>

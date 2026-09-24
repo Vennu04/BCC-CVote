@@ -36,10 +36,11 @@ export function tabKeyFor(pathname) {
 // Manage hubs and their sub-tabs. `fullAdminOnly` mirrors the backend's
 // admin_only_required (organizers are refused there, so they never see it).
 export const HUBS = [
-  { key: "control", label: "Control Centre", to: "/manage", subs: [] },
+  { key: "control", label: "This week", to: "/manage", subs: [] },
+  { key: "tools", label: "All tools", to: "/manage/tools", subs: [] },
   { key: "matches", label: "Matches", to: "/manage/matches/fixtures", subs: [
     { key: "fixtures", label: "Fixtures & teams", to: "/manage/matches/fixtures" },
-    { key: "windows", label: "Voting & one-off matches", to: "/manage/matches/windows" },
+    { key: "windows", label: "Voting & extra matches", to: "/manage/matches/windows" },
   ] },
   { key: "auction", label: "Auction", to: "/manage/auction/run", subs: [
     { key: "run", label: "Run", to: "/manage/auction/run" },
@@ -51,6 +52,12 @@ export const HUBS = [
     { key: "attendance", label: "Attendance", to: "/manage/players/attendance" },
   ] },
 ];
+
+// The two top-level Manage places on a phone: the guided checklist, and
+// everything else. Matches / Auction / Players pages count as "All tools".
+export function manageTopFor(hub) {
+  return hub === "control" ? "control" : "tools";
+}
 
 export function hubsFor(user) {
   const full = canDoDestructive(user);

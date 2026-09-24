@@ -44,11 +44,11 @@ export function useVoting() {
   };
 
   const handleRevoke = async (slotId) => {
-    if (!confirm("Emergency withdrawal — remove your name from this match?")) return;
+    if (!confirm("Can't come any more? This takes your name off this match.")) return;
     setRevoking(slotId);
     try {
       await api.delete(`/votes/${slotId}`);
-      toast.success("Vote withdrawn");
+      toast.success("Done — your name is off this match");
       await fetchVotes();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to withdraw vote");

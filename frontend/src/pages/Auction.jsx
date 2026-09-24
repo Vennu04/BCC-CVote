@@ -235,7 +235,7 @@ export default function Auction() {
       newEntries.forEach((b) => {
         const verb = b.action === "bid" ? `bid ${b.amount} on`
           : b.action === "free_pick" ? "free-picked"
-          : "got free (quota leftover) —";
+          : "got free (your half of that group was full) —";
         toast(`${b.captain_name} ${verb} ${b.player_name}`, { duration: 3000 });
       });
       if (newEntries.length > 0) {
@@ -420,7 +420,7 @@ export default function Auction() {
               <h3 className="font-bold text-amber-900">Free Pick Available</h3>
             </div>
             <p className="text-xs text-amber-700 mb-3">
-              The other captain's points are drained — claim any remaining player, in any category, for free (still capped at your own quota per category).
+              The other captain has no points left — you can take any player still left, free, up to your half of each group.
             </p>
             <div className="flex flex-wrap gap-2">
               {freePickable.map((p) => (
@@ -469,7 +469,7 @@ export default function Auction() {
                   <span className="font-semibold">{b.captain_name}</span>{" "}
                   {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
                   {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
-                  {b.action === "leftover_free" && <>received {b.player_name} free (quota leftover)</>}
+                  {b.action === "leftover_free" && <>got {b.player_name} free (the other half was full)</>}
                   {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
                   {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within 30s, moved to the back of the category</>}
                   <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
@@ -487,62 +487,51 @@ export default function Auction() {
         {auction.status === "active" && auction.current_player && (
           <div className="sticky bottom-[calc(64px+env(safe-area-inset-bottom,0px))] lg:bottom-4 z-30 bg-white rounded-2xl shadow-soft-lg border border-gray-200 p-3">
                 {canBid ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* Native <input type="number"> spinner arrows don't render on most
-                        mobile browsers (iOS/Android Safari & Chrome) — only desktop — so
-                        typing was the only way to adjust the bid on mobile. These buttons
-                        step by 0.5 regardless of platform. */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => stepAmount(-0.5)}
-                        className="w-9 h-9 flex items-center justify-center text-lg font-bold rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 active:bg-gray-100"
-                        aria-label="Decrease bid by 0.5"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        step="0.5"
-                        min="0.5"
-                        max={myMaxBid ?? undefined}
-                        className="input-field w-24 text-center"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => stepAmount(0.5)}
-                        className="w-9 h-9 flex items-center justify-center text-lg font-bold rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 active:bg-gray-100"
-                        aria-label="Increase bid by 0.5"
-                      >
-                        +
-                      </button>
+                  <div className="space-y-2.5">
+                    {/* Points in plain words: every player starts at the base price for
+                        free, and the purse only pays for going higher. */}
+                    {myRemaining != null && (
+                      <div>
+                        <div className="flex items-baseline justify-between text-sm">
+                          <span className="font-bold text-gray-900">{myRemaining} of {auction.points_budget} points left</span>
+                          <span className="text-gray-500">this bid uses {Math.max(0, (parseFloat(amount) || 0) - auction.starting_price).toFixed(1)}</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden mt-1">
+                          <div className="h-full rounded-full bg-brand-gold" style={{ width: `${Math.max(0, Math.min(100, (myRemaining / auction.points_budget) * 100))}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    {/* Tap to raise instead of typing — native number spinners don't show on
+                        most phones, and typing mid-auction is fiddly. */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {[[-0.5, "−0.5"], [0.5, "+0.5"], [1, "+1"], [2, "+2"]].map(([d, label]) => (
+                        <button key={label} type="button" onClick={() => stepAmount(d)}
+                          className="min-h-[48px] rounded-xl border-2 border-gray-200 bg-white text-base font-black text-brand-navy active:bg-gray-100"
+                          aria-label={d < 0 ? "Lower the bid by 0.5" : `Raise the bid by ${d}`}>
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                    {myMaxBid != null && (
-                      <span className="text-xs text-gray-400">(max {myMaxBid}, {myRemaining} extra left)</span>
-                    )}
-                    <button
-                      className="btn-primary text-sm py-2 px-4"
-                      disabled={bidding || !amount}
-                      onClick={() => placeBid(parseFloat(amount))}
-                    >
-                      {bidding ? "Bidding…" : "Place Bid"}
-                    </button>
-                    {iAmCurrentLeader ? (
-                      <span className="text-xs text-pitch-700 font-medium">
-                        You have the highest bid — can't drop while you're leading.
-                      </span>
-                    ) : (
+                    <div className="flex gap-2">
                       <button
-                        className="flex items-center gap-2 text-sm py-2 px-4 rounded-lg border-2 border-red-300 text-red-700 bg-white hover:bg-red-50 font-medium"
-                        disabled={dropping}
-                        onClick={dropCurrentPlayer}
+                        className="flex-[2] min-h-[56px] rounded-2xl bg-pitch-700 text-white text-xl font-black disabled:opacity-50"
+                        disabled={bidding || !amount}
+                        onClick={() => placeBid(parseFloat(amount))}
                       >
-                        <ThumbsDown size={14} /> {dropping ? "…" : "Drop"}
+                        {bidding ? "Bidding…" : `Bid ${parseFloat(amount || 0).toFixed(1)}`}
                       </button>
-                    )}
+                      {iAmCurrentLeader ? (
+                        <span className="flex-1 text-xs text-pitch-700 font-bold flex items-center">You're winning — you can't pass while you lead.</span>
+                      ) : (
+                        <button
+                          className="flex-1 min-h-[56px] rounded-2xl border-2 border-red-200 text-red-700 bg-white text-lg font-black flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          disabled={dropping}
+                          onClick={dropCurrentPlayer}
+                        >
+                          <ThumbsDown size={16} /> {dropping ? "…" : "Pass"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">
