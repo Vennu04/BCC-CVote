@@ -41,6 +41,15 @@ PERMISSIONS = {
 }
 
 
+def is_staff(user):
+    """True for anyone who passes @admin_required: role admin/organizer or
+    the is_admin dual-role flag (every real admin account is role=captain +
+    is_admin=True, so a bare role=="admin" check locks them out)."""
+    if not user:
+        return False
+    return user.get("role") in PERMISSIONS["manage"] or user.get("is_admin") is True
+
+
 def requires(perm):
     """Permission-based staff decorator. role=="admin" (or the legacy
     is_admin=True cross-flag — unchanged meaning, still full admin) always

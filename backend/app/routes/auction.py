@@ -6,7 +6,7 @@ from bson import ObjectId
 from datetime import datetime, timedelta
 
 from .. import mongo, limiter
-from ..utils.auth import admin_required, get_current_user, captain_required
+from ..utils.auth import admin_required, get_current_user, captain_required, is_staff
 from ..utils.audit import log_action
 from ..services.notifications import notify_event
 from ..utils.time_utils import format_ist, to_iso_utc, utcnow
@@ -1080,9 +1080,11 @@ def get_auction(auction_id):
             auction = _auction_or_404(auction_id)
 
     user = get_current_user()
+    if not user:
+        return jsonify({"error": "Access denied"}), 403
     uid = str(user["_id"])
     is_participant = uid in (auction["captain_a_id"], auction["captain_b_id"])
-    if not is_participant and user["role"] != "admin":
+    if not is_participant and not is_staff(user):
         return jsonify({"error": "Access denied"}), 403
 
     # Records the first time each captain's own JWT hits this endpoint --
@@ -1603,7 +1605,7 @@ def send_chat_message(auction_id):
     # Identical access rule to get_auction below -- whoever can already see
     # this auction's live state can also post in its chat, nothing wider.
     is_participant = uid in (auction["captain_a_id"], auction["captain_b_id"])
-    if not is_participant and user["role"] != "admin":
+    if not is_participant and not is_staff(user):
         return jsonify({"error": "Access denied"}), 403
 
     data = request.get_json(silent=True) or {}
