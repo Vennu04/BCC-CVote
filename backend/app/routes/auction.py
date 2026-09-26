@@ -323,6 +323,14 @@ def get_next_player_in_category(candidates, category, users_map):
     after every other player has already been offered, ranked the same way
     within that held-back group.
     """
+    queue = order_category_queue(candidates, category, users_map)
+    return queue[0] if queue else None
+
+
+def order_category_queue(candidates, category, users_map):
+    """Full release order for ONE category's still-available players --
+    exactly the ranking get_next_player_in_category takes the head of, so
+    the "coming up" preview can never disagree with what actually releases."""
     def ordered(group):
         # Ascending sort on a fully-negated numeric key == descending on the
         # real values, while the name stays un-negated so its fallback order
@@ -337,8 +345,21 @@ def get_next_player_in_category(candidates, category, users_map):
 
     normal = ordered([p for p in candidates if not p.get("deprioritized")])
     held_back = ordered([p for p in candidates if p.get("deprioritized")])
-    queue = normal + held_back
-    return queue[0] if queue else None
+    return normal + held_back
+
+
+def build_release_queue(available, start_category, users_map):
+    """Every still-available player in the order auto-release will offer
+    them: categories cycle from start_category through AUCTION_GROUPS
+    (same wrap as _maybe_auto_release_next), each ranked by
+    order_category_queue. Pure -- callers pass the players already minus
+    whoever is up right now."""
+    start_idx = AUCTION_GROUPS.index(start_category) if start_category in AUCTION_GROUPS else 0
+    queue = []
+    for i in range(len(AUCTION_GROUPS)):
+        cat = AUCTION_GROUPS[(start_idx + i) % len(AUCTION_GROUPS)]
+        queue += [(cat, p) for p in order_category_queue([p for p in available if p["category"] == cat], cat, users_map)]
+    return queue
 
 
 # Same ranking _release_rank_key/get_next_player_in_category use to decide
@@ -1280,6 +1301,26 @@ def get_auction(auction_id):
     # write-on-first-observation flag would have.
     is_complete = auction["status"] == "active" and len(available_players) == 0
 
+    # "Coming up" preview for both captains and admin: the exact order
+    # auto-release will offer the rest of the pool (see build_release_queue).
+    # Only reorders when both captains pass on someone at base price
+    # (deprioritized -> end of their category), which the UI explains.
+    upcoming = []
+    if auction["status"] in ("pending", "active"):
+        start_cat = auction.get("auto_release_category") if auction["status"] == "active" else AUCTION_GROUPS[0]
+        if auction["status"] == "pending" or start_cat:
+            waiting = [p for p in players if p["status"] == "available" and str(p["_id"]) != auction.get("current_player_id")]
+            for pos, (cat, p) in enumerate(build_release_queue(waiting, start_cat, users_map), start=1):
+                u = users_map.get(p["user_id"], {})
+                upcoming.append({
+                    "position": pos, "id": str(p["_id"]), "user_id": p["user_id"],
+                    "name": u.get("name", "?"), "category": cat,
+                    "deprioritized": p.get("deprioritized", False),
+                    "batting_average": u.get("batting_average"), "strike_rate": u.get("strike_rate"),
+                    "bowling_average": u.get("bowling_average"), "economy": u.get("economy"),
+                    "attendance_percentage": u.get("attendance_percentage"),
+                })
+
     return jsonify({
         "id": auction_id,
         "status": auction["status"],
@@ -1293,6 +1334,7 @@ def get_auction(auction_id):
         "group_quotas": group_quotas,
         "current_player": current_player,
         "available_players": available_players,
+        "upcoming": upcoming,
         "captain_a": captain_summary(auction["captain_a_id"]),
         "captain_b": captain_summary(auction["captain_b_id"]),
         "bid_feed": bid_feed,
