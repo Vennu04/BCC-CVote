@@ -81,7 +81,7 @@ export function computeSteps(match, { sitOuts = {}, shared = false } = {}) {
     },
     start: {
       done: auction === "completed",
-      detail: { null: "Pick two captains and start", pending: "Waiting for the captains", active: "The auction is live", completed: "Auction finished" }[auction],
+      detail: { null: "Pick captains, share the player list, start", pending: "Waiting for the captains · player list ready", active: "The auction is live", completed: "Auction finished" }[auction],
       lock: !closed ? "Close voting first" : odd.length ? "Fix odd numbers first" : null,
     },
     share: {

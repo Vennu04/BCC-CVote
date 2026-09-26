@@ -543,6 +543,34 @@ function DutyStep({ match }) {
 }
 
 // ---------- step 7: start the auction ----------
+// The WhatsApp player list for both captains — its own screen before the
+// auction is created, and still shown while a created auction waits to start.
+function PlayerListCard({ text }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied — paste it into the auction WhatsApp group");
+    } catch {
+      toast.error("Couldn't copy — press and hold the list to copy it");
+    }
+  };
+  return (
+    <>
+      <Card>
+        <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans max-h-80 overflow-y-auto select-all">{text}</pre>
+      </Card>
+      <Big onClick={copy}><Copy size={20} /> Copy for WhatsApp</Big>
+      <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer"
+        className="w-full min-h-[56px] rounded-2xl border-2 font-black text-lg mt-3 flex items-center justify-center gap-2 px-4 bg-white text-brand-navy border-gray-300">
+        <MessageCircle size={20} /> Send on WhatsApp
+      </a>
+    </>
+  );
+}
+
+// Pages: 0 Captain A · 1 Captain B · 2 Share the player list · 3 Create.
+// Captains are picked first because they're never auctioned, so the list
+// the other captains plan from must already leave them out.
 function StartStep({ match }) {
   const navigate = useNavigate();
   const [captains, setCaptains] = useState(null);
@@ -552,18 +580,28 @@ function StartStep({ match }) {
   const [preview, setPreview] = useState(null);
   const [sitOuts, setSitOutsState] = useState(() => getSitOuts(match.slot_id));
   const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState(null);
 
   useEffect(() => { api.get("/admin/captains").then((r) => setCaptains(r.data || [])).catch(() => setCaptains([])); }, []);
   useEffect(() => {
-    if (page !== 2) return;
+    if (page < 2 || !a || !b) return;
     api.get("/admin/auction/preview", { params: { slot_id: match.slot_id, captain_a_id: a.id, captain_b_id: b.id } })
       .then((r) => setPreview(r.data)).catch((err) => setPreview({ error: err.response?.data?.error || "Couldn't check the players" }));
   }, [page, a, b, match.slot_id]);
+  // Auction already created but not started: keep the list available.
+  useEffect(() => {
+    if (!match.auction || match.auction.status !== "pending") return;
+    api.get(`/auction/${match.auction.id}`).then((r) => setCreated(r.data)).catch(() => setCreated(null));
+  }, [match.auction]);
 
   const openRun = (id) => { try { localStorage.setItem(ACTIVE_AUCTION_KEY, id); } catch { /* ignore */ } navigate("/manage/auction/run"); };
 
   if (match.auction) {
     const st = match.auction.status;
+    const createdList = st === "pending" && created ? buildPlayerListText({
+      matchLabel: match.label, captainA: created.captain_a?.name, captainB: created.captain_b?.name, groupName,
+      groups: CATS.map((c) => ({ category: c, players: (created.available_players || []).filter((p) => p.category === c) })),
+    }) : "";
     return (
       <Shell stepKey="start" match={match}>
         <Question hint={st === "pending" ? "Tell both captains to open the app — they'll see a red LIVE button." : st === "active" ? "Pause, bid for a captain and finish from the auction screen." : "Next: share the teams."}>
@@ -572,6 +610,13 @@ function StartStep({ match }) {
         {st === "completed"
           ? <BigLink to={`/manage/step/share?slot=${match.slot_id}`}>Next: share the teams</BigLink>
           : <Big onClick={() => openRun(match.auction.id)}>Open the auction</Big>}
+        {createdList && (
+          <div className="mt-6">
+            <p className="font-black text-gray-900 flex items-center gap-2 mb-1"><MessageCircle size={18} /> Player list for the captains</p>
+            <p className="text-sm text-gray-600 mb-3">Post it in the auction WhatsApp group before you start.</p>
+            <PlayerListCard text={createdList} />
+          </div>
+        )}
       </Shell>
     );
   }
@@ -585,14 +630,6 @@ function StartStep({ match }) {
   const playerList = listReady ? buildPlayerListText({
     matchLabel: match.label, captainA: a?.name, captainB: b?.name, groups, excludeIds: excluded, groupName,
   }) : "";
-  const copyList = async () => {
-    try {
-      await navigator.clipboard.writeText(playerList);
-      toast.success("Copied — paste it into the auction WhatsApp group");
-    } catch {
-      toast.error("Couldn't copy — press and hold the list to copy it");
-    }
-  };
 
   const create = async () => {
     setBusy(true);
@@ -615,55 +652,49 @@ function StartStep({ match }) {
   return (
     <Shell stepKey="start" match={match}>
       {page === 0 && (<>
-        <Question hint="They run the draft; they're never auctioned themselves.">Who is Captain A?</Question>
+        <Question hint="They run the draft; they're never auctioned themselves. Next you'll get the player list to share with both captains.">Who is Captain A?</Question>
         {pickList(a, setA, b)}
         <Big onClick={() => setPage(1)} disabled={!a}>Next</Big>
       </>)}
       {page === 1 && (<>
         <Question>Who is Captain B?</Question>
         {pickList(b, setB, a)}
-        <Big onClick={() => { setPreview(null); setPage(2); }} disabled={!b}>Next</Big>
+        <Big onClick={() => { setPreview(null); setPage(2); }} disabled={!b}>Next: player list</Big>
         <Big kind="white" onClick={() => setPage(0)}><ChevronLeft size={20} /> Back</Big>
       </>)}
       {page === 2 && (<>
+        <Question hint={`${a.name} vs ${b.name} · post it in the auction WhatsApp group so both captains can plan their team before bidding.`}>Share the player list</Question>
+        {!preview ? <LoadingState /> : preview.error ? <Card>{preview.error}</Card> : (<>
+          {stillOdd.map((g) => (
+            <Card key={g.category} className="ring-2 ring-red-200">
+              <p className="font-black text-gray-900 mb-2">{groupName(g.category)} is odd ({g.count}) — who sits out? (needed before the list)</p>
+              {[...g.players].sort((x, y) => (y.user_id === g.suggested_holdout_id) - (x.user_id === g.suggested_holdout_id)).slice(0, 4).map((p) => (
+                <Pick key={p.user_id} onClick={() => { setSitOut(match.slot_id, g.category, p.user_id); setSitOutsState(getSitOuts(match.slot_id)); }}
+                  note={p.user_id === g.suggested_holdout_id ? "Suggested" : null}>{p.name}</Pick>
+              ))}
+            </Card>
+          ))}
+          {missing.length > 0 && (
+            <Card className="ring-2 ring-amber-200">
+              <p className="font-bold text-gray-900">{missing.map((p) => p.name).join(", ")} {missing.length > 1 ? "have" : "has"} no group yet.</p>
+              <Link to={`/manage/step/odd?slot=${match.slot_id}`} className="text-pitch-700 font-bold">Give them a group in step 5 ›</Link>
+            </Card>
+          )}
+          {listReady && <PlayerListCard text={playerList} />}
+        </>)}
+        <Big kind={listReady ? "white" : "green"} onClick={() => setPage(3)} disabled={!listReady}>Next: create the auction</Big>
+        <Big kind="white" onClick={() => setPage(1)}><ChevronLeft size={20} /> Back</Big>
+      </>)}
+      {page === 3 && (<>
         <Question hint={`${a.name} vs ${b.name}`}>Ready to create the auction?</Question>
         {!preview ? <LoadingState /> : preview.error ? <Card>{preview.error}</Card> : (
-          <>
-            <Card>
-              <p className="font-bold text-gray-900 mb-1 flex items-center gap-2"><Users size={18} /> {groups.reduce((n, g) => n + g.count, 0) - excluded.length} players in the pool</p>
-              <p className="text-gray-600">{groups.map((g) => `${g.count - (excluded.some((uid) => g.players.some((p) => p.user_id === uid)) ? 1 : 0)} ${groupName(g.category)}`).join(" · ")}</p>
-            </Card>
-            {stillOdd.map((g) => (
-              <Card key={g.category} className="ring-2 ring-red-200">
-                <p className="font-black text-gray-900 mb-2">{groupName(g.category)} is odd ({g.count}) — who sits out?</p>
-                {[...g.players].sort((x, y) => (y.user_id === g.suggested_holdout_id) - (x.user_id === g.suggested_holdout_id)).slice(0, 4).map((p) => (
-                  <Pick key={p.user_id} onClick={() => { setSitOut(match.slot_id, g.category, p.user_id); setSitOutsState(getSitOuts(match.slot_id)); }}
-                    note={p.user_id === g.suggested_holdout_id ? "Suggested" : null}>{p.name}</Pick>
-                ))}
-              </Card>
-            ))}
-            {missing.length > 0 && (
-              <Card className="ring-2 ring-amber-200">
-                <p className="font-bold text-gray-900">{missing.map((p) => p.name).join(", ")} {missing.length > 1 ? "have" : "has"} no group yet.</p>
-                <Link to={`/manage/step/odd?slot=${match.slot_id}`} className="text-pitch-700 font-bold">Give them a group in step 5 ›</Link>
-              </Card>
-            )}
-          </>
-        )}
-        {listReady && (
           <Card>
-            <p className="font-bold text-gray-900 mb-1 flex items-center gap-2"><MessageCircle size={18} /> Player list for the captains</p>
-            <p className="text-sm text-gray-600 mb-2">Post this in the auction WhatsApp group so both captains can plan before bidding.</p>
-            <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans bg-gray-50 rounded-xl p-3 max-h-72 overflow-y-auto select-all">{playerList}</pre>
-            <Big kind="white" onClick={copyList}><Copy size={20} /> Copy for WhatsApp</Big>
-            <a href={`https://wa.me/?text=${encodeURIComponent(playerList)}`} target="_blank" rel="noopener noreferrer"
-              className="w-full min-h-[56px] rounded-2xl border-2 font-black text-lg mt-3 flex items-center justify-center gap-2 px-4 bg-white text-brand-navy border-gray-300">
-              <MessageCircle size={20} /> Send on WhatsApp
-            </a>
+            <p className="font-bold text-gray-900 mb-1 flex items-center gap-2"><Users size={18} /> {groups.reduce((n, g) => n + g.count, 0) - excluded.length} players in the pool</p>
+            <p className="text-gray-600">{groups.map((g) => `${g.count - (excluded.some((uid) => g.players.some((p) => p.user_id === uid)) ? 1 : 0)} ${groupName(g.category)}`).join(" · ")}</p>
           </Card>
         )}
-        <Big onClick={create} disabled={busy || !preview || !!preview?.error || stillOdd.length > 0 || missing.length > 0}>{busy ? "Creating…" : "Create auction"}</Big>
-        <Big kind="white" onClick={() => setPage(1)}><ChevronLeft size={20} /> Back</Big>
+        <Big onClick={create} disabled={busy || !listReady}>{busy ? "Creating…" : "Create auction"}</Big>
+        <Big kind="white" onClick={() => setPage(2)}><ChevronLeft size={20} /> Back to the player list</Big>
       </>)}
     </Shell>
   );
