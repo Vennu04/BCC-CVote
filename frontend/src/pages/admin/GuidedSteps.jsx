@@ -8,11 +8,11 @@ import { TeamsVs } from "../../components/TeamCrest";
 import { EveningCard } from "./AuctionDuty";
 import { shortDay } from "../../utils/duty";
 import { formatDateDisplay } from "../../utils/formatDate";
-import { buildWhatsAppSummary, ACTIVE_AUCTION_KEY } from "../../utils/auctionShare";
+import { buildWhatsAppSummary, buildPlayerListText, ACTIVE_AUCTION_KEY } from "../../utils/auctionShare";
 import {
   STEP_KEYS, STEP_TITLES, computeSteps, groupName, getSitOuts, setSitOut, clearSitOut, wasShared, markShared,
 } from "../../utils/week";
-import { Check, ChevronLeft, X, Copy, Calendar, Clock, MapPin, Users } from "lucide-react";
+import { Check, ChevronLeft, X, Copy, Calendar, Clock, MapPin, Users, MessageCircle } from "lucide-react";
 
 // One guided screen per "This week" step: a single big question, plain
 // numbers, one green button, and a safe way back. Everything here calls the
@@ -581,6 +581,18 @@ function StartStep({ match }) {
   const excluded = odd.map((g) => sitOuts[g.category]).filter((uid, i) => uid && odd[i].players.some((p) => p.user_id === uid));
   const stillOdd = odd.filter((g) => !g.players.some((p) => p.user_id === sitOuts[g.category]));
   const missing = preview?.missing_category || [];
+  const listReady = !!preview && !preview.error && stillOdd.length === 0 && missing.length === 0;
+  const playerList = listReady ? buildPlayerListText({
+    matchLabel: match.label, captainA: a?.name, captainB: b?.name, groups, excludeIds: excluded, groupName,
+  }) : "";
+  const copyList = async () => {
+    try {
+      await navigator.clipboard.writeText(playerList);
+      toast.success("Copied — paste it into the auction WhatsApp group");
+    } catch {
+      toast.error("Couldn't copy — press and hold the list to copy it");
+    }
+  };
 
   const create = async () => {
     setBusy(true);
@@ -637,6 +649,18 @@ function StartStep({ match }) {
               </Card>
             )}
           </>
+        )}
+        {listReady && (
+          <Card>
+            <p className="font-bold text-gray-900 mb-1 flex items-center gap-2"><MessageCircle size={18} /> Player list for the captains</p>
+            <p className="text-sm text-gray-600 mb-2">Post this in the auction WhatsApp group so both captains can plan before bidding.</p>
+            <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans bg-gray-50 rounded-xl p-3 max-h-72 overflow-y-auto select-all">{playerList}</pre>
+            <Big kind="white" onClick={copyList}><Copy size={20} /> Copy for WhatsApp</Big>
+            <a href={`https://wa.me/?text=${encodeURIComponent(playerList)}`} target="_blank" rel="noopener noreferrer"
+              className="w-full min-h-[56px] rounded-2xl border-2 font-black text-lg mt-3 flex items-center justify-center gap-2 px-4 bg-white text-brand-navy border-gray-300">
+              <MessageCircle size={20} /> Send on WhatsApp
+            </a>
+          </Card>
         )}
         <Big onClick={create} disabled={busy || !preview || !!preview?.error || stillOdd.length > 0 || missing.length > 0}>{busy ? "Creating…" : "Create auction"}</Big>
         <Big kind="white" onClick={() => setPage(1)}><ChevronLeft size={20} /> Back</Big>
