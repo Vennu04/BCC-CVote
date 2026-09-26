@@ -8,6 +8,7 @@ import PlayerInsightsCard from "../components/PlayerInsightsCard";
 import FairnessBanner from "../components/FairnessBanner";
 import ReleaseOrderLog from "../components/ReleaseOrderLog";
 import AuctionChat from "../components/AuctionChat";
+import UpcomingPlayers, { NextUpStrip } from "../components/UpcomingPlayers";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
 import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap, AlertTriangle } from "lucide-react";
@@ -133,6 +134,7 @@ export default function Auction() {
   } = useAuction(id);
   const [amount, setAmount] = useState("");
   const [activePanel, setActivePanel] = useState("teams");
+  const panelTabsRef = useRef(null);
 
   const isParticipant = useMemo(() => {
     if (!auction || !user) return false;
@@ -338,11 +340,19 @@ export default function Auction() {
 
   const panels = [
     { key: "teams", label: "Teams" },
-    ...(auction.status !== "completed" ? [{ key: "pool", label: "Pool" }, { key: "feed", label: "Feed" }] : []),
+    ...(auction.status !== "completed" ? [{ key: "pool", label: "Coming up" }, { key: "feed", label: "Feed" }] : []),
     { key: "chat", label: "Chat" },
     { key: "rules", label: "Rules" },
   ];
   const panel = panels.some((p) => p.key === activePanel) ? activePanel : "teams";
+  const hasQueue = Array.isArray(auction.upcoming);
+  const myCaptainSummary = isParticipant
+    ? (auction.captain_a?.captain_id === user?.id ? auction.captain_a : auction.captain_b)
+    : null;
+  const showAllUpcoming = () => {
+    setActivePanel("pool");
+    requestAnimationFrame(() => panelTabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   return (
     <div className="min-h-screen bg-brand-ground">
@@ -413,6 +423,8 @@ export default function Auction() {
 
         {auction.current_player && <PlayerInsightsCard player={auction.current_player} />}
 
+        {auction.status !== "completed" && hasQueue && <NextUpStrip upcoming={auction.upcoming} onSeeAll={showAllUpcoming} />}
+
         {freePickable.length > 0 && (
           <div className="card border-2 border-amber-300 bg-amber-50">
             <div className="flex items-center gap-2 mb-2">
@@ -439,7 +451,7 @@ export default function Auction() {
 
         {auction.status !== "completed" && <FairnessBanner />}
 
-        <div className="flex gap-1 bg-white rounded-2xl shadow-soft p-1 overflow-x-auto scroll-touch" role="tablist">
+        <div ref={panelTabsRef} className="flex gap-1 bg-white rounded-2xl shadow-soft p-1 overflow-x-auto scroll-touch scroll-mt-20" role="tablist">
           {panels.map((p) => (
             <button key={p.key} type="button" role="tab" aria-selected={panel === p.key} onClick={() => setActivePanel(p.key)}
               className={`flex-1 shrink-0 min-h-[40px] px-3 rounded-xl text-sm font-bold transition-colors duration-150 ${
@@ -455,7 +467,9 @@ export default function Auction() {
           <CaptainCard summary={auction.captain_b} isYou={auction.captain_b?.captain_id === user?.id} startingPrice={auction.starting_price} />
           </div>
         )}
-        {panel === "pool" && <AvailablePlayersPool auction={auction} />}
+        {panel === "pool" && (hasQueue
+          ? <UpcomingPlayers upcoming={auction.upcoming} me={myCaptainSummary} quotas={auction.group_quotas} pending={auction.status === "pending"} />
+          : <AvailablePlayersPool auction={auction} />)}
         {panel === "feed" && (
           <>
           <div className="card">

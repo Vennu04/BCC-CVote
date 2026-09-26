@@ -11,6 +11,7 @@ import PlayerInsightsCard from "../../components/PlayerInsightsCard";
 import FairnessBanner from "../../components/FairnessBanner";
 import ReleaseOrderLog from "../../components/ReleaseOrderLog";
 import AuctionChat from "../../components/AuctionChat";
+import UpcomingPlayers, { NextUpStrip } from "../../components/UpcomingPlayers";
 import { useAuth } from "../../context/AuthContext";
 import { useAuction } from "../../hooks/useAuction";
 import { STATUS_STYLES } from "../../utils/windowStatus";
@@ -915,6 +916,20 @@ export default function AdminAuction() {
             )}
 
             {auction.current_player && <PlayerInsightsCard player={auction.current_player} />}
+
+            {auction.status !== "completed" && Array.isArray(auction.upcoming) && auction.upcoming.length > 0 && (
+              <>
+                <NextUpStrip upcoming={auction.upcoming} />
+                <details className="rounded-2xl bg-white shadow-soft px-3 py-2">
+                  <summary className="text-sm font-bold text-pitch-700 cursor-pointer min-h-[40px] flex items-center">
+                    See the full order ({auction.upcoming.length}) — same list the captains see
+                  </summary>
+                  <div className="pt-2">
+                    <UpcomingPlayers upcoming={auction.upcoming} quotas={auction.group_quotas} pending={auction.status === "pending"} />
+                  </div>
+                </details>
+              </>
+            )}
 
             {auction.status === "completed" && (
               <div className="card text-center py-6 text-green-700 font-medium space-y-3">
