@@ -110,3 +110,39 @@ def test_cancelled_test_and_past_matches_are_left_out(client, admin_headers, mat
     match(_saturday(), is_test=True)
     match(now_ist().date() - timedelta(days=2))
     assert _get(client, admin_headers)["matches"] == []
+
+
+def test_match_captains_are_left_out_of_every_group(client, admin_headers, make_user, match):
+    # Hawks' and Royals' captains voted available but run the draft, so the
+    # groups are judged without them: 2 power, 2 classic — nothing odd.
+    slot_id, window_id = match(_saturday())
+    cap_a = make_user("captain", "CHA", "pw", team_name="HAWKS", is_player=True, auction_category="power")
+    cap_b = make_user("captain", "CHB", "pw", team_name="royals ", is_player=True, auction_category="classic")
+    players = [make_user("player", f"P{i}", "pw", auction_category=cat)
+               for i, cat in enumerate(["power", "power", "classic", "classic"])]
+    for u in [cap_a, cap_b, *players]:
+        _vote(u["_id"], slot_id, window_id)
+
+    m = _get(client, admin_headers)["matches"][0]
+    assert m["counts"]["available"] == 6
+    assert m["counts"]["by_group"]["power"] == 2
+    assert m["counts"]["by_group"]["classic"] == 2
+    assert m["odd_groups"] == []
+    assert {c["name"] for c in m["captains"]} == {cap_a["name"], cap_b["name"]}
+
+    resp = client.get(f"/api/admin/auction/preview?slot_id={slot_id}", headers=admin_headers)
+    body = resp.get_json()
+    assert resp.status_code == 200 and body["is_balanced"] is True
+    assert body["total_voters"] == 4
+    assert {c["id"] for c in body["captains_excluded"]} == {str(cap_a["_id"]), str(cap_b["_id"])}
+
+
+def test_two_captains_claiming_one_team_are_not_guessed(client, admin_headers, make_user, match):
+    slot_id, window_id = match(_saturday())
+    a = make_user("captain", "CA1", "pw", team_name="Hawks", is_player=True, auction_category="power")
+    b = make_user("captain", "CA2", "pw", team_name="Hawks", is_player=True, auction_category="power")
+    for u in (a, b):
+        _vote(u["_id"], slot_id, window_id)
+    m = _get(client, admin_headers)["matches"][0]
+    assert m["captains"] == []
+    assert m["counts"]["by_group"]["power"] == 2

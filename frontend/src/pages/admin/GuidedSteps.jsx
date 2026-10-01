@@ -430,6 +430,18 @@ function CategoryPicker({ person, onDone, onCancel }) {
   );
 }
 
+// Captains run the draft and are never auctioned, so they're left out of
+// every group's count.
+function CaptainsNote({ captains }) {
+  if (!captains?.length) return null;
+  return (
+    <Card className="ring-2 ring-pitch-200">
+      <p className="text-gray-800">🧢 <b>{captains.map((c) => `${c.name} (${c.team_name})`).join(" and ")}</b>{" "}
+        {captains.length > 1 ? "are captains" : "is a captain"} in this match, so they're not in any group.</p>
+    </Card>
+  );
+}
+
 function OddStep({ match, reload }) {
   const navigate = useNavigate();
   const [preview, setPreview] = useState(null);
@@ -454,6 +466,7 @@ function OddStep({ match, reload }) {
   return (
     <Shell stepKey="odd" match={match}>
       <Question hint="Each team gets half of every group, so every group needs an even number.">Are the groups even?</Question>
+      <CaptainsNote captains={preview.captains_excluded} />
       <div className="grid grid-cols-2 gap-2 mb-4">
         {groups.map((g) => {
           const out = sitOuts[g.category] && !g.is_balanced ? 1 : 0;
@@ -582,7 +595,16 @@ function StartStep({ match }) {
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState(null);
 
-  useEffect(() => { api.get("/admin/captains").then((r) => setCaptains(r.data || [])).catch(() => setCaptains([])); }, []);
+  useEffect(() => {
+    api.get("/admin/captains").then((r) => {
+      const list = r.data || [];
+      setCaptains(list);
+      // Pre-pick the match's own captains (found by team name); admin can still change them.
+      const [ca, cb] = (match.captains || []).map((c) => list.find((x) => x.id === c.id)).filter(Boolean);
+      if (ca) setA(ca);
+      if (cb) setB(cb);
+    }).catch(() => setCaptains([]));
+  }, [match.captains]);
   useEffect(() => {
     if (page < 2 || !a || !b) return;
     api.get("/admin/auction/preview", { params: { slot_id: match.slot_id, captain_a_id: a.id, captain_b_id: b.id } })
@@ -652,7 +674,9 @@ function StartStep({ match }) {
   return (
     <Shell stepKey="start" match={match}>
       {page === 0 && (<>
-        <Question hint="They run the draft; they're never auctioned themselves. Next you'll get the player list to share with both captains.">Who is Captain A?</Question>
+        <Question hint={match.captains?.length === 2
+          ? "Already picked from the two teams — tap Next, or choose someone else. Captains are never auctioned."
+          : "They run the draft; they're never auctioned themselves. Next you'll get the player list to share with both captains."}>Who is Captain A?</Question>
         {pickList(a, setA, b)}
         <Big onClick={() => setPage(1)} disabled={!a}>Next</Big>
       </>)}

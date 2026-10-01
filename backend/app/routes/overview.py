@@ -18,7 +18,7 @@ from ..utils.time_utils import (
     IST, effective_match_date_str, format_ist, is_voting_window_open, now_ist, utc_to_ist,
 )
 from .admin import VOTER_FILTER
-from .auction import AUCTION_GROUPS, MIN_AUCTION_POOL_SIZE
+from .auction import AUCTION_GROUPS, MIN_AUCTION_POOL_SIZE, match_captains
 from .duty import DUTY_SLOT_LABELS, WEEKEND_WEEKDAYS, _match_label
 
 overview_bp = Blueprint("overview", __name__)
@@ -99,9 +99,15 @@ def admin_overview():
                 voted_ids.add(v["captain_id"])
                 if v["availability"] == "available":
                     available_ids.append(v["captain_id"])
+        # The match's two captains are never auctioned, so they don't count
+        # toward any category (they still count as "available" — they play).
+        captains = match_captains(slot)
+        captain_ids = {c["id"] for c in captains}
         by_group = {g: 0 for g in AUCTION_GROUPS}
         uncategorised = 0
         for uid in available_ids:
+            if uid in captain_ids:
+                continue
             cat = category_of.get(uid)
             if cat in by_group:
                 by_group[cat] += 1
@@ -135,6 +141,7 @@ def admin_overview():
                 "uncategorised": uncategorised,
             },
             "odd_groups": odd,
+            "captains": captains,
             "attendance_credited": credited,
             "auction": {"id": str(auction["_id"]), "status": auction_status} if auction else None,
             "duty": {"lead_id": duty.get("lead_id"), "backup_id": duty.get("backup_id"),

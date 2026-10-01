@@ -606,6 +606,30 @@ def _maybe_timeout_current_player(auction):
 
 # ── Admin: setup + control ──────────────────────────────────────────────────────
 
+def _norm_team(name):
+    return " ".join((name or "").split()).casefold()
+
+
+def match_captains(slot):
+    """The two captains playing this match as captains, found by matching
+    each side's team name to an active captain's team_name (case and spacing
+    ignored). A side is skipped when no captain, or more than one, claims it —
+    a guess could wrongly pull a real player out of the pool. Captains run
+    the draft and are never auctioned, so they must not count toward any
+    category before admin has formally picked Captain A/B."""
+    found = []
+    for side in ("team_a_name", "team_b_name"):
+        name = _norm_team((slot or {}).get(side))
+        if not name:
+            continue
+        hits = [u for u in mongo.db.users.find({"role": "captain", "is_active": True, "team_name": {"$exists": True}},
+                                               {"name": 1, "team_name": 1})
+                if _norm_team(u.get("team_name")) == name]
+        if len(hits) == 1:
+            found.append({"id": str(hits[0]["_id"]), "name": hits[0]["name"], "team_name": slot[side]})
+    return found
+
+
 # Read-only counterpart to create_auction()'s parity check — lets admin see
 # (and fix) an odd-category pool BEFORE hitting the 400 from a real create
 # attempt, instead of finding out by trial and error. Mirrors create_auction's
@@ -625,7 +649,12 @@ def preview_auction_pool():
     if not window:
         return jsonify({"error": "No active voting window for this slot"}), 400
 
-    excluded_captains = {cid for cid in (captain_a_id, captain_b_id) if cid}
+    # Before admin has picked Captain A/B, leave out the match's own captains
+    # (by team name) so the category counts already match the real pool.
+    captains = []
+    if not captain_a_id and not captain_b_id:
+        captains = match_captains(mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)}))
+    excluded_captains = {cid for cid in (captain_a_id, captain_b_id) if cid} | {c["id"] for c in captains}
     available_votes = list(mongo.db.votes.find({
         "slot_id": slot_id, "window_id": str(window["_id"]), "availability": "available",
     }))
@@ -661,6 +690,7 @@ def preview_auction_pool():
 
     return jsonify({
         "total_voters": len(voters),
+        "captains_excluded": captains,
         "missing_category": missing_category,
         "groups": groups,
         "is_balanced": all(g["is_balanced"] for g in groups),
