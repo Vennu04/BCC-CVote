@@ -262,9 +262,14 @@ function VotesStep({ match, reload }) {
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
   const summary = dash?.slots?.find((s) => s.slot_id === match.slot_id);
-  const pending = (dash?.vote_matrix || [])
-    .filter((row) => !row.votes.find((v) => v.slot_id === match.slot_id)?.availability)
+  const answerOf = (row) => row.votes.find((v) => v.slot_id === match.slot_id)?.availability || null;
+  const peopleWith = (answer) => (dash?.vote_matrix || [])
+    .filter((row) => answerOf(row) === answer)
     .map((row) => row.captain).sort((a, b) => a.name.localeCompare(b.name));
+  const pending = peopleWith(null);
+  const playing = peopleWith("available");
+  const notPlaying = peopleWith("not_available");
+  const captainIds = new Set((match.captains || []).map((c) => c.id));
 
   const mark = async (person, availability) => {
     setBusy(person.id);
@@ -305,6 +310,43 @@ function VotesStep({ match, reload }) {
           </ul>
         )}
       </Card>
+      <Card>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-black text-gray-900">✅ Playing ({playing.length})</h3>
+          <span className="text-xs text-gray-500">not coming? tap Out</span>
+        </div>
+        {!dash ? <LoadingState /> : playing.length === 0 ? (
+          <p className="text-gray-600 py-2">Nobody yet.</p>
+        ) : (
+          <ol className="divide-y divide-gray-100">
+            {playing.map((p, i) => (
+              <li key={p.id} className="flex items-center gap-2 py-2">
+                <span className="w-6 text-right text-sm text-gray-400 tabular-nums">{i + 1}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-gray-900">{captainIds.has(p.id) ? "🧢 " : ""}{p.name}</span>
+                  <span className="block text-xs text-gray-500">{captainIds.has(p.id) ? "Captain" : p.auction_category ? groupName(p.auction_category) : "No group"}</span>
+                </span>
+                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")}
+                  className="min-h-[44px] px-3 rounded-xl bg-red-50 text-red-700 font-black disabled:opacity-50">✕ Out</button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Card>
+      {notPlaying.length > 0 && (
+        <Card>
+          <h3 className="font-black text-gray-900 mb-1">❌ Not playing ({notPlaying.length})</h3>
+          <ul className="divide-y divide-gray-100">
+            {notPlaying.map((p) => (
+              <li key={p.id} className="flex items-center gap-2 py-2">
+                <span className="flex-1 font-semibold text-gray-700">{p.name}</span>
+                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "available")}
+                  className="min-h-[44px] px-3 rounded-xl bg-pitch-50 text-pitch-800 font-black disabled:opacity-50">✓ In</button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <BigLink to={`/manage?slot=${match.slot_id}`}>Done</BigLink>
     </Shell>
   );
