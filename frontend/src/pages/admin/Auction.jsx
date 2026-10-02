@@ -300,7 +300,7 @@ export default function AdminAuction() {
     setStarting(true);
     try {
       await api.post(`/admin/auction/${auctionId}/start`);
-      toast.success("Auction started — 25 minute clock is running");
+      toast.success("Auction started — the clock is running");
       refetch();
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to start auction");

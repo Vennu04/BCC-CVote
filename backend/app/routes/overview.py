@@ -18,7 +18,8 @@ from ..utils.time_utils import (
     IST, effective_match_date_str, format_ist, is_voting_window_open, now_ist, utc_to_ist,
 )
 from .admin import VOTER_FILTER
-from .auction import AUCTION_GROUPS, MIN_AUCTION_POOL_SIZE, match_captains
+from .auction import AUCTION_GROUPS, match_captains
+from ..services.settings import get_auction_rules
 from .duty import DUTY_SLOT_LABELS, WEEKEND_WEEKDAYS, _match_label
 
 overview_bp = Blueprint("overview", __name__)
@@ -159,8 +160,9 @@ def admin_overview():
             names = ", ".join(f"{GROUP_LABELS[g]} ({by_group[g]})" for g in odd)
             todos.append({"level": "red", "title": f"Odd numbers: {names}", "detail": where,
                           "link": "/manage/auction/run"})
-        if state == "closed" and not auction and len(available_ids) < MIN_AUCTION_POOL_SIZE:
-            todos.append({"level": "red", "title": f"Only {len(available_ids)} available — an auction needs {MIN_AUCTION_POOL_SIZE}",
+        min_pool = get_auction_rules()["min_pool_size"]
+        if state == "closed" and not auction and len(available_ids) < min_pool:
+            todos.append({"level": "red", "title": f"Only {len(available_ids)} available — an auction needs {min_pool}",
                           "detail": where, "link": "/manage/matches/windows"})
         if uncategorised > 2 and not auction:
             todos.append({"level": "gold", "title": f"{uncategorised} available players have no category",

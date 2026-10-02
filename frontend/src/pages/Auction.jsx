@@ -485,7 +485,7 @@ export default function Auction() {
                   {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
                   {b.action === "leftover_free" && <>got {b.player_name} free (the other half was full)</>}
                   {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
-                  {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within 30s, moved to the back of the category</>}
+                  {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within {auction.release_timeout_seconds || 30}s, moved to the back of the category</>}
                   <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
                 </div>
               ))}

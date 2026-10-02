@@ -6,6 +6,7 @@ from bson import ObjectId
 from datetime import datetime, timedelta
 
 from .. import mongo, limiter
+from ..services.settings import get_auction_rules
 from ..utils.auth import admin_required, get_current_user, captain_required, is_staff
 from ..utils.audit import log_action
 from ..services.notifications import notify_event
@@ -29,6 +30,9 @@ SESSION_MINUTES = 25
 PLAYER_RELEASE_TIMEOUT_SECONDS = 30
 MIN_AUCTION_POOL_SIZE = 20  # a side can field 10, per admin's call — no longer requiring a full XI
 MAX_ROSTER_SIZE_PER_SIDE = 14  # 14+14 = 28 max auctioned players total, captains excluded
+# The numbers above are only the defaults — admins can change them any time
+# in All tools › Settings (services/settings.py); the live values are read
+# with get_auction_rules().
 
 # Release order within a category is driven by batting/bowling stats, not admin
 # choice (admin can only pick WHICH CATEGORY to release from next, never which
@@ -575,7 +579,8 @@ def _maybe_timeout_current_player(auction):
     released_at = auction.get("current_player_released_at")
     if not player_id or not released_at:
         return
-    if utcnow() - released_at < timedelta(seconds=PLAYER_RELEASE_TIMEOUT_SECONDS):
+    timeout = auction.get("release_timeout_seconds") or PLAYER_RELEASE_TIMEOUT_SECONDS
+    if utcnow() - released_at < timedelta(seconds=timeout):
         return
 
     any_activity = mongo.db.auction_bids.find_one({
@@ -790,17 +795,18 @@ def create_auction():
     # admin's rule) no more than 14 to keep squads a sane size. Both are
     # driven by the pool size itself, not the 17-point budget, which is
     # unrelated and unchanged either way.
-    if len(voters) < MIN_AUCTION_POOL_SIZE:
+    rules = get_auction_rules()
+    if len(voters) < rules["min_pool_size"]:
         return jsonify({
-            "error": f"At least {MIN_AUCTION_POOL_SIZE} players are needed for an auction "
-                     f"({MIN_AUCTION_POOL_SIZE // 2} per side) — only {len(voters)} voted available"
+            "error": f"At least {rules['min_pool_size']} players are needed for an auction "
+                     f"({rules['min_pool_size'] // 2} per side) — only {len(voters)} voted available"
         }), 400
 
     per_side_roster_size = sum(count // 2 for count in counts_by_group.values())
-    if per_side_roster_size > MAX_ROSTER_SIZE_PER_SIDE:
+    if per_side_roster_size > rules["max_per_side"]:
         return jsonify({
             "error": f"This pool would give each side {per_side_roster_size} players — "
-                     f"the max is {MAX_ROSTER_SIZE_PER_SIDE} per side"
+                     f"the max is {rules['max_per_side']} per side"
         }), 400
 
     auction_doc = {
@@ -818,8 +824,8 @@ def create_auction():
         "started_at": None,
         "ends_at": None,
         "target_roster_size": TARGET_ROSTER_SIZE,
-        "points_budget": POINTS_BUDGET,
-        "starting_price": STARTING_PRICE,
+        "points_budget": get_auction_rules()["points_budget"],
+        "starting_price": get_auction_rules()["starting_price"],
         "created_at": utcnow(),
     }
     result = mongo.db.auctions.insert_one(auction_doc)
@@ -899,8 +905,8 @@ def create_practice_auction():
         "started_at": None,
         "ends_at": None,
         "target_roster_size": TARGET_ROSTER_SIZE,
-        "points_budget": POINTS_BUDGET,
-        "starting_price": STARTING_PRICE,
+        "points_budget": get_auction_rules()["points_budget"],
+        "starting_price": get_auction_rules()["starting_price"],
         "created_at": utcnow(),
     }
     result = mongo.db.auctions.insert_one(auction_doc)
@@ -939,10 +945,13 @@ def start_auction(auction_id):
         return jsonify({"error": f"Auction is already {auction['status']}"}), 400
 
     now = utcnow()
-    ends_at = now + timedelta(minutes=SESSION_MINUTES)
+    rules = get_auction_rules()
+    ends_at = now + timedelta(minutes=rules["session_minutes"])
     mongo.db.auctions.update_one(
         {"_id": auction["_id"]},
         {"$set": {"status": "active", "started_at": now, "ends_at": ends_at,
+                  "session_minutes": rules["session_minutes"],
+                  "release_timeout_seconds": rules["release_timeout_seconds"],
                    # Always the canonical first category -- admin no longer
                    # picks a starting category by hand (that was the whole
                    # point of the one manual click this replaces), so there's
@@ -1352,7 +1361,8 @@ def get_auction(auction_id):
         "ends_at_iso": to_iso_utc(auction.get("ends_at")),
         "points_budget": auction["points_budget"],
         "starting_price": auction["starting_price"],
-        "session_minutes": SESSION_MINUTES,
+        "session_minutes": auction.get("session_minutes") or get_auction_rules()["session_minutes"],
+        "release_timeout_seconds": auction.get("release_timeout_seconds") or get_auction_rules()["release_timeout_seconds"],
         "group_quotas": group_quotas,
         "current_player": current_player,
         "available_players": available_players,
