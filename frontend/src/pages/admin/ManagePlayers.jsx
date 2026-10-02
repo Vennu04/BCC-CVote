@@ -198,13 +198,29 @@ export default function ManagePlayers() {
     }
   };
 
+  // Removed people — listed on demand so an admin can bring someone back.
+  const [removed, setRemoved] = useState(null);
+  const loadRemoved = () => api.get("/admin/players", { params: { inactive: 1 } })
+    .then((r) => setRemoved(r.data || [])).catch(() => toast.error("Couldn't load removed people"));
+  const handleReactivate = async (person) => {
+    try {
+      await api.put(`/admin/${endpointFor(person)}/${person.id}`, { is_active: true });
+      toast.success(`${person.name} is back`);
+      loadRemoved();
+      fetchPlayers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Couldn't bring them back");
+    }
+  };
+
   const handleDeactivate = (person) => {
     const label = person.role === "captain" ? "captain" : "player";
-    requestConfirm(`Remove ${person.name} from the ${label} roster? Their voting/auction history is kept — this can be undone by an admin directly in the database if needed.`, async () => {
+    requestConfirm(`Remove ${person.name} from the ${label} roster? Their voting/auction history is kept — you can bring them back any time from "Removed people" at the bottom of this page.`, async () => {
       try {
         await api.delete(`/admin/${endpointFor(person)}/${person.id}`);
         toast.success(`${person.name} removed`);
         fetchPlayers();
+        if (removed) loadRemoved();
       } catch (err) {
         toast.error(err.response?.data?.error || `Failed to remove ${label}`);
       }
@@ -865,6 +881,29 @@ export default function ManagePlayers() {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="card mt-4">
+              {removed === null ? (
+                <button type="button" onClick={loadRemoved} className="w-full min-h-[44px] text-sm font-bold text-gray-700">
+                  Show removed people
+                </button>
+              ) : (
+                <>
+                  <h3 className="font-bold text-gray-900 mb-2">Removed people ({removed.length})</h3>
+                  {removed.length === 0 ? <p className="text-sm text-gray-500">Nobody has been removed.</p> : (
+                    <ul className="divide-y divide-gray-100">
+                      {removed.map((p) => (
+                        <li key={p.id} className="flex items-center gap-2 py-2">
+                          <span className="flex-1 text-sm"><b className="text-gray-900">{p.name}</b> <span className="text-gray-500">· {p.team_code} · {p.role}</span></span>
+                          <button type="button" onClick={() => handleReactivate(p)}
+                            className="text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-pitch-50 text-pitch-800 font-bold">Bring back</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
 
             {players.length === 0 && <EmptyState message="No players yet. Add one above." />}

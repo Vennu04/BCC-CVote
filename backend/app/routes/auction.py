@@ -611,14 +611,23 @@ def _norm_team(name):
 
 
 def match_captains(slot):
-    """The two captains playing this match as captains, found by matching
+    """The two captains playing this match as captains: the captain admin
+    picked for each team on the Tournament page, otherwise found by matching
     each side's team name to an active captain's team_name (case and spacing
     ignored). A side is skipped when no captain, or more than one, claims it —
     a guess could wrongly pull a real player out of the pool. Captains run
     the draft and are never auctioned, so they must not count toward any
     category before admin has formally picked Captain A/B."""
     found = []
-    for side in ("team_a_name", "team_b_name"):
+    for side, id_field in (("team_a_name", "team_a_id"), ("team_b_name", "team_b_id")):
+        # The captain admin picked for the team on the Tournament page wins.
+        team_oid = (slot or {}).get(id_field)
+        team = mongo.db.tournament_teams.find_one({"_id": ObjectId(team_oid)}) if team_oid and ObjectId.is_valid(team_oid) else None
+        if team and team.get("captain_id") and ObjectId.is_valid(team["captain_id"]):
+            captain = mongo.db.users.find_one({"_id": ObjectId(team["captain_id"]), "is_active": True}, {"name": 1})
+            if captain:
+                found.append({"id": str(captain["_id"]), "name": captain["name"], "team_name": slot[side]})
+                continue
         name = _norm_team((slot or {}).get(side))
         if not name:
             continue
