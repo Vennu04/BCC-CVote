@@ -124,7 +124,7 @@ function SetupStep() {
   const [group, setGroup] = useState("A");
   const [page, setPage] = useState(0);
   const [f, setF] = useState(null);
-  const [form, setForm] = useState({ date: "", time: "06:15", venue: "", opens: "now", opensAt: "" });
+  const [form, setForm] = useState({ date: "", time: "06:15", endTime: "10:00", venue: "", opens: "now", opensAt: "" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -133,14 +133,14 @@ function SetupStep() {
 
   const choose = (fx) => {
     setF(fx);
-    setForm({ date: fx.date || "", time: fx.time || "06:15", venue: fx.venue || "", opens: "now", opensAt: "" });
+    setForm({ date: fx.date || "", time: fx.time || "06:15", endTime: fx.end_time || "10:00", venue: fx.venue || "", opens: "now", opensAt: "" });
     setPage(1);
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      const body = { date: form.date, time: form.time, venue: form.venue };
+      const body = { date: form.date, time: form.time, end_time: form.endTime, venue: form.venue };
       if (form.opens === "later" && form.opensAt) body.voting_opens_at = form.opensAt;
       const res = await api.put(`/admin/tournament/fixtures/${f.id}`, body);
       toast.success(form.opens === "later" ? "Match saved — voting opens at the time you picked" : "Match saved — voting is open");
@@ -201,6 +201,8 @@ function SetupStep() {
           ))}
           <label className="block text-sm font-bold text-gray-700 mt-3 mb-1" htmlFor="setup-time">Another time</label>
           <input id="setup-time" type="time" className="input-field" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+          <label className="block text-sm font-bold text-gray-700 mt-3 mb-1" htmlFor="setup-end">Ends at</label>
+          <input id="setup-end" type="time" className="input-field" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
           <Big onClick={() => setPage(3)} disabled={!form.time}>Next</Big>
           <Big kind="white" onClick={() => setPage(1)}><ChevronLeft size={20} /> Back</Big>
         </>
@@ -240,7 +242,7 @@ function SetupStep() {
           <Card>
             <TeamsVs a={f.team1_name} b={f.team2_name} />
             <dl className="divide-y divide-gray-100 text-base">
-              {[["📅 Day", formatDateDisplay(form.date)], ["🕕 Starts", time12(form.time)], ["📍 Ground", form.venue || "—"],
+              {[["📅 Day", formatDateDisplay(form.date)], ["🕕 Time", `${time12(form.time)}${form.endTime ? ` – ${time12(form.endTime)}` : ""}`], ["📍 Ground", form.venue || "—"],
                 ["🗳 Voting opens", form.opens === "now" ? "Right now" : form.opensAt.replace("T", " at ")]].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2.5"><dt className="text-gray-600">{k}</dt><dd className="font-bold text-gray-900">{v}</dd></div>
               ))}

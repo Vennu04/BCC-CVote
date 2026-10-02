@@ -115,11 +115,15 @@ def _sync_match_slot_and_window(fixture, team1, team2, voting_opens_at=None):
             # instantly closed and unusable.
             closes_at = opens_at + timedelta(hours=6)
 
+    end_str = fixture.get("end_time") if time_str else None
+    start_display = _12h_display(time_str) or ""
+    end_display = _12h_display(end_str) if end_str else None
     slot_fields = {
         "day": datetime.fromisoformat(fixture["date"]).strftime("%A"),
         "time_of_day": "Evening" if (time_str and int(time_str.split(":")[0]) >= 16) else "Morning",
-        "match_time": _12h_display(time_str) or "",
+        "match_time": f"{start_display} – {end_display}" if start_display and end_display else start_display,
         "start_time": time_str,
+        "end_time": end_str if end_display else None,
         "description": fixture.get("venue") or "",
         "match_date": fixture["date"],
         "team_a_id": str(team1["_id"]), "team_a_name": team1["name"],
@@ -133,7 +137,6 @@ def _sync_match_slot_and_window(fixture, team1, team2, voting_opens_at=None):
         slot_id = mongo.db.match_slots.insert_one({
             **slot_fields,
             "slot_number": (last_slot["slot_number"] + 1) if last_slot else 1,
-            "end_time": None,
             "is_adhoc": True,
             "is_active": True,
             "created_at": now,
@@ -161,8 +164,27 @@ def _sync_match_slot_and_window(fixture, team1, team2, voting_opens_at=None):
     return str(slot_id)
 
 
-def _team_to_dict(t):
-    return {"id": str(t["_id"]), "name": t["name"], "group": t["group"]}
+def _captain_names(teams):
+    ids = [ObjectId(t["captain_id"]) for t in teams if ObjectId.is_valid(t.get("captain_id") or "")]
+    return {str(u["_id"]): u["name"] for u in mongo.db.users.find({"_id": {"$in": ids}}, {"name": 1})} if ids else {}
+
+
+def _team_to_dict(t, captain_names=None):
+    cid = t.get("captain_id")
+    return {"id": str(t["_id"]), "name": t["name"], "group": t["group"],
+            "captain_id": cid, "captain_name": (captain_names or {}).get(cid) if cid else None}
+
+
+# Matches store a denormalised copy of each team's name (match_slots
+# team_a_name/team_b_name) — keep every match of this team in step when it's
+# renamed, and keep the captain's own team_name (shown on their profile, and
+# the fallback for spotting captains) in step with the team.
+def _sync_team_everywhere(team):
+    tid = str(team["_id"])
+    mongo.db.match_slots.update_many({"team_a_id": tid}, {"$set": {"team_a_name": team["name"]}})
+    mongo.db.match_slots.update_many({"team_b_id": tid}, {"$set": {"team_b_name": team["name"]}})
+    if ObjectId.is_valid(team.get("captain_id") or ""):
+        mongo.db.users.update_one({"_id": ObjectId(team["captain_id"])}, {"$set": {"team_name": team["name"].upper()}})
 
 
 # Where each fixture is on the way to an auction — voting window state plus
@@ -217,6 +239,7 @@ def _fixture_to_dict(f, teams_by_id, schedule=None):
         "team2_name": team2["name"] if team2 else "Unknown",
         "date": f.get("date"),
         "time": f.get("time"),
+        "end_time": f.get("end_time"),
         "venue": f.get("venue"),
         "result": f.get("result"),
         "match_slot_id": f.get("match_slot_id"),
@@ -228,7 +251,8 @@ def _fixture_to_dict(f, teams_by_id, schedule=None):
 @jwt_required()
 def list_teams():
     teams = list(mongo.db.tournament_teams.find().sort([("group", 1), ("name", 1)]))
-    return jsonify({"teams": [_team_to_dict(t) for t in teams]})
+    names = _captain_names(teams)
+    return jsonify({"teams": [_team_to_dict(t, names) for t in teams]})
 
 
 @tournament_bp.route("/tournament/fixtures", methods=["GET"])
@@ -275,12 +299,25 @@ def update_team(team_id):
         if group not in GROUPS:
             return jsonify({"error": "group must be A, B, or C"}), 400
         updates["group"] = group
+    if "captain_id" in data:
+        cid = data["captain_id"] or None
+        if cid:
+            captain = mongo.db.users.find_one({"_id": ObjectId(cid), "role": "captain", "is_active": True}) \
+                if ObjectId.is_valid(cid) else None
+            if not captain:
+                return jsonify({"error": "Pick an active captain"}), 400
+            other = mongo.db.tournament_teams.find_one({"captain_id": cid, "_id": {"$ne": team_oid}})
+            if other:
+                return jsonify({"error": f"{captain['name']} is already captain of {other['name']}"}), 400
+        updates["captain_id"] = cid
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
     result = mongo.db.tournament_teams.update_one({"_id": team_oid}, {"$set": updates})
     if result.matched_count == 0:
         return jsonify({"error": "Team not found"}), 404
-    return jsonify({"success": True})
+    team = mongo.db.tournament_teams.find_one({"_id": team_oid})
+    _sync_team_everywhere(team)
+    return jsonify({"success": True, "team": _team_to_dict(team, _captain_names([team]))})
 
 
 @tournament_bp.route("/admin/tournament/teams/<team_id>", methods=["DELETE"])
@@ -325,6 +362,7 @@ def create_fixture():
         "team2_id": team2_oid,
         "date": (data.get("date") or "").strip() or None,
         "time": (data.get("time") or "").strip() or None,
+        "end_time": (data.get("end_time") or "").strip() or None,
         "venue": (data.get("venue") or "").strip() or None,
         "result": None,
         "created_at": datetime.utcnow(),
@@ -351,7 +389,7 @@ def update_fixture(fixture_id):
         return jsonify({"error": "Fixture not found"}), 404
     data = request.get_json() or {}
     updates = {}
-    for field in ("date", "time", "venue", "result"):
+    for field in ("date", "time", "end_time", "venue", "result"):
         if field in data:
             value = data[field]
             updates[field] = (value.strip() or None) if isinstance(value, str) else value
@@ -377,7 +415,7 @@ def update_fixture(fixture_id):
     merged = {**fixture, **updates}
     team1 = mongo.db.tournament_teams.find_one({"_id": merged["team1_id"]})
     team2 = mongo.db.tournament_teams.find_one({"_id": merged["team2_id"]})
-    if any(k in data for k in ("date", "time", "voting_opens_at")):
+    if any(k in data for k in ("date", "time", "end_time", "voting_opens_at")):
         if team1 and team2:
             try:
                 voting_opens_at = _parse_voting_opens(

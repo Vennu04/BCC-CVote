@@ -686,6 +686,10 @@ def list_players():
     # here (and to /attendance below) plus matching frontend fetch changes
     # before this becomes a real payload-size problem — deliberately deferred
     # rather than built speculatively.
+    # ?inactive=1 lists removed people instead, so an admin can bring them back.
+    if request.args.get("inactive"):
+        gone = mongo.db.users.find({"is_active": False, **VOTER_FILTER}).sort("name", 1)
+        return jsonify([_user_to_dict(p) for p in gone])
     players = list(mongo.db.users.find(
         {"is_active": True, **VOTER_FILTER}
     ).sort("name", 1))

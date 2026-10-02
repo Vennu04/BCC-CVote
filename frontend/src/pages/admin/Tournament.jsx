@@ -31,6 +31,7 @@ function fixtureStage(f) {
 
 export default function AdminTournament() {
   const [teams, setTeams] = useState([]);
+  const [captains, setCaptains] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeGroup, setActiveGroup] = useState("A");
@@ -56,6 +57,23 @@ export default function AdminTournament() {
   };
 
   useEffect(fetchData, []);
+  useEffect(() => { api.get("/admin/captains").then((r) => setCaptains(r.data || [])).catch(() => {}); }, []);
+
+  // The team's captain is picked here once; matches, auctions and This week
+  // all follow it (and follow renames of the team or the captain).
+  const handleSetCaptain = async (team, captainId) => {
+    setSavingTeam(team.id);
+    try {
+      await api.put(`/admin/tournament/teams/${team.id}`, { captain_id: captainId || null });
+      const who = captains.find((c) => c.id === captainId)?.name;
+      toast.success(who ? `${who} is now captain of ${team.name}` : `Captain cleared for ${team.name}`);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Couldn't set the captain");
+    } finally {
+      setSavingTeam(null);
+    }
+  };
 
   const groupTeams = teams.filter((t) => t.group === activeGroup);
   const groupFixtures = fixtures.filter((f) => f.group === activeGroup);
@@ -211,13 +229,24 @@ export default function AdminTournament() {
             {groupTeams.map((t) => {
               const dirty = teamEdits[t.id] !== undefined && teamEdits[t.id] !== t.name;
               return (
-                <div key={t.id} className="flex items-center gap-2">
+                <div key={t.id} className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                   <input
                     type="text"
-                    className="input-field flex-1 text-sm py-2"
+                    className="input-field flex-1 min-w-[10rem] text-sm py-2"
+                    aria-label="Team name"
                     value={teamEdits[t.id] ?? t.name}
                     onChange={(e) => setTeamEdits({ ...teamEdits, [t.id]: e.target.value })}
                   />
+                  <select
+                    className="input-field flex-1 min-w-[9rem] text-sm py-2"
+                    aria-label={`Captain of ${t.name}`}
+                    value={t.captain_id || ""}
+                    disabled={savingTeam === t.id}
+                    onChange={(e) => handleSetCaptain(t, e.target.value)}
+                  >
+                    <option value="">🧢 Pick captain…</option>
+                    {captains.map((c) => <option key={c.id} value={c.id}>🧢 {c.name}</option>)}
+                  </select>
                   <button
                     type="button"
                     onClick={() => handleSaveTeam(t.id)}
@@ -304,6 +333,15 @@ export default function AdminTournament() {
                       disabled={scheduleLocked}
                       value={edit.time ?? f.time ?? ""}
                       onChange={(e) => setFixtureEdits({ ...fixtureEdits, [f.id]: { ...edit, time: e.target.value } })}
+                    />
+                    <input
+                      type="time"
+                      className="input-field text-xs py-1.5"
+                      title="End time"
+                      aria-label="End time"
+                      disabled={scheduleLocked}
+                      value={edit.end_time ?? f.end_time ?? ""}
+                      onChange={(e) => setFixtureEdits({ ...fixtureEdits, [f.id]: { ...edit, end_time: e.target.value } })}
                     />
                     <input
                       type="text"
