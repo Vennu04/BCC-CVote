@@ -91,10 +91,11 @@ def test_attendance_step_done_once_everyone_credited(client, admin_headers, make
     assert "Credit attendance" not in [t["title"] for t in data["todos"]]
 
 
-def test_weekend_duty_gaps_become_todos(client, admin_headers, match):
-    match(_saturday(weeks_ahead=0))  # this week's Saturday: its Friday auction is within 7 days
+def test_no_duty_confirmation_todos(client, admin_headers, match):
+    # Any admin can run the auction, so nobody is nagged to pick a Lead/Backup.
+    match(_saturday(weeks_ahead=0))
     titles = [t["title"] for t in _get(client, admin_headers)["todos"]]
-    assert any(t.startswith("No Lead for the Fri auction") for t in titles)
+    assert not any("Lead" in t or "Backup" in t for t in titles)
 
 
 def test_completed_auction_needs_nothing(client, admin_headers, make_user, match):

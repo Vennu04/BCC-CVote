@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeSteps, unresolvedOdd, defaultMatch } from "./week";
+import { STEP_KEYS, computeSteps, unresolvedOdd, defaultMatch } from "./week";
 
 const base = {
   slot_id: "s1", label: "Hawks vs Royals", kickoff: "06:15 AM", is_weekend: true,
@@ -16,7 +16,6 @@ describe("This week steps", () => {
     expect(s.close).toBe("open");
     expect(s.attend).toBe("locked");
     expect(s.odd).toBe("locked");
-    expect(s.duty).toBe("open");
     expect(s.start).toBe("locked");
     expect(s.share).toBe("locked");
   });
@@ -25,7 +24,7 @@ describe("This week steps", () => {
     const s = states({ ...base, voting: { state: "scheduled" } });
     expect(s.votes).toBe("locked");
     expect(s.close).toBe("locked");
-    expect(s.duty).toBe("now");
+    expect(Object.values(s)).not.toContain("now");
   });
 
   it("after closing: attendance is next; odd groups block the start", () => {
@@ -47,8 +46,9 @@ describe("This week steps", () => {
     expect(s.start).toBe("now");
   });
 
-  it("weekday matches need no duty roster", () => {
-    expect(states({ ...base, is_weekend: false }).duty).toBe("done");
+  it("has no duty step — any admin can run the auction", () => {
+    expect(STEP_KEYS).not.toContain("duty");
+    expect(states(base).duty).toBeUndefined();
   });
 
   it("a finished auction leaves only sharing, then everything is done", () => {

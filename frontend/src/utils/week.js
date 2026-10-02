@@ -1,9 +1,9 @@
-// "This week" checklist — the 8 guided steps an admin walks through for one
+// "This week" checklist — the 7 guided steps an admin walks through for one
 // match, worked out from /admin/overview plus two things only this browser
 // knows (who sits out of an odd category, and whether the teams were already
 // copied for WhatsApp). Pure functions so the rules are unit-tested.
 
-export const STEP_KEYS = ["setup", "votes", "close", "attend", "odd", "duty", "start", "share"];
+export const STEP_KEYS = ["setup", "votes", "close", "attend", "odd", "start", "share"];
 
 export const STEP_TITLES = {
   setup: "Set up the match",
@@ -11,7 +11,6 @@ export const STEP_TITLES = {
   close: "Close voting",
   attend: "Credit attendance",
   odd: "Fix odd numbers",
-  duty: "Confirm who runs it",
   start: "Start the auction",
   share: "Share the teams",
 };
@@ -50,7 +49,6 @@ export function computeSteps(match, { sitOuts = {}, shared = false } = {}) {
   const closed = votingClosed(match);
   const odd = unresolvedOdd(match, sitOuts);
   const credited = auction === "completed" || (c.available > 0 && match.attendance_credited >= c.available);
-  const dutyDone = !match.is_weekend || !!match.duty?.lead_id;
 
   const steps = {
     setup: { done: true, detail: `${match.label} · ${match.kickoff || ""}`.trim() },
@@ -73,11 +71,6 @@ export function computeSteps(match, { sitOuts = {}, shared = false } = {}) {
       done: closed && odd.length === 0,
       detail: odd.length ? `${odd.map(groupName).join(", ")} ${odd.length > 1 ? "are" : "is"} odd` : "All groups even",
       lock: closed ? null : "Close voting first",
-    },
-    duty: {
-      done: dutyDone,
-      detail: !match.is_weekend ? "Weekday match — the Organiser runs it"
-        : match.duty?.lead_id ? "Lead and Backup confirmed" : "Pick a Lead and a Backup",
     },
     start: {
       done: auction === "completed",

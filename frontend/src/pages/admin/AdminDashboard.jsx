@@ -6,7 +6,6 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import AvailabilityGrid from "../../components/AvailabilityGrid";
 import YetToVotePanel from "../../components/YetToVotePanel";
-import DutySummary from "../../components/DutySummary";
 import { TeamsVs } from "../../components/TeamCrest";
 import { LoadingState } from "../../components/LoadingState";
 import { STATUS_STYLES } from "../../utils/windowStatus";
@@ -152,8 +151,6 @@ export default function VotesInsights() {
                 </ul>
               )}
             </section>
-
-            <DutySummary variant="dark" />
 
             {/* Matches */}
             <section>
