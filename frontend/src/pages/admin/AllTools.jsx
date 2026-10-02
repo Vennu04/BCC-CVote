@@ -5,13 +5,14 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import { useAuth } from "../../context/AuthContext";
 import { canDoDestructive } from "../../utils/roles";
-import { CalendarDays, Vote, PlusCircle, Users, ClipboardCheck, Gavel, FlaskConical, CalendarClock, BarChart3, Download, ChevronRight, Shield, SlidersHorizontal } from "lucide-react";
+import { CalendarDays, Vote, PlusCircle, Users, ClipboardCheck, Gavel, FlaskConical, CalendarClock, BarChart3, Download, ChevronRight, Shield, SlidersHorizontal, CalendarCheck } from "lucide-react";
 
 // Manage › All tools — every admin page from before the guided checklist,
 // kept for anything unusual. Nothing was removed; This week just means you
 // rarely need to come here.
 const TOOLS = [
   { to: "/manage/matches/fixtures", icon: CalendarDays, title: "Fixtures & teams", text: "Dates, results, add or rename teams" },
+  { to: "/schedule", icon: CalendarCheck, title: "Match dates", text: "Captains agree a date; it's set when both tick" },
   { to: "/manage/matches/windows", icon: Vote, title: "Voting times", text: "Open, close early or cancel a match" },
   { to: "/manage/matches/windows#extra", icon: PlusCircle, title: "Extra match", text: "A match on any date — rain day, holiday" },
   { to: "/manage/players/people", icon: Users, title: "People", text: "Groups, passwords, stats, add or remove" },

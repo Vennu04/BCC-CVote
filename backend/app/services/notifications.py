@@ -114,6 +114,15 @@ EVENT_MESSAGES = {
         f"You're on duty for {ctx.get('label', 'tonight')} ({ctx.get('when', 'tonight')}). "
         "Close voting early and check both captains are ready.",
     ),
+    "match_dates_proposed": lambda ctx: (
+        "📅 Pick a match date", f"{ctx.get('label', 'Your match')}: tick the dates you can play."
+    ),
+    "match_dates_rejected": lambda ctx: (
+        "📅 None of those dates work", f"{ctx.get('label', 'Your match')}: the other captain can't make any — suggest new dates."
+    ),
+    "match_date_fixed": lambda ctx: (
+        "✅ Match date fixed", f"{ctx.get('label', 'The match')} is on {ctx.get('when', 'the agreed date')}. Voting is open."
+    ),
     "player_sold": lambda ctx: (
         "🏏 Player sold!",
         f"{ctx.get('player_name', 'A player')} was sold to {ctx.get('team_name', 'a team')}"

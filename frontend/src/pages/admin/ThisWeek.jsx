@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import api from "../../utils/api";
 import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
+import DateRequestsCard from "../../components/DateRequestsCard";
 import { LoadingState } from "../../components/LoadingState";
 import { shortDay } from "../../utils/duty";
 import { STEP_KEYS, activeMatches, computeSteps, defaultMatch, getSitOuts, wasShared } from "../../utils/week";
@@ -65,6 +66,7 @@ export default function ThisWeek() {
         subtitle={selected ? `${selected.label} · ${shortDay(selected.match_date)}${selected.kickoff ? ` · ${selected.kickoff}` : ""}` : "Your jobs for this week's matches"} />
 
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
+        <DateRequestsCard admin />
         {error && !overview ? (
           <div className="bg-white rounded-2xl shadow-soft p-6 text-center">
             <p className="font-bold text-gray-900">Couldn't load this week</p>
