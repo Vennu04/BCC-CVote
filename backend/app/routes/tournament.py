@@ -1,18 +1,80 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timedelta
 import pytz
 
 from .. import mongo
-from ..utils.auth import admin_required
+from ..utils.auth import admin_required, admin_only_required
+from ..utils.audit import log_action
 from ..utils.time_utils import IST, utcnow, utc_to_ist, format_ist
 from .admin import _window_info, _window_status
 
 tournament_bp = Blueprint("tournament", __name__)
 
-GROUPS = ("A", "B", "C")
+DEFAULT_GROUPS = ["A", "B", "C"]
+DEFAULT_TOURNAMENT_NAME = "BCC Tournament 2026"
+
+
+# ── Tournaments ────────────────────────────────────────────────────────────────
+# Teams and fixtures belong to a tournament; exactly one is "active" (the
+# current one) and every page works on it. When a tournament is over, an admin
+# starts a new one with its own groups (A/B/C/D… whatever is needed) and the
+# old one is kept, read-only, as history — no developer or build involved.
+# The very first call adopts everything that existed before tournaments did
+# into a default tournament, so nothing is lost.
+
+def _clean_groups(raw):
+    groups, seen = [], set()
+    for g in raw or []:
+        g = " ".join(str(g).split()).upper()
+        if not g or len(g) > 12 or not all(ch.isalnum() or ch == " " for ch in g):
+            raise ValueError("Group names must be 1–12 letters or numbers (e.g. A, B, C or D)")
+        if g not in seen:
+            seen.add(g)
+            groups.append(g)
+    if not groups:
+        raise ValueError("A tournament needs at least one group")
+    return groups
+
+
+def current_tournament():
+    t = mongo.db.tournaments.find_one({"status": "active"}, sort=[("created_at", -1)])
+    if t:
+        return t
+    if mongo.db.tournaments.count_documents({}) == 0:
+        groups = sorted(set(mongo.db.tournament_teams.distinct("group"))) or DEFAULT_GROUPS
+        # Upsert on a fixed marker (unique index) so two first requests at once
+        # can't create two default tournaments.
+        try:
+            mongo.db.tournaments.update_one({"seed": "initial"}, {"$setOnInsert": {
+                "name": DEFAULT_TOURNAMENT_NAME, "groups": groups, "status": "active", "created_at": datetime.utcnow(),
+            }}, upsert=True)
+        except DuplicateKeyError:
+            pass
+        tid = mongo.db.tournaments.find_one({"seed": "initial"})["_id"]
+        for coll in (mongo.db.tournament_teams, mongo.db.tournament_fixtures):
+            coll.update_many({"tournament_id": {"$exists": False}}, {"$set": {"tournament_id": tid}})
+        return mongo.db.tournaments.find_one({"_id": tid})
+    return mongo.db.tournaments.find_one(sort=[("created_at", -1)])
+
+
+def _tournament_for_request():
+    """?tournament_id= picks an older tournament (read-only history); else the current one."""
+    tid = _object_id(request.args.get("tournament_id")) if request.args.get("tournament_id") else None
+    if tid:
+        t = mongo.db.tournaments.find_one({"_id": tid})
+        if t:
+            return t
+    return current_tournament()
+
+
+def _tournament_to_dict(t):
+    return {"id": str(t["_id"]), "name": t["name"], "groups": t.get("groups") or DEFAULT_GROUPS,
+            "status": t.get("status", "finished"),
+            "team_count": mongo.db.tournament_teams.count_documents({"tournament_id": t["_id"]})}
 
 
 def _12h_display(value):
@@ -250,16 +312,18 @@ def _fixture_to_dict(f, teams_by_id, schedule=None):
 @tournament_bp.route("/tournament/teams", methods=["GET"])
 @jwt_required()
 def list_teams():
-    teams = list(mongo.db.tournament_teams.find().sort([("group", 1), ("name", 1)]))
+    t = _tournament_for_request()
+    teams = list(mongo.db.tournament_teams.find({"tournament_id": t["_id"]}).sort([("group", 1), ("name", 1)]))
     names = _captain_names(teams)
-    return jsonify({"teams": [_team_to_dict(t, names) for t in teams]})
+    return jsonify({"teams": [_team_to_dict(x, names) for x in teams], "tournament": _tournament_to_dict(t)})
 
 
 @tournament_bp.route("/tournament/fixtures", methods=["GET"])
 @jwt_required()
 def list_fixtures():
-    teams_by_id = {str(t["_id"]): t for t in mongo.db.tournament_teams.find()}
-    fixtures = list(mongo.db.tournament_fixtures.find().sort([("group", 1), ("match_number", 1)]))
+    t = _tournament_for_request()
+    teams_by_id = {str(x["_id"]): x for x in mongo.db.tournament_teams.find({"tournament_id": t["_id"]})}
+    fixtures = list(mongo.db.tournament_fixtures.find({"tournament_id": t["_id"]}).sort([("group", 1), ("match_number", 1)]))
     schedules = _schedule_info_by_fixture(fixtures)
     return jsonify({
         "fixtures": [_fixture_to_dict(f, teams_by_id, schedules.get(str(f["_id"]))) for f in fixtures]
@@ -271,12 +335,13 @@ def list_fixtures():
 def create_team():
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
-    group = (data.get("group") or "").strip().upper()
-    if not name or group not in GROUPS:
-        return jsonify({"error": "name and a valid group (A/B/C) are required"}), 400
-    if mongo.db.tournament_teams.find_one({"name": name, "group": group}):
-        return jsonify({"error": "A team with this name already exists in this group"}), 400
-    doc = {"name": name, "group": group, "created_at": datetime.utcnow()}
+    group = " ".join((data.get("group") or "").split()).upper()
+    t = current_tournament()
+    if not name or group not in t["groups"]:
+        return jsonify({"error": f"name and a group ({', '.join(t['groups'])}) are required"}), 400
+    if mongo.db.tournament_teams.find_one({"name": name, "tournament_id": t["_id"]}):
+        return jsonify({"error": "A team with this name already exists in this tournament"}), 400
+    doc = {"name": name, "group": group, "tournament_id": t["_id"], "created_at": datetime.utcnow()}
     doc["_id"] = mongo.db.tournament_teams.insert_one(doc).inserted_id
     return jsonify({"team": _team_to_dict(doc)}), 201
 
@@ -294,10 +359,14 @@ def update_team(team_id):
         if not name:
             return jsonify({"error": "name cannot be empty"}), 400
         updates["name"] = name
+    existing = mongo.db.tournament_teams.find_one({"_id": team_oid})
+    if not existing:
+        return jsonify({"error": "Team not found"}), 404
+    tour = mongo.db.tournaments.find_one({"_id": existing.get("tournament_id")}) or current_tournament()
     if "group" in data:
-        group = (data["group"] or "").strip().upper()
-        if group not in GROUPS:
-            return jsonify({"error": "group must be A, B, or C"}), 400
+        group = " ".join((data["group"] or "").split()).upper()
+        if group not in tour["groups"]:
+            return jsonify({"error": f"group must be one of {', '.join(tour['groups'])}"}), 400
         updates["group"] = group
     if "captain_id" in data:
         cid = data["captain_id"] or None
@@ -306,7 +375,8 @@ def update_team(team_id):
                 if ObjectId.is_valid(cid) else None
             if not captain:
                 return jsonify({"error": "Pick an active captain"}), 400
-            other = mongo.db.tournament_teams.find_one({"captain_id": cid, "_id": {"$ne": team_oid}})
+            other = mongo.db.tournament_teams.find_one({"captain_id": cid, "_id": {"$ne": team_oid},
+                                                        "tournament_id": existing.get("tournament_id")})
             if other:
                 return jsonify({"error": f"{captain['name']} is already captain of {other['name']}"}), 400
         updates["captain_id"] = cid
@@ -338,24 +408,26 @@ def delete_team(team_id):
 @admin_required
 def create_fixture():
     data = request.get_json() or {}
-    group = (data.get("group") or "").strip().upper()
+    group = " ".join((data.get("group") or "").split()).upper()
     team1_oid = _object_id(data.get("team1_id"))
     team2_oid = _object_id(data.get("team2_id"))
-    if group not in GROUPS or not team1_oid or not team2_oid:
+    tour = current_tournament()
+    if group not in tour["groups"] or not team1_oid or not team2_oid:
         return jsonify({"error": "group, team1_id, and team2_id are required"}), 400
     if team1_oid == team2_oid:
         return jsonify({"error": "A team cannot play itself"}), 400
-    team1 = mongo.db.tournament_teams.find_one({"_id": team1_oid})
-    team2 = mongo.db.tournament_teams.find_one({"_id": team2_oid})
+    team1 = mongo.db.tournament_teams.find_one({"_id": team1_oid, "tournament_id": tour["_id"]})
+    team2 = mongo.db.tournament_teams.find_one({"_id": team2_oid, "tournament_id": tour["_id"]})
     if not team1 or not team2:
-        return jsonify({"error": "One or both teams not found"}), 404
+        return jsonify({"error": "One or both teams not found in the current tournament"}), 404
     try:
         voting_opens_at = _parse_voting_opens((data.get("voting_opens_at") or "").strip())
     except ScheduleError as e:
         return jsonify({"error": str(e)}), e.status
-    last = mongo.db.tournament_fixtures.find_one({"group": group}, sort=[("match_number", -1)])
+    last = mongo.db.tournament_fixtures.find_one({"group": group, "tournament_id": tour["_id"]}, sort=[("match_number", -1)])
     match_number = (last["match_number"] + 1) if last else 1
     doc = {
+        "tournament_id": tour["_id"],
         "group": group,
         "match_number": match_number,
         "team1_id": team1_oid,
@@ -448,3 +520,74 @@ def delete_fixture(fixture_id):
     if result.deleted_count == 0:
         return jsonify({"error": "Fixture not found"}), 404
     return jsonify({"success": True})
+
+
+@tournament_bp.route("/tournaments", methods=["GET"])
+@jwt_required()
+def list_tournaments():
+    current = current_tournament()
+    all_t = list(mongo.db.tournaments.find().sort("created_at", -1))
+    return jsonify({"current_id": str(current["_id"]), "tournaments": [_tournament_to_dict(t) for t in all_t]})
+
+
+@tournament_bp.route("/admin/tournaments", methods=["POST"])
+@admin_only_required
+def start_tournament():
+    """Finish the current tournament and start a new one.
+    Body: {"name", "groups": ["A","B",...], "copy_teams": bool} — copy_teams
+    brings over the current tournament's teams, groups and captains."""
+    data = request.get_json(silent=True) or {}
+    name = " ".join((data.get("name") or "").split())
+    if not name:
+        return jsonify({"error": "Give the tournament a name"}), 400
+    try:
+        groups = _clean_groups(data.get("groups"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    old = current_tournament()
+    now = datetime.utcnow()
+    new_id = mongo.db.tournaments.insert_one(
+        {"name": name, "groups": groups, "status": "active", "created_at": now}).inserted_id
+    mongo.db.tournaments.update_one({"_id": old["_id"]}, {"$set": {"status": "finished", "finished_at": now}})
+    copied = 0
+    if data.get("copy_teams"):
+        for team in mongo.db.tournament_teams.find({"tournament_id": old["_id"]}):
+            group = team["group"] if team["group"] in groups else groups[0]
+            mongo.db.tournament_teams.insert_one({
+                "name": team["name"], "group": group, "captain_id": team.get("captain_id"),
+                "tournament_id": new_id, "created_at": now,
+            })
+            copied += 1
+    log_action(get_jwt_identity(), "create", "tournament", str(new_id),
+               old_value={"finished": str(old["_id"])}, new_value={"name": name, "groups": groups, "copied_teams": copied})
+    return jsonify({"tournament": _tournament_to_dict(mongo.db.tournaments.find_one({"_id": new_id})),
+                    "copied_teams": copied}), 201
+
+
+@tournament_bp.route("/admin/tournaments/<tournament_id>", methods=["PUT"])
+@admin_required
+def update_tournament(tournament_id):
+    """Rename a tournament or change its groups (add any; remove only an empty one)."""
+    t = mongo.db.tournaments.find_one({"_id": _object_id(tournament_id)}) if _object_id(tournament_id) else None
+    if not t:
+        return jsonify({"error": "Tournament not found"}), 404
+    data = request.get_json(silent=True) or {}
+    updates = {}
+    if "name" in data:
+        name = " ".join((data.get("name") or "").split())
+        if not name:
+            return jsonify({"error": "Give the tournament a name"}), 400
+        updates["name"] = name
+    if "groups" in data:
+        try:
+            groups = _clean_groups(data.get("groups"))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        for removed in set(t.get("groups") or []) - set(groups):
+            if mongo.db.tournament_teams.find_one({"tournament_id": t["_id"], "group": removed}):
+                return jsonify({"error": f"Group {removed} still has teams — move or remove them first"}), 400
+        updates["groups"] = groups
+    if not updates:
+        return jsonify({"error": "Nothing to change"}), 400
+    mongo.db.tournaments.update_one({"_id": t["_id"]}, {"$set": updates})
+    return jsonify({"tournament": _tournament_to_dict(mongo.db.tournaments.find_one({"_id": t["_id"]}))})

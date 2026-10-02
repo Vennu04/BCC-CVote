@@ -10,7 +10,6 @@ import { Link } from "react-router-dom";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { Trophy, Users, Calendar, Plus, Trash2, Save, Clock, Vote, Gavel } from "lucide-react";
 
-const GROUPS = ["A", "B", "C"];
 const EMPTY_FIXTURE = { team1_id: "", team2_id: "", date: "", time: "", venue: "", voting_opens_at: "" };
 
 // One-line "what happens next" for a fixture, from the backend's window +
@@ -31,6 +30,9 @@ function fixtureStage(f) {
 
 export default function AdminTournament() {
   const [teams, setTeams] = useState([]);
+  const [tournament, setTournament] = useState(null);
+  const [tourForm, setTourForm] = useState(null); // null | {mode: "groups"|"new", name, groups, copy}
+  const [savingTour, setSavingTour] = useState(false);
   const [captains, setCaptains] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,9 @@ export default function AdminTournament() {
     Promise.all([api.get("/tournament/teams"), api.get("/tournament/fixtures")])
       .then(([teamsRes, fixturesRes]) => {
         setTeams(teamsRes.data.teams || []);
+        const tour = teamsRes.data.tournament || null;
+        setTournament(tour);
+        if (tour?.groups?.length) setActiveGroup((g) => (tour.groups.includes(g) ? g : tour.groups[0]));
         setFixtures(fixturesRes.data.fixtures || []);
       })
       .catch(() => toast.error("Failed to load tournament data"))
@@ -75,7 +80,29 @@ export default function AdminTournament() {
     }
   };
 
+  const GROUPS = tournament?.groups || ["A", "B", "C"];
   const groupTeams = teams.filter((t) => t.group === activeGroup);
+
+  const parseGroups = (text) => text.split(/[,\s]+/).map((g) => g.trim().toUpperCase()).filter(Boolean);
+  const saveTournament = async () => {
+    const groups = parseGroups(tourForm.groups);
+    setSavingTour(true);
+    try {
+      if (tourForm.mode === "groups") {
+        await api.put(`/admin/tournaments/${tournament.id}`, { name: tourForm.name, groups });
+        toast.success("Tournament updated");
+      } else {
+        const res = await api.post("/admin/tournaments", { name: tourForm.name, groups, copy_teams: tourForm.copy });
+        toast.success(`${tourForm.name} started${res.data.copied_teams ? ` — ${res.data.copied_teams} teams copied` : ""}`);
+      }
+      setTourForm(null);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Couldn't save the tournament");
+    } finally {
+      setSavingTour(false);
+    }
+  };
   const groupFixtures = fixtures.filter((f) => f.group === activeGroup);
 
   const handleAddTeam = async (e) => {
@@ -204,13 +231,56 @@ export default function AdminTournament() {
       <ManageHeader hub="matches" sub="fixtures" subtitle="Teams, groups and the fixture schedule — saving a date creates the match and opens voting" />
       <div className="max-w-4xl mx-auto px-4 py-4">
 
-        <div className="flex gap-2 mb-6">
+        <div className="card mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Trophy size={18} className="text-pitch-600" />
+            <h2 className="font-black text-gray-900 flex-1">{tournament?.name || "Tournament"}</h2>
+            <button type="button" className="btn-secondary text-sm min-h-[44px]"
+              onClick={() => setTourForm({ mode: "groups", name: tournament?.name || "", groups: GROUPS.join(", ") })}>Edit name / groups</button>
+            <button type="button" className="btn-primary text-sm min-h-[44px]"
+              onClick={() => setTourForm({ mode: "new", name: "", groups: GROUPS.join(", "), copy: true })}>Start a new tournament</button>
+          </div>
+          {tourForm && (
+            <div className="mt-3 border-t border-gray-100 pt-3 space-y-2">
+              {tourForm.mode === "new" && (
+                <p className="text-sm text-amber-800 bg-amber-50 rounded-xl p-2">
+                  “{tournament?.name}” will be finished and kept as history (everyone can still view it). The new tournament becomes the current one.
+                </p>
+              )}
+              <label className="block text-sm font-bold text-gray-700">Name
+                <input className="input-field mt-1" value={tourForm.name} placeholder="e.g. BCC Winter Cup 2027"
+                  onChange={(e) => setTourForm({ ...tourForm, name: e.target.value })} />
+              </label>
+              <label className="block text-sm font-bold text-gray-700">Groups <span className="font-normal text-gray-500">(separate with commas, e.g. A, B, C, D)</span>
+                <input className="input-field mt-1" value={tourForm.groups}
+                  onChange={(e) => setTourForm({ ...tourForm, groups: e.target.value })} />
+              </label>
+              {tourForm.mode === "new" && (
+                <label className="flex items-center gap-2 text-sm text-gray-700 min-h-[44px]">
+                  <input type="checkbox" checked={tourForm.copy} onChange={(e) => setTourForm({ ...tourForm, copy: e.target.checked })} />
+                  Copy this tournament's teams and captains into the new one (you can change them after)
+                </label>
+              )}
+              <div className="flex gap-2">
+                <button type="button" className="btn-primary flex-1 min-h-[44px]" disabled={savingTour || !tourForm.name.trim() || parseGroups(tourForm.groups).length === 0}
+                  onClick={() => (tourForm.mode === "new"
+                    ? requestConfirm(`Finish “${tournament?.name}” and start “${tourForm.name.trim()}”?`, saveTournament)
+                    : saveTournament())}>
+                  {savingTour ? "Saving…" : tourForm.mode === "new" ? "Start tournament" : "Save"}
+                </button>
+                <button type="button" className="btn-secondary min-h-[44px]" onClick={() => setTourForm(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 mb-6 overflow-x-auto">
           {GROUPS.map((g) => (
             <button
               key={g}
               type="button"
               onClick={() => setActiveGroup(g)}
-              className={`flex-1 py-2.5 rounded-xl font-bold text-sm min-h-[44px] transition-colors duration-150 ${
+              className={`flex-1 min-w-[4.5rem] py-2.5 rounded-xl font-bold text-sm min-h-[44px] transition-colors duration-150 ${
                 activeGroup === g ? "bg-pitch-600 text-white" : "bg-white text-gray-600 border border-gray-200"
               }`}
             >
