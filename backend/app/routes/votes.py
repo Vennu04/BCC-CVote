@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 from .. import mongo, limiter
@@ -9,7 +9,8 @@ from ..utils.auth import get_current_user, captain_required
 from ..utils.time_utils import (
     is_voting_window_open, seconds_until_close,
     format_ist, now_ist, suggested_window_for_slot,
-    can_revoke_vote, revoke_deadline_for_window, effective_match_date_str, utcnow
+    can_revoke_vote, revoke_deadline_for_window, effective_match_date_str, utcnow,
+    match_datetime_for_slot, IST,
 )
 from ..services.weather import get_forecast_for_slot
 
@@ -35,7 +36,29 @@ def _visible_slots(user):
     query = {"is_active": {"$ne": False}}
     if user["role"] == "player" and not user.get("is_admin"):
         query["is_test"] = {"$ne": True}
-    return list(mongo.db.match_slots.find(query).sort("slot_number", 1))
+    slots = mongo.db.match_slots.find(query).sort("slot_number", 1)
+    return [s for s in slots if s.get("is_test") or not _match_is_over(s)]
+
+
+MATCH_LENGTH_FALLBACK = timedelta(hours=4)  # when a match has no end_time
+
+
+def _match_is_over(slot):
+    """Home lists only matches still to be played (plus the test match):
+    a match drops off once its end time has passed — end_time when set,
+    otherwise kickoff + 4h. A slot whose date can't be worked out stays."""
+    kickoff = match_datetime_for_slot(slot)
+    if not kickoff:
+        return False
+    end = kickoff + MATCH_LENGTH_FALLBACK
+    if slot.get("end_time"):
+        try:
+            hh, mm = (int(x) for x in slot["end_time"].split(":"))
+            local = datetime.strptime(effective_match_date_str(slot), "%Y-%m-%d").replace(hour=hh, minute=mm)
+            end = IST.localize(local).astimezone(pytz.utc).replace(tzinfo=None)
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return utcnow() >= end
 
 
 def _window_info(window, slot=None):
