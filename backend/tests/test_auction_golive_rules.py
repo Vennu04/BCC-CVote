@@ -20,16 +20,16 @@ def _create(client, headers, setup):
     }, headers=headers)
 
 
-def test_admin_linked_to_a_chosen_captain_cannot_create_the_auction(
+def test_admin_who_is_one_of_the_captains_can_still_run_the_auction(
     client, make_user, auth_header, make_auction_setup
 ):
+    # Any admin may run any auction, even one they captain — no conflict block.
     setup = make_auction_setup([("classic", None, None)] * 22)
     linked_admin = make_user(
         "admin", "LINKEDADMIN", "pw", linked_captain_id=str(setup["captain_a"]["_id"])
     )
     res = _create(client, auth_header(linked_admin), setup)
-    assert res.status_code == 403
-    assert "someone else" in res.get_json()["error"].lower()
+    assert res.status_code == 201
 
 
 def test_admin_linked_to_an_unrelated_captain_can_still_create_it(

@@ -715,18 +715,8 @@ def create_auction():
     if captain_a_id == captain_b_id:
         return jsonify({"error": "captain_a_id and captain_b_id must be different"}), 400
 
-    # Conflict of interest: an admin who is also (in real life) one of the two
-    # captains shouldn't be the one running their own auction — someone else
-    # from the admin team should conduct it instead. linked_captain_id is set
-    # once, by hand, on the small number of dual-role admin accounts that
-    # need it (see scripts/link_dual_role_captains.py) — most admins have no
-    # such link and this check is simply a no-op for them.
-    acting_admin = get_current_user()
-    linked_captain_id = acting_admin.get("linked_captain_id") if acting_admin else None
-    if linked_captain_id and linked_captain_id in (captain_a_id, captain_b_id):
-        return jsonify({
-            "error": "You're linked to one of the chosen captains — someone else from the admin team must run this auction"
-        }), 403
+    # Any admin may run any auction — including one where they're a captain
+    # (the user's call: no conflict-of-interest block, no duty confirmation).
 
     slot = mongo.db.match_slots.find_one({"_id": ObjectId(slot_id)})
     if not slot:
@@ -868,13 +858,6 @@ def create_practice_auction():
         return jsonify({"error": "captain_a_id and captain_b_id are required"}), 400
     if captain_a_id == captain_b_id:
         return jsonify({"error": "captain_a_id and captain_b_id must be different"}), 400
-
-    acting_admin = get_current_user()
-    linked_captain_id = acting_admin.get("linked_captain_id") if acting_admin else None
-    if linked_captain_id and linked_captain_id in (captain_a_id, captain_b_id):
-        return jsonify({
-            "error": "You're linked to one of the chosen captains — someone else from the admin team must run this auction"
-        }), 403
 
     for cid in (captain_a_id, captain_b_id):
         captain_user = mongo.db.users.find_one({"_id": ObjectId(cid), "role": "captain", "is_active": True})

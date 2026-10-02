@@ -6,14 +6,14 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import { LoadingState } from "../../components/LoadingState";
 import { shortDay } from "../../utils/duty";
-import { computeSteps, defaultMatch, getSitOuts, wasShared } from "../../utils/week";
+import { STEP_KEYS, computeSteps, defaultMatch, getSitOuts, wasShared } from "../../utils/week";
 import { Check, ChevronRight, Lock, Plus, RefreshCw, Wrench } from "lucide-react";
 
 const POLL_MS = 15000;
 const extrasFor = (slotId) => ({ sitOuts: getSitOuts(slotId), shared: wasShared(slotId) });
 
 // Manage › This week — the Control Centre as a checklist. Each match walks
-// the same 8 steps; the next one lights up, finished ones turn green, and a
+// the same 7 steps; the next one lights up, finished ones turn green, and a
 // step that can't be done yet says why. Every step opens a guided screen
 // (GuidedSteps.jsx); every other admin page lives under All tools.
 export default function ThisWeek() {
@@ -101,8 +101,8 @@ export default function ThisWeek() {
 
             <div className="bg-white rounded-2xl shadow-soft px-4 py-3">
               <div className="flex items-center justify-between text-sm font-bold text-gray-700">
-                <span>{doneCount} of 8 done</span>
-                {doneCount === 8 && <span className="text-pitch-700">All done for this match 🎉</span>}
+                <span>{doneCount} of {STEP_KEYS.length} done</span>
+                {doneCount === STEP_KEYS.length && <span className="text-pitch-700">All done for this match 🎉</span>}
               </div>
               <div className="flex gap-1 mt-2" aria-hidden="true">
                 {steps.map((s) => (

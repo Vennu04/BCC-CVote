@@ -5,8 +5,6 @@ import api from "../../utils/api";
 import Navbar from "../../components/Navbar";
 import { LoadingState } from "../../components/LoadingState";
 import { TeamsVs } from "../../components/TeamCrest";
-import { EveningCard } from "./AuctionDuty";
-import { shortDay } from "../../utils/duty";
 import { formatDateDisplay } from "../../utils/formatDate";
 import { buildWhatsAppSummary, buildPlayerListText, ACTIVE_AUCTION_KEY } from "../../utils/auctionShare";
 import {
@@ -31,7 +29,7 @@ function Shell({ stepKey, match, children }) {
       <div className="bg-brand-navy text-white">
         <div className="max-w-xl mx-auto px-4 pt-3 pb-4">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-white/70">Step {n} of 8{match ? ` · ${match.label}` : ""}</span>
+            <span className="text-sm font-bold text-white/70">Step {n} of {STEP_KEYS.length}{match ? ` · ${match.label}` : ""}</span>
             <Link to={back} className="flex items-center gap-1 text-sm font-bold text-white/80 min-h-[44px] px-2 -mr-2"><X size={18} /> Close</Link>
           </div>
           <h1 className="text-2xl font-black">{STEP_TITLES[stepKey]}</h1>
@@ -530,32 +528,7 @@ function OddStep({ match, reload }) {
   );
 }
 
-// ---------- step 6: who runs it ----------
-function DutyStep({ match }) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-  const load = useCallback(() => api.get("/admin/duty").then((r) => setData(r.data)).catch((err) => setError(err.response?.status === 403 ? "Only full admins can use the duty roster." : "Couldn't load the duty roster")), []);
-  useEffect(() => { load(); }, [load]);
-
-  if (!match.is_weekend) {
-    return (
-      <Shell stepKey="duty" match={match}>
-        <Question hint="The Organiser runs auctions for weekday matches.">Nothing to do for this match ✓</Question>
-        <BigLink to={`/manage?slot=${match.slot_id}`}>Back to This week</BigLink>
-      </Shell>
-    );
-  }
-  const evening = data?.evenings?.find((e) => e.slot_id === match.slot_id);
-  return (
-    <Shell stepKey="duty" match={match}>
-      <Question hint={`${shortDay(match.auction_date)} · the evening before the match, 7:30 – 10:30 PM`}>Who will run the auction?</Question>
-      {error ? <Card>{error}</Card> : !data ? <LoadingState /> : evening ? <EveningCard evening={evening} data={data} onChanged={load} /> : <Card>This match isn't on the roster yet.</Card>}
-      <BigLink to={`/manage?slot=${match.slot_id}`} kind="white">Back to This week</BigLink>
-    </Shell>
-  );
-}
-
-// ---------- step 7: start the auction ----------
+// ---------- step 6: start the auction ----------
 // The WhatsApp player list for both captains — its own screen before the
 // auction is created, and still shown while a created auction waits to start.
 function PlayerListCard({ text }) {
@@ -724,7 +697,7 @@ function StartStep({ match }) {
   );
 }
 
-// ---------- step 8: share the teams ----------
+// ---------- step 7: share the teams ----------
 function ShareStep({ match }) {
   const [auction, setAuction] = useState(null);
   const [shared, setShared] = useState(() => wasShared(match.slot_id));
@@ -746,7 +719,7 @@ function ShareStep({ match }) {
   if (match.auction?.status !== "completed") {
     return (
       <Shell stepKey="share" match={match}>
-        <Question hint="Finish the auction first (step 7).">Nothing to share yet</Question>
+        <Question hint="Finish the auction first (step 6).">Nothing to share yet</Question>
         <BigLink to={`/manage?slot=${match.slot_id}`} kind="white">Back to This week</BigLink>
       </Shell>
     );
@@ -758,7 +731,7 @@ function ShareStep({ match }) {
       <Big onClick={copy} disabled={!auction}><Copy size={20} /> Copy for WhatsApp</Big>
       {shared && (
         <>
-          <Card className="ring-2 ring-pitch-200 mt-3"><b className="text-pitch-800">All 8 steps done for this match 🎉</b></Card>
+          <Card className="ring-2 ring-pitch-200 mt-3"><b className="text-pitch-800">All steps done for this match 🎉</b></Card>
           <BigLink to={`/manage?slot=${match.slot_id}`} kind="white">Back to This week</BigLink>
         </>
       )}
@@ -767,7 +740,7 @@ function ShareStep({ match }) {
 }
 
 // ---------- router ----------
-const STEPS = { votes: VotesStep, close: CloseStep, attend: AttendStep, odd: OddStep, duty: DutyStep, start: StartStep, share: ShareStep };
+const STEPS = { votes: VotesStep, close: CloseStep, attend: AttendStep, odd: OddStep, start: StartStep, share: ShareStep };
 
 export default function GuidedStep() {
   const { step } = useParams();

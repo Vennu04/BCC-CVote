@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, jsonify
 
 from .. import mongo
-from ..utils.auth import admin_required, get_current_user
+from ..utils.auth import admin_required
 from ..utils.time_utils import (
     IST, effective_match_date_str, format_ist, is_voting_window_open, now_ist, utc_to_ist,
 )
@@ -65,8 +65,6 @@ def _steps(state, available, credited, odd, auction_status):
 @overview_bp.route("/admin/overview", methods=["GET"])
 @admin_required
 def admin_overview():
-    user = get_current_user()
-    full_admin = user.get("role") == "admin" or user.get("is_admin") is True
     now = now_ist()
     today = now.date()
 
@@ -170,13 +168,6 @@ def admin_overview():
         if state == "closed" and available_ids and credited < len(available_ids):
             todos.append({"level": "blue", "title": "Credit attendance", "detail": f"{where} · {len(available_ids) - credited} to credit",
                           "link": "/manage/players/attendance"})
-        if is_weekend and full_admin and auction_date <= today + timedelta(days=7):
-            if not duty.get("lead_id"):
-                todos.append({"level": "gold", "title": f"No Lead for the {auction_date.strftime('%a')} auction",
-                              "detail": where, "link": "/manage/auction/duty"})
-            elif not duty.get("backup_id"):
-                todos.append({"level": "gold", "title": f"{auction_date.strftime('%a')} auction needs a Backup",
-                              "detail": where, "link": "/manage/auction/duty"})
         if state == "open" and window and len(voter_ids - voted_ids) > 0:
             todos.append({"level": "info", "title": f"{len(voter_ids - voted_ids)} yet to vote", "detail": where,
                           "link": "/manage"})
