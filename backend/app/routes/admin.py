@@ -1668,3 +1668,53 @@ def export_available_players():
     filename = f"BCC-Available-Players-{utcnow().strftime('%Y%m%d')}.xlsx"
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                      as_attachment=True, download_name=filename)
+
+
+# ── Admins: who can manage the app ──────────────────────────────────────────────
+# Any full admin can make another person an admin or take it away, so the app
+# never depends on one person (or a database edit) to change the admin team.
+# role=="admin" accounts (the shared organiser login) are permanent and can't
+# be removed here; is_admin is the flag that turns a captain/player into an
+# admin. The last remaining admin can't be removed.
+
+def _admins():
+    return list(mongo.db.users.find(
+        {"is_active": {"$ne": False}, "$or": [{"role": "admin"}, {"is_admin": True}]},
+        {"name": 1, "team_code": 1, "role": 1, "is_admin": 1},
+    ).sort("name", 1))
+
+
+@admin_bp.route("/admins", methods=["GET"])
+@admin_only_required
+def list_admins():
+    return jsonify([{
+        "id": str(a["_id"]), "name": a["name"], "team_code": a.get("team_code"),
+        "permanent": a.get("role") == "admin",
+    } for a in _admins()])
+
+
+@admin_bp.route("/admins/<user_id>", methods=["PUT"])
+@admin_only_required
+def set_admin(user_id):
+    """Body: {"is_admin": true|false}"""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data.get("is_admin"), bool):
+        return jsonify({"error": "is_admin must be true or false"}), 400
+    make_admin = data["is_admin"]
+    if not ObjectId.is_valid(user_id):
+        return jsonify({"error": "Person not found"}), 404
+    person = mongo.db.users.find_one({"_id": ObjectId(user_id), "is_active": {"$ne": False}})
+    if not person:
+        return jsonify({"error": "Person not found"}), 404
+    if person.get("role") == "admin":
+        return jsonify({"error": "This is the main organiser login — it is always an admin"}), 400
+    if not make_admin and len(_admins()) <= 1:
+        return jsonify({"error": "There must be at least one admin"}), 400
+    was = bool(person.get("is_admin"))
+    if make_admin:
+        mongo.db.users.update_one({"_id": person["_id"]}, {"$set": {"is_admin": True}})
+    else:
+        mongo.db.users.update_one({"_id": person["_id"]}, {"$unset": {"is_admin": "", "linked_captain_id": ""}})
+    log_action(get_jwt_identity(), "admin_rights", "user", user_id,
+               old_value={"is_admin": was}, new_value={"is_admin": make_admin})
+    return jsonify({"message": f"{person['name']} is {'now an admin' if make_admin else 'no longer an admin'}"})
