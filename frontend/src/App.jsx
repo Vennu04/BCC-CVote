@@ -21,6 +21,7 @@ const Matches = lazy(() => import("./pages/Matches"));
 const Stats = lazy(() => import("./pages/Stats"));
 const Me = lazy(() => import("./pages/Me"));
 const AuctionHome = lazy(() => import("./pages/AuctionHome"));
+const Schedule = lazy(() => import("./pages/Schedule"));
 const Auction = lazy(() => import("./pages/Auction"));
 const VotesInsights = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminsPage = lazy(() => import("./pages/admin/Admins"));
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/stats/knockout"  element={<ProtectedRoute><Stats /></ProtectedRoute>} />
           <Route path="/me"              element={<ProtectedRoute><Me /></ProtectedRoute>} />
           <Route path="/auction"         element={<VoterRoute><AuctionHome /></VoterRoute>} />
+          <Route path="/schedule"        element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
           <Route path="/auction/:id"     element={<ProtectedRoute><Auction /></ProtectedRoute>} />
 
           {/* Manage hubs */}

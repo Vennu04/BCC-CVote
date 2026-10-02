@@ -34,6 +34,8 @@ INDEX_SPECS = [
     ("tournament_teams", "tournament_id", {}),
     ("tournament_fixtures", "tournament_id", {}),
     ("tournaments", "status", {}),
+    ("schedule_proposals", [("fixture_id", 1), ("status", 1)], {}),
+    ("schedule_proposals", [("status", 1), ("captain_ids", 1)], {}),
     ("tournaments", "seed", {"unique": True, "sparse": True}),
     ("auction_duty", [("slot_id", 1), ("auction_date", 1)], {"unique": True}),
 ]

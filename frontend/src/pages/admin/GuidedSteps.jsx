@@ -173,6 +173,8 @@ function SetupStep() {
                 className={`flex-1 min-w-[5rem] min-h-[48px] rounded-2xl font-black ${group === g ? "bg-brand-navy text-white" : "bg-white text-gray-700 shadow-soft"}`}>Group {g}</button>
             ))}
           </div>
+          <BigLink to="/schedule" kind="white">📅 Or let the two captains agree a date</BigLink>
+          <div className="h-3" />
           {list.length === 0 && <p className="text-gray-600">No open fixtures in Group {group}.</p>}
           {list.map((fx) => (
             <Pick key={fx.id} onClick={() => choose(fx)}

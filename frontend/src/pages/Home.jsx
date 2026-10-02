@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../utils/api";
 import Navbar from "../components/Navbar";
 import VotingSlots from "../components/VotingSlots";
+import DateRequestsCard from "../components/DateRequestsCard";
 import { useAuth } from "../context/AuthContext";
 import { useVoting } from "../hooks/useVoting";
 import { useMyAuction } from "../hooks/useMyAuction";
@@ -59,6 +60,8 @@ export default function Home() {
             </span>
           </Link>
         )}
+
+        <DateRequestsCard />
 
         <div className="grid grid-cols-3 gap-2">
           <Stat value={me?.attendance_percentage != null ? `${Math.round(me.attendance_percentage)}%` : "—"} label="Attendance" to="/stats" />
