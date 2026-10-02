@@ -6,7 +6,7 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import { LoadingState } from "../../components/LoadingState";
 import { shortDay } from "../../utils/duty";
-import { STEP_KEYS, computeSteps, defaultMatch, getSitOuts, wasShared } from "../../utils/week";
+import { STEP_KEYS, activeMatches, computeSteps, defaultMatch, getSitOuts, wasShared } from "../../utils/week";
 import { Check, ChevronRight, Lock, Plus, RefreshCw, Wrench } from "lucide-react";
 
 const POLL_MS = 15000;
@@ -34,7 +34,7 @@ export default function ThisWeek() {
 
   useEffect(() => { load(); const t = setInterval(load, POLL_MS); return () => clearInterval(t); }, [load]);
 
-  const matches = overview?.matches || [];
+  const matches = activeMatches(overview?.matches);
   const selected = useMemo(() => {
     const wanted = params.get("slot");
     return matches.find((m) => m.slot_id === wanted) || defaultMatch(matches, extrasFor);

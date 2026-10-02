@@ -89,6 +89,11 @@ export function computeSteps(match, { sitOuts = {}, shared = false } = {}) {
   return list.map((s) => ({ ...s, state: s.done ? "done" : s === next ? "now" : s.lock ? "locked" : "open" }));
 }
 
+// This week only lists matches still being worked on — once a match's
+// auction is finished it drops off (its teams can still be copied from the
+// auction screen).
+export const activeMatches = (matches = []) => matches.filter((m) => m.auction?.status !== "completed");
+
 // The match to show first: the soonest one that still has work left.
 export function defaultMatch(matches, extras = () => ({})) {
   return matches.find((m) => computeSteps(m, extras(m.slot_id)).some((s) => !s.done)) || matches[0] || null;
