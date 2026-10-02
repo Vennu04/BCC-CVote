@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STEP_KEYS, computeSteps, unresolvedOdd, defaultMatch } from "./week";
+import { STEP_KEYS, activeMatches, computeSteps, unresolvedOdd, defaultMatch } from "./week";
 
 const base = {
   slot_id: "s1", label: "Hawks vs Royals", kickoff: "06:15 AM", is_weekend: true,
@@ -55,6 +55,13 @@ describe("This week steps", () => {
     const m = { ...base, voting: { state: "closed" }, auction: { id: "a1", status: "completed" }, duty: { lead_id: "x" } };
     expect(states(m).share).toBe("now");
     expect(Object.values(states(m, { shared: true })).every((v) => v === "done")).toBe(true);
+  });
+
+  it("drops a match from the list once its auction is finished", () => {
+    const done = { ...base, slot_id: "d", auction: { id: "a", status: "completed" } };
+    const live = { ...base, slot_id: "l", auction: { id: "b", status: "active" } };
+    expect(activeMatches([done, live, base]).map((m) => m.slot_id)).toEqual(["l", "s1"]);
+    expect(activeMatches(undefined)).toEqual([]);
   });
 
   it("opens on the first match that still has work", () => {
