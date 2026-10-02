@@ -24,6 +24,7 @@ const AuctionHome = lazy(() => import("./pages/AuctionHome"));
 const Auction = lazy(() => import("./pages/Auction"));
 const VotesInsights = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminsPage = lazy(() => import("./pages/admin/Admins"));
+const SettingsPage = lazy(() => import("./pages/admin/Settings"));
 const ThisWeek = lazy(() => import("./pages/admin/ThisWeek"));
 const GuidedStep = lazy(() => import("./pages/admin/GuidedSteps"));
 const AllTools = lazy(() => import("./pages/admin/AllTools"));
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="/manage/tools"               element={<AdminRoute><AllTools /></AdminRoute>} />
           <Route path="/manage/tools/votes"         element={<AdminRoute><VotesInsights /></AdminRoute>} />
           <Route path="/manage/tools/admins"        element={<AdminRoute><AdminsPage /></AdminRoute>} />
+          <Route path="/manage/tools/settings"      element={<AdminRoute><SettingsPage /></AdminRoute>} />
           <Route path="/manage/matches"             element={<Navigate to="/manage/matches/fixtures" replace />} />
           <Route path="/manage/matches/fixtures"    element={<AdminRoute><AdminTournament /></AdminRoute>} />
           <Route path="/manage/matches/windows"     element={<AdminRoute><VotingWindow /></AdminRoute>} />

@@ -5,7 +5,7 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import { useAuth } from "../../context/AuthContext";
 import { canDoDestructive } from "../../utils/roles";
-import { CalendarDays, Vote, PlusCircle, Users, ClipboardCheck, Gavel, FlaskConical, CalendarClock, BarChart3, Download, ChevronRight, Shield } from "lucide-react";
+import { CalendarDays, Vote, PlusCircle, Users, ClipboardCheck, Gavel, FlaskConical, CalendarClock, BarChart3, Download, ChevronRight, Shield, SlidersHorizontal } from "lucide-react";
 
 // Manage › All tools — every admin page from before the guided checklist,
 // kept for anything unusual. Nothing was removed; This week just means you
@@ -21,6 +21,7 @@ const TOOLS = [
   { to: "/manage/auction/duty", icon: CalendarClock, title: "Duty roster", text: "Everyone's evening slots", fullAdminOnly: true },
   { to: "/manage/tools/votes", icon: BarChart3, title: "Votes & insights", text: "Every voter × match, trends" },
   { to: "/manage/tools/admins", icon: Shield, title: "Admins", text: "Add or remove who can manage the app", fullAdminOnly: true },
+  { to: "/manage/tools/settings", icon: SlidersHorizontal, title: "Settings", text: "Auction rules: purse, base price, clocks, pool size", fullAdminOnly: true },
 ];
 
 const EXPORTS = [
