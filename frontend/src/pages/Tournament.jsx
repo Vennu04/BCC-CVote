@@ -6,8 +6,6 @@ import { formatDateDisplay } from "../utils/formatDate";
 import { MapPin, AlertTriangle, RefreshCw } from "lucide-react";
 import { todayIst } from "../utils/duty";
 
-const GROUPS = ["A", "B", "C"];
-
 // Matches › Fixtures and Matches › Groups — the public tournament view
 // (formerly the standalone Tournament page), rendered inside Matches.jsx.
 export function TournamentView({ view }) {
@@ -16,20 +14,37 @@ export function TournamentView({ view }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [group, setGroup] = useState("all");
+  const [tournament, setTournament] = useState(null);
+  const [tournaments, setTournaments] = useState([]);
+  const [tournamentId, setTournamentId] = useState("");
+  const GROUPS = tournament?.groups || ["A", "B", "C"];
+
+  useEffect(() => { api.get("/tournaments").then((r) => setTournaments(r.data.tournaments || [])).catch(() => {}); }, []);
 
   const fetchData = () => {
     setLoading(true);
-    Promise.all([api.get("/tournament/teams"), api.get("/tournament/fixtures")])
+    const params = tournamentId ? { params: { tournament_id: tournamentId } } : undefined;
+    Promise.all([api.get("/tournament/teams", params), api.get("/tournament/fixtures", params)])
       .then(([teamsRes, fixturesRes]) => {
         setTeams(teamsRes.data.teams || []);
+        setTournament(teamsRes.data.tournament || null);
         setFixtures(fixturesRes.data.fixtures || []);
+        setGroup("all");
         setError(false);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   };
 
-  useEffect(fetchData, []);
+  useEffect(fetchData, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Older tournaments stay viewable as history.
+  const picker = tournaments.length > 1 && (
+    <select className="input-field mb-3" aria-label="Tournament" value={tournamentId || tournament?.id || ""}
+      onChange={(e) => setTournamentId(e.target.value)}>
+      {tournaments.map((t) => <option key={t.id} value={t.id}>{t.name}{t.status === "active" ? " (current)" : ""}</option>)}
+    </select>
+  );
 
   if (loading) return <div className="flex items-center justify-center h-48"><LoadingState label="Loading tournament…" /></div>;
 
@@ -45,13 +60,15 @@ export function TournamentView({ view }) {
   }
 
   if (teams.length === 0) {
-    return <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4 text-gray-500">Tournament data hasn't been set up yet — check back soon.</div>;
+    return <>{picker}<div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4 text-gray-500">Tournament data hasn't been set up yet — check back soon.</div></>;
   }
 
   const chips = (
+    <>
+    {picker}
     <div className="flex gap-2 mb-4 overflow-x-auto scroll-touch -mx-1 px-1">
       {(view === "groups" ? GROUPS : ["all", ...GROUPS]).map((g) => {
-        const on = view === "groups" ? g === (group === "all" ? "A" : group) : g === group;
+        const on = view === "groups" ? g === (group === "all" ? GROUPS[0] : group) : g === group;
         return (
           <button key={g} type="button" onClick={() => setGroup(g)} aria-pressed={on}
             className={`shrink-0 px-4 min-h-[40px] rounded-full text-sm font-bold transition-colors duration-150 ${
@@ -61,10 +78,11 @@ export function TournamentView({ view }) {
         );
       })}
     </div>
+    </>
   );
 
   if (view === "groups") {
-    const g = group === "all" ? "A" : group;
+    const g = group === "all" ? GROUPS[0] : group;
     const groupTeams = teams.filter((t) => t.group === g);
     const played = fixtures.filter((f) => f.group === g && f.result).length;
     const total = fixtures.filter((f) => f.group === g).length;

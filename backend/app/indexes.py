@@ -31,6 +31,10 @@ INDEX_SPECS = [
     ("audit_logs", [("timestamp", -1)], {}),
     ("tournament_teams", [("group", 1), ("name", 1)], {}),
     ("tournament_fixtures", [("group", 1), ("match_number", 1)], {}),
+    ("tournament_teams", "tournament_id", {}),
+    ("tournament_fixtures", "tournament_id", {}),
+    ("tournaments", "status", {}),
+    ("tournaments", "seed", {"unique": True, "sparse": True}),
     ("auction_duty", [("slot_id", 1), ("auction_date", 1)], {"unique": True}),
 ]
 

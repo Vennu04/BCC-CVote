@@ -122,6 +122,7 @@ function SetupStep() {
   const navigate = useNavigate();
   const [fixtures, setFixtures] = useState(null);
   const [group, setGroup] = useState("A");
+  const [groups, setGroups] = useState(["A", "B", "C"]);
   const [page, setPage] = useState(0);
   const [f, setF] = useState(null);
   const [form, setForm] = useState({ date: "", time: "06:15", endTime: "10:00", venue: "", opens: "now", opensAt: "" });
@@ -129,6 +130,10 @@ function SetupStep() {
 
   useEffect(() => {
     api.get("/tournament/fixtures").then((r) => setFixtures(r.data.fixtures || [])).catch(() => setFixtures([]));
+    api.get("/tournament/teams").then((r) => {
+      const g = r.data.tournament?.groups;
+      if (g?.length) { setGroups(g); setGroup(g[0]); }
+    }).catch(() => {});
   }, []);
 
   const choose = (fx) => {
@@ -162,10 +167,10 @@ function SetupStep() {
       {page === 0 && (
         <>
           <Question hint="Pick the fixture you want to schedule (or move).">Which match?</Question>
-          <div className="flex gap-2 mb-3">
-            {["A", "B", "C"].map((g) => (
+          <div className="flex gap-2 mb-3 overflow-x-auto">
+            {groups.map((g) => (
               <button key={g} type="button" onClick={() => setGroup(g)} aria-pressed={group === g}
-                className={`flex-1 min-h-[48px] rounded-2xl font-black ${group === g ? "bg-brand-navy text-white" : "bg-white text-gray-700 shadow-soft"}`}>Group {g}</button>
+                className={`flex-1 min-w-[5rem] min-h-[48px] rounded-2xl font-black ${group === g ? "bg-brand-navy text-white" : "bg-white text-gray-700 shadow-soft"}`}>Group {g}</button>
             ))}
           </div>
           {list.length === 0 && <p className="text-gray-600">No open fixtures in Group {group}.</p>}
