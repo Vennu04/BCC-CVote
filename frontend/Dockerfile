@@ -15,10 +15,13 @@ ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 RUN npm run build
 
 # Production stage
-FROM nginx:1.27-alpine
+# nginx 1.30 = the current stable line. 1.27-alpine sat on Alpine 3.21, which
+# never got the libtiff CVE-2026-4775 fix (no `apk upgrade` could clear the
+# image scan), and 1.28 has open HIGH nginx CVEs of its own.
+FROM nginx:1.30-alpine
 
-# The nginx:1.27-alpine tag doesn't always carry the latest Alpine security
-# patches (openssl/libexpat/libpng CVEs caught by CI here) — apply whatever's
+# The upstream tag doesn't always carry the latest Alpine security patches
+# (openssl/libexpat/libpng CVEs caught by CI here) — apply whatever's
 # available at build time rather than waiting on the upstream tag to refresh.
 RUN apk update && apk upgrade --no-cache
 
