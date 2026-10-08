@@ -66,6 +66,10 @@ class TestingConfig(Config):
         Config.MONGO_URI.rsplit("/", 1)[0] + "/bcc_cvote_test",
     )
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+    # A token is created and used within the same instant here; if the host
+    # clock steps back a fraction of a second (seen under WSL/Docker), PyJWT
+    # rejects it as "not yet valid (iat)" and a random test gets a 401.
+    JWT_DECODE_LEEWAY = 10
     # Tests hit /login repeatedly against the same team_code by design —
     # rate limiting would make the suite's pass/fail depend on run order.
     RATELIMIT_ENABLED = False
