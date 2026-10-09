@@ -279,6 +279,30 @@ function VotesStep({ match, reload }) {
   const playing = peopleWith("available");
   const notPlaying = peopleWith("not_available");
   const captainIds = new Set((match.captains || []).map((c) => c.id));
+  // The auction pool: everyone playing except the two captains, by group.
+  const pool = playing.filter((p) => !captainIds.has(p.id));
+  const playingGroups = [...CATS, null]
+    .map((cat) => ({ cat, people: pool.filter((p) => (CATS.includes(p.auction_category) ? p.auction_category : null) === cat) }))
+    .filter((g) => g.people.length > 0);
+  const captainRows = (match.captains || []).map((c) => {
+    const row = (dash?.vote_matrix || []).find((r) => r.captain.id === c.id);
+    return { ...c, answer: row ? answerOf(row) : null };
+  });
+
+  // Takes someone's answer away completely (back to "Haven't answered") —
+  // for a last-minute drop-out who shouldn't be recorded as In or Out.
+  const remove = async (person) => {
+    setBusy(person.id);
+    try {
+      await api.delete(`/admin/votes/${match.slot_id}/${person.id}`);
+      toast.success(`${person.name} removed from this match`);
+      await load(); reload();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Couldn't remove them");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const mark = async (person, availability) => {
     setBusy(person.id);
@@ -319,28 +343,51 @@ function VotesStep({ match, reload }) {
           </ul>
         )}
       </Card>
-      <Card>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="font-black text-gray-900">✅ Playing ({playing.length})</h3>
-          <span className="text-xs text-gray-500">not coming? tap Out</span>
-        </div>
-        {!dash ? <LoadingState /> : playing.length === 0 ? (
-          <p className="text-gray-600 py-2">Nobody yet.</p>
-        ) : (
-          <ol className="divide-y divide-gray-100">
-            {playing.map((p, i) => (
-              <li key={p.id} className="flex items-center gap-2 py-2">
-                <span className="w-6 text-right text-sm text-gray-400 tabular-nums">{i + 1}</span>
+      {captainRows.length > 0 && (
+        <Card>
+          <h3 className="font-black text-gray-900 mb-1">🧢 Captains</h3>
+          <ul className="divide-y divide-gray-100">
+            {captainRows.map((c) => (
+              <li key={c.id} className="flex items-center gap-2 py-2">
                 <span className="flex-1 min-w-0">
-                  <span className="block font-semibold text-gray-900">{captainIds.has(p.id) ? "🧢 " : ""}{p.name}</span>
-                  <span className="block text-xs text-gray-500">{captainIds.has(p.id) ? "Captain" : p.auction_category ? groupName(p.auction_category) : "No group"}</span>
+                  <span className="block font-semibold text-gray-900">{c.name}</span>
+                  <span className="block text-xs text-gray-500">{c.team_name} · not in the auction</span>
                 </span>
-                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")}
-                  className="min-h-[44px] px-3 rounded-xl bg-red-50 text-red-700 font-black disabled:opacity-50">✕ Out</button>
+                <span className={`text-xs font-black rounded-full px-2.5 py-1 ${c.answer === "available" ? "bg-pitch-50 text-pitch-800" : c.answer === "not_available" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"}`}>
+                  {c.answer === "available" ? "Playing" : c.answer === "not_available" ? "Not playing" : "No answer yet"}
+                </span>
               </li>
             ))}
-          </ol>
-        )}
+          </ul>
+        </Card>
+      )}
+      <Card>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-black text-gray-900">✅ Playing ({pool.length})</h3>
+          <span className="text-xs text-gray-500">by group · captains not counted</span>
+        </div>
+        <p className="text-xs text-gray-500 mb-1"><b>Out</b> = not coming. <b>Remove</b> = take their answer away.</p>
+        {!dash ? <LoadingState /> : pool.length === 0 ? (
+          <p className="text-gray-600 py-2">Nobody yet.</p>
+        ) : playingGroups.map((g) => (
+          <div key={g.cat || "none"} className="mt-2">
+            <h4 className={`text-sm font-black rounded-lg px-2 py-1 ${!g.cat || g.people.length % 2 ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>
+              {g.cat ? groupName(g.cat) : "No group yet"} ({g.people.length}){g.cat && g.people.length % 2 ? " · odd" : ""}
+            </h4>
+            <ol className="divide-y divide-gray-100">
+              {g.people.map((p, i) => (
+                <li key={p.id} className="flex items-center gap-2 py-2">
+                  <span className="w-6 text-right text-sm text-gray-400 tabular-nums">{i + 1}</span>
+                  <span className="flex-1 min-w-0 font-semibold text-gray-900">{p.name}</span>
+                  <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")}
+                    className="min-h-[44px] px-3 rounded-xl bg-red-50 text-red-700 font-black disabled:opacity-50">✕ Out</button>
+                  <button type="button" disabled={busy === p.id} onClick={() => remove(p)}
+                    className="min-h-[44px] px-3 rounded-xl bg-gray-100 text-gray-700 font-black disabled:opacity-50">Remove</button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
       </Card>
       {notPlaying.length > 0 && (
         <Card>
@@ -351,6 +398,8 @@ function VotesStep({ match, reload }) {
                 <span className="flex-1 font-semibold text-gray-700">{p.name}</span>
                 <button type="button" disabled={busy === p.id} onClick={() => mark(p, "available")}
                   className="min-h-[44px] px-3 rounded-xl bg-pitch-50 text-pitch-800 font-black disabled:opacity-50">✓ In</button>
+                <button type="button" disabled={busy === p.id} onClick={() => remove(p)}
+                  className="min-h-[44px] px-3 rounded-xl bg-gray-100 text-gray-700 font-black disabled:opacity-50">Remove</button>
               </li>
             ))}
           </ul>

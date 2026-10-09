@@ -6,6 +6,7 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import AuctionRulesNote from "../../components/AuctionRulesNote";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
+import { useMatchCaptains } from "../../hooks/useMatchCaptains";
 import CountdownBadge from "../../components/CountdownBadge";
 import PlayerInsightsCard from "../../components/PlayerInsightsCard";
 import FairnessBanner from "../../components/FairnessBanner";
@@ -54,6 +55,7 @@ export default function AdminAuction() {
   const [slots, setSlots] = useState([]);
   const [voteMatrix, setVoteMatrix] = useState([]);
   const [captains, setCaptains] = useState([]);
+  const matchCaptains = useMatchCaptains();
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [captainAId, setCaptainAId] = useState("");
   const [captainBId, setCaptainBId] = useState("");
@@ -488,7 +490,7 @@ export default function AdminAuction() {
                   {win?.closes_at && (
                     <p className="text-[11px] text-gray-400 mb-2">📅 {win.closes_at}</p>
                   )}
-                  <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} compact />
+                  <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} matchCaptains={matchCaptains[slot.id]} compact />
                 </button>
               ))}
             </div>
@@ -527,7 +529,7 @@ export default function AdminAuction() {
                   scoped to just the selected slot with the picked captains excluded
                   — exactly what create_auction will see. */}
               {selectedSlotId && (
-                <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={selectedSlotId} excludeIds={excludeCaptainIds} onVoteSet={fetchSlotsAndVotes} />
+                <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={selectedSlotId} excludeIds={excludeCaptainIds} matchCaptains={matchCaptains[selectedSlotId]} onVoteSet={fetchSlotsAndVotes} />
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
