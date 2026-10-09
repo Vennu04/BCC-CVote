@@ -87,7 +87,10 @@ jobs:
           ignore-unfixed: true
 
       # ── SonarCloud ────────────────────────────────────────────────────────
+      # Skipped on Dependabot PRs: GitHub doesn't give them repo secrets, so
+      # SONAR_TOKEN is empty there. The scan still runs on main after merge.
       - name: SonarCloud scan
+        if: github.actor != 'dependabot[bot]'
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
