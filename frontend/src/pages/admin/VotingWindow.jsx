@@ -6,6 +6,7 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import WeatherForecast from "../../components/WeatherForecast";
 import ConfirmedPlayersPanel from "../../components/ConfirmedPlayersPanel";
+import { useMatchCaptains } from "../../hooks/useMatchCaptains";
 import { LoadingState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -27,6 +28,7 @@ const POLL_INTERVAL_MS = 5000;
 export default function VotingWindow() {
   const [windows, setWindows] = useState([]);
   const [voteMatrix, setVoteMatrix] = useState([]);
+  const matchCaptains = useMatchCaptains();
   const [forms, setForms] = useState({}); // slot_id -> { opens_at, closes_at }
   const [loading, setLoading] = useState(true);
   const [savingSlot, setSavingSlot] = useState(null);
@@ -437,7 +439,7 @@ export default function VotingWindow() {
 
                         {win && (
                           <div className="mb-4">
-                            <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} onVoteSet={fetchVoteMatrix} />
+                            <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} matchCaptains={matchCaptains[slot.id]} onVoteSet={fetchVoteMatrix} />
                           </div>
                         )}
 

@@ -145,11 +145,17 @@ function NameChips({ people, tone, onMark, markingId }) {
 // own vote in time). Setting a vote for someone with none yet happens
 // immediately; changing someone's already-recorded vote asks for confirmation
 // first, since that's overwriting a real answer rather than filling a blank.
-export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, compact, onVoteSet }) {
+// matchCaptains: the two captains playing this match ([{ id, name, team_name }]).
+// They're never auctioned, so they're left out of every group and count here.
+export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, matchCaptains, compact, onVoteSet }) {
   const [showPending, setShowPending] = useState(false);
   const [markingId, setMarkingId] = useState(null);
   const { confirmProps, requestConfirm } = useConfirm();
-  const data = useMemo(() => confirmedForSlot(voteMatrix, slotId, excludeIds), [voteMatrix, slotId, excludeIds]);
+  const allExcluded = useMemo(
+    () => new Set([...(excludeIds || []), ...(matchCaptains || []).map((c) => c.id)]),
+    [excludeIds, matchCaptains]
+  );
+  const data = useMemo(() => confirmedForSlot(voteMatrix, slotId, allExcluded), [voteMatrix, slotId, allExcluded]);
 
   const pendingTotal = CATEGORY_ORDER.reduce((sum, cat) => sum + data.categories[cat].pending.length, 0);
 
@@ -219,6 +225,13 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
           );
         })}
       </div>
+
+      {!compact && matchCaptains?.length > 0 && (
+        <p className="text-xs text-gray-600 mt-2">
+          🧢 {matchCaptains.map((c) => `${c.name} (${c.team_name})`).join(" and ")}{" "}
+          {matchCaptains.length > 1 ? "are captains" : "is a captain"} in this match, so they're not in any group.
+        </p>
+      )}
 
       {!compact && data.uncategorizedConfirmed > 0 && (
         <p className="text-xs text-red-600 mt-2">
