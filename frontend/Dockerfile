@@ -18,7 +18,7 @@ RUN npm run build
 # nginx 1.30 = the current stable line. 1.27-alpine sat on Alpine 3.21, which
 # never got the libtiff CVE-2026-4775 fix (no `apk upgrade` could clear the
 # image scan), and 1.28 has open HIGH nginx CVEs of its own.
-FROM nginx:1.30-alpine
+FROM nginx:1.31-alpine
 
 # The upstream tag doesn't always carry the latest Alpine security patches
 # (openssl/libexpat/libpng CVEs caught by CI here) — apply whatever's
