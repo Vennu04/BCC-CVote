@@ -139,8 +139,13 @@ def _check_leftover_award(auction, group):
                 "captain_id": other_id, "action": "leftover_free", "amount": 0,
                 "created_at": now,
             })
-        if auction.get("current_player_id") in remaining_ids:
-            mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
+        # Matched against the auction's CURRENT state in Mongo, not the
+        # `auction` dict passed in -- another worker may have put one of
+        # these players up for bidding after that dict was read.
+        mongo.db.auctions.update_one(
+            {"_id": auction["_id"], "current_player_id": {"$in": remaining_ids}},
+            {"$set": {"current_player_id": None}},
+        )
         return  # only one side can hit quota first — nothing left to check for this group
 
 
@@ -428,6 +433,41 @@ def _claim_release(auction, category, player, users_map):
     return True
 
 
+STALE_CURRENT_PLAYER_GRACE_SECONDS = 5
+
+
+def _clear_stale_current_player(auction):
+    """Safety net: the player marked as "up for bidding" must still be
+    "available". If he has already gone to a captain (sold, free-picked, or
+    swept up by the leftover award), nobody can bid on him and -- because
+    auto-release waits for current_player_id to clear -- the whole auction
+    would sit on him forever. That is exactly what stalled the live auction
+    on 2026-10-09: a poll from the other gunicorn worker released the last
+    player of a category in the few milliseconds between a sale clearing
+    current_player_id and the leftover award giving that same player away.
+    Compare-and-swap on the exact player id, so this can never clear a
+    different, genuinely live player. Returns the auction as it now stands."""
+    player_id = auction.get("current_player_id")
+    if not player_id:
+        return auction
+    player = _player_doc(str(auction["_id"]), player_id)
+    if player and player["status"] == "available":
+        return auction
+    # A sale deliberately keeps current_player_id on the sold player for the
+    # few milliseconds it takes to hand over the category's leftovers (see
+    # _drop_core) -- that is a lock, not a stall, so leave it alone.
+    sold_at = player.get("sold_at") if player else None
+    if sold_at and utcnow() - sold_at < timedelta(seconds=STALE_CURRENT_PLAYER_GRACE_SECONDS):
+        return auction
+    mongo.db.auctions.update_one(
+        {"_id": auction["_id"], "current_player_id": player_id},
+        {"$set": {"current_player_id": None}},
+    )
+    logger.warning("auction %s: cleared stale current player %s (status=%s)",
+                   auction["_id"], player_id, player["status"] if player else "missing")
+    return _auction_or_404(str(auction["_id"]))
+
+
 def _maybe_auto_release_next(auction_id):
     """Self-fetching and fully guarded -- safe to call unconditionally from
     anywhere a release might need to advance (tail of drop_player, tail of
@@ -456,7 +496,8 @@ def _maybe_auto_release_next(auction_id):
     auction = _auction_or_404(auction_id)
     if not auction or auction["status"] != "active" or auction.get("is_paused"):
         return
-    if auction.get("current_player_id"):
+    auction = _clear_stale_current_player(auction)
+    if not auction or auction.get("current_player_id"):
         return
     category = auction.get("auto_release_category")
     if not category:
@@ -1512,9 +1553,16 @@ def _drop_core(auction, auction_id, captain_id):
             {"$set": {"status": "sold", "sold_to": other_captain,
                       "sold_price": last_bid["amount"], "assigned_via": "bid", "sold_at": utcnow()}},
         )
-        mongo.db.auctions.update_one({"_id": auction["_id"]}, {"$set": {"current_player_id": None}})
-        auction = _auction_or_404(auction_id)
+        # Leftover award FIRST, while current_player_id still points at the
+        # player just sold: that keeps every other worker's auto-release
+        # parked until the rest of the category has been handed over. Clearing
+        # it first left a gap in which a poll could put up a player who was
+        # about to be given away (see _clear_stale_current_player).
         _check_leftover_award(auction, player["category"])
+        mongo.db.auctions.update_one(
+            {"_id": auction["_id"], "current_player_id": player_id},
+            {"$set": {"current_player_id": None}},
+        )
         result = {"message": "Sold", "sold_to": other_captain, "sold_price": last_bid["amount"]}
         _maybe_auto_release_next(auction_id)
         return result, 200
