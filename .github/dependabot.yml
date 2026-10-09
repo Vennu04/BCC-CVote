@@ -1,0 +1,77 @@
+# Weekly dependency updates, so library fixes arrive as small routine PRs
+# instead of as a red security scan in Dev CI (which is what happened on
+# 2026-10-01: axios / pymongo / werkzeug advisories, fixed by hand in #60).
+#
+# How to use the PRs: wait for Dev CI to go green, then merge. Merging to
+# main deploys to prod (~7 min), so don't merge while an auction is live.
+#
+# - One grouped PR per area per week, opened Monday morning IST (matches
+#   are at the weekend, auctions the evenings before).
+# - Major versions are left out on purpose: they are breaking upgrades
+#   (React 19, Vite 8, Tailwind 4, ...) and need their own planned task.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Kolkata
+    groups:
+      backend:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Kolkata
+    groups:
+      frontend:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Base images. python and node stay on their current release line
+  # (3.12 / 20) - moving those is a runtime upgrade, not a routine bump.
+  - package-ecosystem: docker
+    directories: ["/backend", "/frontend"]
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Kolkata
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Kolkata
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
