@@ -101,3 +101,28 @@ def test_a_live_current_player_is_never_cleared_by_the_safety_net(
     for _ in range(5):
         assert _get(client, admin_headers, auction_id)["current_player"]["id"] == first
     assert mongo.db.auction_release_log.count_documents({"auction_id": auction_id}) == 1
+
+
+def test_power_batters_is_its_own_group_released_after_power_allrounders_and_before_classic(
+        client, admin_headers, make_auction_setup):
+    """2026-10-10: Power was split into Power All-rounders ("power") and
+    Power Batters ("power_batsman")."""
+    assert auction_routes.AUCTION_GROUPS == (
+        "extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic")
+    setup = make_auction_setup(
+        [("extra_power_allrounder", 40, 10)] * 2 + [("power", 30, 10)] * 8
+        + [("power_batsman", 20, None)] * 4 + [("classic", None, None)] * 6)
+    preview = client.get("/api/admin/auction/preview", query_string={
+        "slot_id": setup["slot_id"], "captain_a_id": str(setup["captain_a"]["_id"]),
+        "captain_b_id": str(setup["captain_b"]["_id"])}, headers=admin_headers).get_json()
+    assert preview["is_balanced"] is True
+    assert {g["category"]: len(g["players"]) for g in preview["groups"]}["power_batsman"] == 4
+    auction_id = _create_and_start(client, admin_headers, setup)
+    assert _get(client, admin_headers, auction_id)["group_quotas"]["power_batsman"] == 2
+
+
+def test_a_player_can_be_moved_into_power_batters(client, admin_headers, make_auction_setup):
+    setup = make_auction_setup([("power", 30, 10)] * 2)
+    pid = str(setup["voters"][0]["_id"])
+    r = client.put(f"/api/admin/players/{pid}", json={"auction_category": "power_batsman"}, headers=admin_headers)
+    assert r.status_code == 200 and r.get_json()["player"]["auction_category"] == "power_batsman"

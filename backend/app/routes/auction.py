@@ -16,10 +16,13 @@ from ..services.next_match import next_match_context, next_match_label
 auction_bp = Blueprint("auction", __name__)
 logger = logging.getLogger(__name__)
 
-# Every auctioned player sits in exactly one of these four groups, each split evenly
+# Every auctioned player sits in exactly one of these five groups, each split evenly
 # in half between the two captains (Extra Power is two independent sections, not one
 # combined pool — see admin's rules).
-AUCTION_GROUPS = ("extra_power_allrounder", "extra_power_batsman", "power", "classic")
+# "power" is the Power ALL-ROUNDERS group (the key predates the 2026-10-10 split of
+# Power into all-rounders and batters, and is kept so every existing player and past
+# auction stays valid); "power_batsman" is the Power BATTERS group added by that split.
+AUCTION_GROUPS = ("extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic")
 POINTS_BUDGET = 17
 STARTING_PRICE = 8.5
 TARGET_ROSTER_SIZE = 11
@@ -45,7 +48,7 @@ MAX_ROSTER_SIZE_PER_SIDE = 14  # 14+14 = 28 max auctioned players total, captain
 # the secondary key (admin's explicit call — simple to reason about, though it
 # means a stat with larger typical magnitude has more pull on the ranking).
 # Any remaining tie is broken by attendance_percentage descending.
-BATSMAN_ONLY_GROUPS = ("extra_power_batsman",)
+BATSMAN_ONLY_GROUPS = ("extra_power_batsman", "power_batsman")
 
 
 def _auction_match_label(auction):

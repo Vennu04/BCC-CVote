@@ -18,7 +18,8 @@ export const STEP_TITLES = {
 const GROUP_NAMES = {
   extra_power_allrounder: "EP All-rounders",
   extra_power_batsman: "EP Batsmen",
-  power: "Power",
+  power: "Power All-rounders",
+  power_batsman: "Power Batters",
   classic: "Classic",
 };
 export const groupName = (g) => GROUP_NAMES[g] || g;

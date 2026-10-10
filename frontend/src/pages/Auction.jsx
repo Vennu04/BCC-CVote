@@ -20,21 +20,22 @@ import {
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
   extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power",
+  power: "Power — All-Rounders",
+  power_batsman: "Power — Batsmen",
   classic: "Classic",
 };
 
 // Fixed order/labels for every auction — not derived from the data, so a
 // category with zero players left still shows up as "(0 left)" instead of
 // disappearing, giving captains a stable 4-row layout to plan around.
-const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "classic"];
+const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"];
 
 function AvailablePlayersPool({ auction }) {
   const players = auction.available_players || [];
   const currentId = auction.current_player?.id;
 
   const byCategory = useMemo(() => {
-    const map = { extra_power_allrounder: [], extra_power_batsman: [], power: [], classic: [] };
+    const map = { extra_power_allrounder: [], extra_power_batsman: [], power: [], power_batsman: [], classic: [] };
     for (const p of players) {
       if (map[p.category]) map[p.category].push(p);
     }

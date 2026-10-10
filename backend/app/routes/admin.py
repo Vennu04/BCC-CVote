@@ -63,7 +63,7 @@ def _user_to_dict(u, next_match_available=False):
     }
 
 
-AUCTION_CATEGORIES = {"extra_power_allrounder", "extra_power_batsman", "power", "classic"}
+AUCTION_CATEGORIES = {"extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"}
 
 # Normally captain/player role IS the voter roster. A handful of accounts
 # (role=="admin") are also flagged is_player=True so the same admin login can

@@ -11,10 +11,11 @@ import { Users, ChevronDown, ChevronUp, Check, HelpCircle, X } from "lucide-reac
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
   extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power",
+  power: "Power — All-Rounders",
+  power_batsman: "Power — Batsmen",
   classic: "Classic",
 };
-const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "classic"];
+const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"];
 
 const AVAILABILITY_LABELS = {
   available: "Available",

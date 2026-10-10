@@ -16,7 +16,7 @@ import { Check, ChevronLeft, X, Copy, Calendar, Clock, MapPin, Users, MessageCir
 // numbers, one green button, and a safe way back. Everything here calls the
 // same endpoints the full admin pages use — nothing new on the server.
 
-const CATS = ["extra_power_allrounder", "extra_power_batsman", "power", "classic"];
+const CATS = ["extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"];
 
 // ---------- shared pieces ----------
 function Shell({ stepKey, match, children }) {
