@@ -57,7 +57,7 @@ export default function Settings() {
                   </label>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-3">The four player groups and the release order stay as they are.</p>
+              <p className="text-xs text-gray-500 mt-3">The five player groups and the release order stay as they are.</p>
               <button type="button" onClick={save} disabled={saving || Object.keys(changed).length === 0}
                 className="btn-primary w-full mt-4 min-h-[48px] disabled:opacity-45">
                 {saving ? "Saving…" : Object.keys(changed).length ? `Save ${Object.keys(changed).length} change${Object.keys(changed).length > 1 ? "s" : ""}` : "No changes"}

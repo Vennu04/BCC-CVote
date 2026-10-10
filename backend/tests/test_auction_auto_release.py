@@ -230,14 +230,14 @@ def test_auto_release_advances_to_next_category_in_fixed_order(client, admin_hea
 
 def test_auto_release_visits_categories_in_the_exact_AUCTION_GROUPS_order(client, admin_headers, auth_header, make_auction_setup):
     """Full end-to-end: release only the FIRST category by hand, then let
-    every remaining player across all 4 categories resolve itself with zero
+    every remaining player across all 5 categories resolve itself with zero
     further /release calls -- confirming the auto-advance sequence matches
     AUCTION_GROUPS exactly (extra_power_allrounder -> extra_power_batsman ->
-    power -> classic), the order this app's admin UI presents them in."""
-    assert AUCTION_GROUPS == ("extra_power_allrounder", "extra_power_batsman", "power", "classic")
+    power -> power_batsman -> classic), the order this app's admin UI presents them in."""
+    assert AUCTION_GROUPS == ("extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic")
 
-    # 6 each (24 total) clears MIN_AUCTION_POOL_SIZE (20); 4 each (16) was too small.
-    category_sizes = {"extra_power_allrounder": 6, "extra_power_batsman": 6, "power": 6, "classic": 6}
+    # 4 each across the five groups = 20, exactly MIN_AUCTION_POOL_SIZE.
+    category_sizes = {"extra_power_allrounder": 4, "extra_power_batsman": 4, "power": 4, "power_batsman": 4, "classic": 4}
     setup = make_auction_setup(
         [(cat, None, None) for cat, n in category_sizes.items() for _ in range(n)]
     )

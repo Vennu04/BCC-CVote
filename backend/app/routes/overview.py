@@ -28,7 +28,8 @@ HORIZON_DAYS = 21
 GROUP_LABELS = {
     "extra_power_allrounder": "EP All-rounders",
     "extra_power_batsman": "EP Batsmen",
-    "power": "Power",
+    "power": "Power All-rounders",
+    "power_batsman": "Power Batters",
     "classic": "Classic",
 }
 AUCTION_EVENING_START = (19, 30)  # the duty roster's first slot

@@ -21,11 +21,11 @@ describe("SlotCard voting status", () => {
 describe("auctionCreatedMessage", () => {
   it("reads as plain words, not raw data", () => {
     const msg = auctionCreatedMessage({ extra_power_allrounder: 4, extra_power_batsman: 6, power: 8, classic: 6 });
-    expect(msg).toBe("Auction created — 24 players: 4 EP All-rounders · 6 EP Batsmen · 8 Power · 6 Classic");
+    expect(msg).toBe("Auction created — 24 players: 4 EP All-rounders · 6 EP Batsmen · 8 Power All-rounders · 6 Classic");
     expect(msg).not.toContain("{");
   });
   it("skips empty categories and copes with no counts", () => {
-    expect(auctionCreatedMessage({ power: 2, classic: 0 })).toBe("Auction created — 2 players: 2 Power");
+    expect(auctionCreatedMessage({ power: 2, classic: 0 })).toBe("Auction created — 2 players: 2 Power All-rounders");
     expect(auctionCreatedMessage(undefined)).toBe("Auction created");
   });
 });

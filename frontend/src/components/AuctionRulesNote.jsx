@@ -4,7 +4,8 @@ import { Info, ChevronDown, ChevronUp } from "lucide-react";
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
   extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power",
+  power: "Power — All-Rounders",
+  power_batsman: "Power — Batsmen",
   classic: "Classic",
 };
 

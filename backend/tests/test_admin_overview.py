@@ -74,7 +74,7 @@ def test_closed_voting_flags_odd_groups_small_pool_and_attendance(client, admin_
     assert m["odd_groups"] == ["power"]
     assert [s["state"] for s in m["steps"]] == ["done", "current", "todo", "todo"]
     titles = [t["title"] for t in data["todos"]]
-    assert any(t.startswith("Odd numbers: Power (1)") for t in titles)
+    assert any(t.startswith("Odd numbers: Power All-rounders (1)") for t in titles)
     assert any("an auction needs 20" in t for t in titles)
     assert "Credit attendance" in titles
     assert data["todos"][0]["level"] == "red"

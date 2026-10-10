@@ -25,7 +25,8 @@ import { buildWhatsAppSummary, ACTIVE_AUCTION_KEY as STORAGE_KEY } from "../../u
 const GROUP_LABELS = {
   extra_power_allrounder: "Extra Power — All-Rounders",
   extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power",
+  power: "Power — All-Rounders",
+  power_batsman: "Power — Batsmen",
   classic: "Classic",
 };
 
@@ -37,7 +38,7 @@ const SLOT_POLL_INTERVAL_MS = 5000;
 // "Auction created — 24 players: 4 EP All-rounders · 6 EP Batsmen · 8 Power · 6 Classic"
 export function auctionCreatedMessage(groupCounts) {
   const counts = groupCounts || {};
-  const names = { extra_power_allrounder: "EP All-rounders", extra_power_batsman: "EP Batsmen", power: "Power", classic: "Classic" };
+  const names = { extra_power_allrounder: "EP All-rounders", extra_power_batsman: "EP Batsmen", power: "Power All-rounders", power_batsman: "Power Batters", classic: "Classic" };
   const parts = Object.keys(names).filter((k) => counts[k]).map((k) => `${counts[k]} ${names[k]}`);
   const total = Object.values(counts).reduce((a, b) => a + (Number(b) || 0), 0);
   return parts.length ? `Auction created — ${total} players: ${parts.join(" · ")}` : "Auction created";

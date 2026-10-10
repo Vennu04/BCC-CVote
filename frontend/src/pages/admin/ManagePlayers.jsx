@@ -51,7 +51,8 @@ const AUCTION_CATEGORY_OPTIONS = [
   { value: "",                       label: "Not set" },
   { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
   { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
-  { value: "power",                  label: "Power" },
+  { value: "power",                  label: "Power — All-Rounder" },
+  { value: "power_batsman",          label: "Power — Batsman" },
   { value: "classic",                label: "Classic" },
 ];
 
@@ -63,7 +64,8 @@ const AUCTION_CATEGORY_FILTER_OPTIONS = [
   { value: "unset",                  label: "Not set" },
   { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
   { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
-  { value: "power",                  label: "Power" },
+  { value: "power",                  label: "Power — All-Rounder" },
+  { value: "power_batsman",          label: "Power — Batsman" },
   { value: "classic",                label: "Classic" },
 ];
 

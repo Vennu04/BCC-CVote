@@ -80,6 +80,10 @@ def make_slot_and_window(app):
         slot = {
             "slot_number": 1, "day": "Saturday", "time_of_day": "Morning",
             "match_time": "06:15 AM", "description": "", "is_adhoc": False,
+            # Without an end time the match counts as "over" 4h after kickoff
+            # and drops off the voting lists -- which made every test using
+            # this slot fail when run on a Saturday after 10:15 AM IST.
+            "end_time": "23:59",
             "is_active": True, "created_at": utcnow(),
         }
         slot_id = mongo.db.match_slots.insert_one(slot).inserted_id

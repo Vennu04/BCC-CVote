@@ -35,7 +35,7 @@ describe("This week steps", () => {
     expect(s.attend).toBe("now");
     expect(s.odd).toBe("open");
     expect(s.start).toBe("locked");
-    expect(computeSteps(m).find((x) => x.key === "odd").detail).toBe("Power is odd");
+    expect(computeSteps(m).find((x) => x.key === "odd").detail).toBe("Power All-rounders is odd");
   });
 
   it("choosing who sits out resolves the odd step", () => {
