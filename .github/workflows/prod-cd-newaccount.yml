@@ -31,8 +31,33 @@ env:
 # build in parallel with a layer cache; images are pushed under their commit
 # tag only and become `latest` (what the server pulls) in the deploy job,
 # after tests have passed; and when several merges land close together only
-# the newest commit is deployed.
+# the newest commit is deployed. Only images whose folder changed since the
+# commit prod is running get rebuilt (and so only those containers restart).
 jobs:
+  plan:
+    name: Plan (which images changed)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      images: ${{ steps.plan.outputs.images }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50
+
+      - name: Configure AWS credentials (OIDC, new account)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Compare with what prod runs
+        id: plan
+        run: .github/scripts/plan-images.sh
+
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
@@ -64,18 +89,15 @@ jobs:
 
   build-and-push:
     name: Build, Scan & Push (${{ matrix.image }})
+    needs: plan
+    if: needs.plan.outputs.images != ''
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     strategy:
       fail-fast: true
-      matrix:
-        include:
-          - image: backend
-            repo: bcc-cvote-backend
-          - image: frontend
-            repo: bcc-cvote-frontend
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -125,7 +147,11 @@ jobs:
 
   deploy:
     name: Deploy (SSM RunCommand)
-    needs: [backend-tests, build-and-push]
+    needs: [plan, backend-tests, build-and-push]
+    # build-and-push is skipped when no image changed; still finish cleanly.
+    if: >-
+      !cancelled() && needs.plan.result == 'success' && needs.backend-tests.result == 'success'
+      && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
     runs-on: ubuntu-latest
 
     # One deploy at a time. If several merges queue up, GitHub keeps only the
@@ -154,6 +180,9 @@ jobs:
           if [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
             echo "::notice::main has moved on to ${HEAD_SHA::8} — skipping this deploy; the newer run deploys instead."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "${{ needs.plan.outputs.images }}" ]; then
+            echo "::notice::No backend/ or frontend/ changes since what prod runs — nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
@@ -170,7 +199,8 @@ jobs:
         if: steps.fresh.outputs.deploy == 'true'
         run: |
           TAG=${GITHUB_SHA::8}
-          for REPO in ${{ env.BACKEND_REPO }} ${{ env.FRONTEND_REPO }}; do
+          for IMG in ${{ needs.plan.outputs.images }}; do
+            REPO="bcc-cvote-$IMG"
             RESP=$(aws ecr batch-get-image --repository-name "$REPO" \
               --image-ids imageTag="$TAG" --region ${{ env.AWS_REGION }} --output json)
             MEDIA_TYPE=$(echo "$RESP" | jq -r '.images[0].imageManifestMediaType // empty')
