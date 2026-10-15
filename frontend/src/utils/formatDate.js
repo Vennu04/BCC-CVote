@@ -10,3 +10,16 @@ export function formatDateDisplay(isoDate) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 }
+
+// "Fri 25 Sep" — match/auction dates are plain IST calendar dates.
+export function shortDay(isoDate) {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" });
+}
+
+// Today's date in IST as "YYYY-MM-DD", whatever the device's own timezone.
+export function todayIst(now = new Date()) {
+  return now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}

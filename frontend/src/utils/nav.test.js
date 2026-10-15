@@ -38,10 +38,10 @@ describe("tabKeyFor", () => {
 });
 
 describe("manage hubs", () => {
-  it("hide the Duty roster from organizers (backend refuses them)", () => {
+  it("give every admin the same Auction pages — there is no duty roster", () => {
     const auctionSubs = (u) => hubsFor(u).find((h) => h.key === "auction").subs.map((s) => s.key);
     expect(auctionSubs(organizer)).toEqual(["run", "practice"]);
-    expect(auctionSubs(captainAdmin)).toEqual(["run", "practice", "duty"]);
+    expect(auctionSubs(captainAdmin)).toEqual(["run", "practice"]);
   });
   it("cover every old admin page", () => {
     const targets = new Set(HUBS.flatMap((h) => [h.to, ...h.subs.map((s) => s.to)]));

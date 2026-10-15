@@ -45,7 +45,6 @@ export const HUBS = [
   { key: "auction", label: "Auction", to: "/manage/auction/run", subs: [
     { key: "run", label: "Run", to: "/manage/auction/run" },
     { key: "practice", label: "Practice", to: "/manage/auction/run#practice" },
-    { key: "duty", label: "Duty roster", to: "/manage/auction/duty", fullAdminOnly: true },
   ] },
   { key: "players", label: "Players", to: "/manage/players/people", subs: [
     { key: "people", label: "People", to: "/manage/players/people" },
@@ -79,7 +78,7 @@ export const REDIRECTS = {
   "/admin/window": "/manage/matches/windows",
   "/admin/tournament": "/manage/matches/fixtures",
   "/admin/auction": "/manage/auction/run",
-  "/admin/duty": "/manage/auction/duty",
+  "/admin/duty": "/manage/auction/run",
 };
 
 export function homePathFor(user) {

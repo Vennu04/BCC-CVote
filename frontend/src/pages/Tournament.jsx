@@ -4,7 +4,7 @@ import { LoadingState } from "../components/LoadingState";
 import TeamCrest, { TeamsVs } from "../components/TeamCrest";
 import { formatDateDisplay } from "../utils/formatDate";
 import { MapPin, AlertTriangle, RefreshCw } from "lucide-react";
-import { todayIst } from "../utils/duty";
+import { todayIst } from "../utils/formatDate";
 
 // Matches › Fixtures and Matches › Groups — the public tournament view
 // (formerly the standalone Tournament page), rendered inside Matches.jsx.
