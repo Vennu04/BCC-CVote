@@ -26,6 +26,12 @@ env:
   # sslip.io URL no longer resolves to a valid cert.
   APP_URL: https://bcccvote.duckdns.org
 
+# Speed-ups (2026-10-15): tests and image builds run side by side (deploy
+# waits for both, so nothing reaches prod unless tests pass); both images
+# build in parallel with a layer cache; images are pushed under their commit
+# tag only and become `latest` (what the server pulls) in the deploy job,
+# after tests have passed; and when several merges land close together only
+# the newest commit is deployed.
 jobs:
   backend-tests:
     name: Backend Tests
@@ -45,6 +51,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
       - name: Install backend dependencies
         working-directory: backend
         run: pip install -r requirements-dev.txt
@@ -55,16 +63,25 @@ jobs:
         run: python -m pytest tests/ -v
 
   build-and-push:
-    name: Build, Scan & Push Images
-    needs: backend-tests
+    name: Build, Scan & Push (${{ matrix.image }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-    outputs:
-      image_tag: ${{ steps.tag.outputs.IMAGE_TAG }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: backend
+            repo: bcc-cvote-backend
+          - image: frontend
+            repo: bcc-cvote-frontend
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set image tag
+        id: tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials (OIDC, new account)
         uses: aws-actions/configure-aws-credentials@v6
@@ -75,62 +92,49 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set image tag
-        id: tag
-        run: echo "IMAGE_TAG=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image
-        working-directory: backend
-        run: |
-          docker build \
-            -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
-            -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest \
-            .
+      # Layer cache lives in GitHub's cache, one scope per image, so an
+      # unchanged dependency layer (pip/npm install) is reused, not rebuilt.
+      # provenance off: a plain single-image manifest, which the deploy
+      # job re-tags as `latest` with a straight ECR put-image.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image }}
+          load: true
+          provenance: false
+          tags: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          build-args: |
+            VITE_API_URL=
+            VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
-      - name: Trivy image scan (backend)
+      - name: Trivy image scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ steps.tag.outputs.IMAGE_TAG }}
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
 
-      - name: Build frontend image
-        working-directory: frontend
-        run: |
-          docker build \
-            --build-arg VITE_API_URL="" \
-            --build-arg VITE_SENTRY_DSN="${{ secrets.VITE_SENTRY_DSN }}" \
-            -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }} \
-            -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest \
-            .
-
-      - name: Trivy image scan (frontend)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
-          severity: CRITICAL,HIGH
-          exit-code: "1"
-          ignore-unfixed: true
-
-      - name: Push backend to ECR
-        run: |
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
-
-      - name: Push frontend to ECR
-        run: |
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ steps.tag.outputs.IMAGE_TAG }}
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+      # Commit tag only — `latest` moves in the deploy job, after tests pass.
+      - name: Push to ECR
+        run: docker push ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ steps.tag.outputs.IMAGE_TAG }}
 
   deploy:
     name: Deploy (SSM RunCommand)
-    needs: build-and-push
-    # Plain GitHub-hosted runner — no self-hosted runner needed. Deploy is
-    # "tell the instance to pull+restart via SSM", not a Kubernetes API
-    # call, so there's no network-reachability requirement this runner
-    # can't satisfy on its own.
+    needs: [backend-tests, build-and-push]
     runs-on: ubuntu-latest
+
+    # One deploy at a time. If several merges queue up, GitHub keeps only the
+    # newest waiting run; the check below also skips any run whose commit is
+    # no longer the head of main, so an older build can never land after a
+    # newer one.
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: false
 
     environment:
       name: production-newaccount
@@ -141,19 +145,49 @@ jobs:
       contents: read
 
     steps:
+      - name: Skip if a newer commit is already on main
+        id: fresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HEAD_SHA=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+          if [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
+            echo "::notice::main has moved on to ${HEAD_SHA::8} — skipping this deploy; the newer run deploys instead."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure AWS credentials (OIDC, new account)
+        if: steps.fresh.outputs.deploy == 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # NEW_INSTANCE_ID is a repo secret because it's stable in practice
-      # (EIP survives instance stop/replace) but NOT guaranteed forever —
-      # if terraform-new-account/main.tf's user_data ever changes,
-      # user_data_replace_on_change=true recreates the instance with a new
-      # ID, and this secret needs a manual update (terraform output
-      # instance_id) before the next deploy.
+      # The server pulls `:latest`; point it at this commit's tested images.
+      - name: Promote this commit's images to latest
+        if: steps.fresh.outputs.deploy == 'true'
+        run: |
+          TAG=${GITHUB_SHA::8}
+          for REPO in ${{ env.BACKEND_REPO }} ${{ env.FRONTEND_REPO }}; do
+            RESP=$(aws ecr batch-get-image --repository-name "$REPO" \
+              --image-ids imageTag="$TAG" --region ${{ env.AWS_REGION }} --output json)
+            MEDIA_TYPE=$(echo "$RESP" | jq -r '.images[0].imageManifestMediaType // empty')
+            MANIFEST=$(echo "$RESP" | jq -r '.images[0].imageManifest // empty')
+            if [ -z "$MANIFEST" ]; then
+              echo "::error::No $REPO image tagged $TAG"; exit 1
+            fi
+            OUT=$(aws ecr put-image --repository-name "$REPO" --image-tag latest \
+              --image-manifest "$MANIFEST" --image-manifest-media-type "$MEDIA_TYPE" \
+              --region ${{ env.AWS_REGION }} 2>&1) || {
+                echo "$OUT" | grep -q ImageAlreadyExistsException || { echo "$OUT"; exit 1; }
+              }
+            echo "$REPO: latest -> $TAG"
+          done
+
       - name: Trigger deploy via SSM RunCommand
+        if: steps.fresh.outputs.deploy == 'true'
         id: deploy
         run: |
           CMD_ID=$(aws ssm send-command \
@@ -164,12 +198,12 @@ jobs:
             --query "Command.CommandId" --output text)
           echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
 
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" --instance-id "${{ secrets.NEW_INSTANCE_ID }}" \
               --region ${{ env.AWS_REGION }} --query Status --output text 2>/dev/null || echo "Pending")
             [ "$STATUS" != "InProgress" ] && [ "$STATUS" != "Pending" ] && break
-            sleep 10
+            sleep 5
           done
 
           aws ssm get-command-invocation \
@@ -183,6 +217,7 @@ jobs:
           fi
 
       - name: Smoke test
+        if: steps.fresh.outputs.deploy == 'true'
         run: |
           for i in $(seq 1 10); do
             CODE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 "${{ env.APP_URL }}/" || echo "000")

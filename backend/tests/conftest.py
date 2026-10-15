@@ -31,7 +31,10 @@ def _insert_user(role, team_code, password, **extra):
     doc = {
         "name": extra.pop("name", team_code.title()),
         "team_code": team_code.upper(),
-        "password_hash": generate_password_hash(password),
+        # Cheap hash for test users only — the default (scrypt, ~0.1 s each)
+        # made user-heavy auction tests spend most of their time hashing.
+        # check_password_hash reads the method from the hash, so logins work.
+        "password_hash": generate_password_hash(password, method="pbkdf2:sha256:1"),
         "role": role,
         "is_active": extra.pop("is_active", True),
         "created_at": utcnow(),
