@@ -26,27 +26,31 @@ env:
   # sslip.io URL no longer resolves to a valid cert.
   APP_URL: https://bcccvote.duckdns.org
 
-# Speed-ups (2026-10-15): tests and image builds run side by side (deploy
-# waits for both, so nothing reaches prod unless tests pass); both images
-# build in parallel with a layer cache; images are pushed under their commit
-# tag only and become `latest` (what the server pulls) in the deploy job,
-# after tests have passed; and when several merges land close together only
-# the newest commit is deployed. Only images whose folder changed since the
-# commit prod is running get rebuilt (and so only those containers restart).
+# How a deploy works (2026-10-15/16):
+# - Every image is fingerprinted by the git tree hash of its folder and
+#   tagged tree-<hash>. PR checks (dev-ci.yml) already build + scan the
+#   images into the *-ci repos, so on merge the usual case is "copy the
+#   PR's image" instead of building again; only source nobody has built
+#   yet is built here (see .github/scripts/plan-images.sh).
+# - Tests run side by side with build/copy; deploy needs all of them, and
+#   only the deploy job moves `latest` (what the server pulls).
+# - One deploy at a time, newest commit only.
 jobs:
   plan:
-    name: Plan (which images changed)
+    name: Plan (build, copy or reuse)
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
-      images: ${{ steps.plan.outputs.images }}
+      builds: ${{ steps.plan.outputs.builds }}
+      copy: ${{ steps.plan.outputs.copy }}
+      deploy: ${{ steps.plan.outputs.deploy }}
+      tag_backend: ${{ steps.plan.outputs.tag_backend }}
+      tag_frontend: ${{ steps.plan.outputs.tag_frontend }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 50
 
       - name: Configure AWS credentials (OIDC, new account)
         uses: aws-actions/configure-aws-credentials@v6
@@ -54,7 +58,7 @@ jobs:
           role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Compare with what prod runs
+      - name: Compare with prod and with PR builds
         id: plan
         run: bash .github/scripts/plan-images.sh
 
@@ -68,9 +72,9 @@ jobs:
           - 27017:27017
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok' --quiet"
-          --health-interval 10s
+          --health-interval 2s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -85,12 +89,12 @@ jobs:
         working-directory: backend
         env:
           FLASK_ENV: testing
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -q
 
   build-and-push:
     name: Build, Scan & Push (${{ matrix.image }})
     needs: plan
-    if: needs.plan.outputs.images != ''
+    if: needs.plan.outputs.builds != ''
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -100,10 +104,6 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set image tag
-        id: tag
-        run: echo "IMAGE_TAG=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials (OIDC, new account)
         uses: aws-actions/configure-aws-credentials@v6
@@ -116,17 +116,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Layer cache lives in GitHub's cache, one scope per image, so an
-      # unchanged dependency layer (pip/npm install) is reused, not rebuilt.
-      # provenance off: a plain single-image manifest, which the deploy
-      # job re-tags as `latest` with a straight ECR put-image.
+      # Must match dev-ci.yml's PR build exactly (context, build args), so a
+      # tree-<hash> image is the same whichever pipeline built it.
       - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image }}
           load: true
           provenance: false
-          tags: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          tags: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ matrix.tag }}
           build-args: |
             VITE_API_URL=
             VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
@@ -136,22 +134,57 @@ jobs:
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ steps.tag.outputs.IMAGE_TAG }}
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ matrix.tag }}
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
 
-      # Commit tag only — `latest` moves in the deploy job, after tests pass.
+      # Pushed only after the scan passed. Not `latest` — the deploy job
+      # moves that once tests have passed too.
       - name: Push to ECR
-        run: docker push ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ steps.tag.outputs.IMAGE_TAG }}
+        run: docker push "${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ matrix.tag }}"
+
+  copy-pr-images:
+    name: Reuse PR-built images
+    needs: plan
+    if: needs.plan.outputs.copy != ''
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials (OIDC, new account)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: imjasonh/setup-crane@v0.7
+
+      # Registry-to-registry copy of the exact image the PR check built and
+      # scanned (same digest), from bcc-cvote-<image>-ci into the prod repo.
+      - name: Copy into the prod repositories
+        env:
+          TAG_BACKEND: ${{ needs.plan.outputs.tag_backend }}
+          TAG_FRONTEND: ${{ needs.plan.outputs.tag_frontend }}
+        run: |
+          for IMG in ${{ needs.plan.outputs.copy }}; do
+            if [ "$IMG" = backend ]; then TAG=$TAG_BACKEND; else TAG=$TAG_FRONTEND; fi
+            crane copy "${{ env.ECR_REGISTRY }}/bcc-cvote-$IMG-ci:$TAG" "${{ env.ECR_REGISTRY }}/bcc-cvote-$IMG:$TAG"
+            echo "bcc-cvote-$IMG:$TAG copied from the PR build"
+          done
 
   deploy:
     name: Deploy (SSM RunCommand)
-    needs: [plan, backend-tests, build-and-push]
-    # build-and-push is skipped when no image changed; still finish cleanly.
+    needs: [plan, backend-tests, build-and-push, copy-pr-images]
+    # build/copy are skipped when there is nothing to build/copy; still finish cleanly.
     if: >-
       !cancelled() && needs.plan.result == 'success' && needs.backend-tests.result == 'success'
       && (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
+      && (needs.copy-pr-images.result == 'success' || needs.copy-pr-images.result == 'skipped')
     runs-on: ubuntu-latest
 
     # One deploy at a time. If several merges queue up, GitHub keeps only the
@@ -180,8 +213,8 @@ jobs:
           if [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
             echo "::notice::main has moved on to ${HEAD_SHA::8} — skipping this deploy; the newer run deploys instead."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
-          elif [ -z "${{ needs.plan.outputs.images }}" ]; then
-            echo "::notice::No backend/ or frontend/ changes since what prod runs — nothing to deploy."
+          elif [ -z "${{ needs.plan.outputs.deploy }}" ]; then
+            echo "::notice::Prod already runs this exact backend/ and frontend/ code — nothing to deploy."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
@@ -194,13 +227,17 @@ jobs:
           role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # The server pulls `:latest`; point it at this commit's tested images.
-      - name: Promote this commit's images to latest
+      # The server pulls `:latest`; point it at this commit's tested images
+      # (same digest as tree-<hash>), and leave a commit tag for history.
+      - name: Promote to latest
         if: steps.fresh.outputs.deploy == 'true'
+        env:
+          TAG_BACKEND: ${{ needs.plan.outputs.tag_backend }}
+          TAG_FRONTEND: ${{ needs.plan.outputs.tag_frontend }}
         run: |
-          TAG=${GITHUB_SHA::8}
-          for IMG in ${{ needs.plan.outputs.images }}; do
+          for IMG in ${{ needs.plan.outputs.deploy }}; do
             REPO="bcc-cvote-$IMG"
+            if [ "$IMG" = backend ]; then TAG=$TAG_BACKEND; else TAG=$TAG_FRONTEND; fi
             RESP=$(aws ecr batch-get-image --repository-name "$REPO" \
               --image-ids imageTag="$TAG" --region ${{ env.AWS_REGION }} --output json)
             MEDIA_TYPE=$(echo "$RESP" | jq -r '.images[0].imageManifestMediaType // empty')
@@ -208,12 +245,14 @@ jobs:
             if [ -z "$MANIFEST" ]; then
               echo "::error::No $REPO image tagged $TAG"; exit 1
             fi
-            OUT=$(aws ecr put-image --repository-name "$REPO" --image-tag latest \
-              --image-manifest "$MANIFEST" --image-manifest-media-type "$MEDIA_TYPE" \
-              --region ${{ env.AWS_REGION }} 2>&1) || {
-                echo "$OUT" | grep -q ImageAlreadyExistsException || { echo "$OUT"; exit 1; }
-              }
-            echo "$REPO: latest -> $TAG"
+            for T in latest "${GITHUB_SHA::8}"; do
+              OUT=$(aws ecr put-image --repository-name "$REPO" --image-tag "$T" \
+                --image-manifest "$MANIFEST" --image-manifest-media-type "$MEDIA_TYPE" \
+                --region ${{ env.AWS_REGION }} 2>&1) || {
+                  echo "$OUT" | grep -q ImageAlreadyExistsException || { echo "$OUT"; exit 1; }
+                }
+            done
+            echo "$REPO: latest -> $TAG (${GITHUB_SHA::8})"
           done
 
       - name: Trigger deploy via SSM RunCommand
@@ -228,12 +267,13 @@ jobs:
             --query "Command.CommandId" --output text)
           echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
 
-          for i in $(seq 1 60); do
+          STATUS=Pending
+          for _ in $(seq 1 150); do
+            sleep 2
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" --instance-id "${{ secrets.NEW_INSTANCE_ID }}" \
               --region ${{ env.AWS_REGION }} --query Status --output text 2>/dev/null || echo "Pending")
             [ "$STATUS" != "InProgress" ] && [ "$STATUS" != "Pending" ] && break
-            sleep 5
           done
 
           aws ssm get-command-invocation \
@@ -249,13 +289,13 @@ jobs:
       - name: Smoke test
         if: steps.fresh.outputs.deploy == 'true'
         run: |
-          for i in $(seq 1 10); do
+          for _ in $(seq 1 20); do
             CODE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 "${{ env.APP_URL }}/" || echo "000")
             if [ "$CODE" = "200" ]; then
               echo "smoke test passed ($CODE)"
               exit 0
             fi
-            sleep 5
+            sleep 3
           done
           echo "::error::smoke test failed after retries"
           exit 1
