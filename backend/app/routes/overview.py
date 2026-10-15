@@ -20,7 +20,6 @@ from ..utils.time_utils import (
 from .admin import VOTER_FILTER
 from .auction import AUCTION_GROUPS, match_captains
 from ..services.settings import get_auction_rules
-from .duty import DUTY_SLOT_LABELS, WEEKEND_WEEKDAYS, _match_label
 
 overview_bp = Blueprint("overview", __name__)
 
@@ -32,7 +31,14 @@ GROUP_LABELS = {
     "power_batsman": "Power Batters",
     "classic": "Classic",
 }
-AUCTION_EVENING_START = (19, 30)  # the duty roster's first slot
+AUCTION_EVENING_START = (19, 30)  # auctions run from 7:30 PM the evening before
+WEEKEND_WEEKDAYS = (5, 6)  # Saturday, Sunday
+
+
+def _match_label(slot):
+    if slot.get("team_a_name") and slot.get("team_b_name"):
+        return f"{slot['team_a_name']} vs {slot['team_b_name']}"
+    return slot.get("description") or f"{slot.get('day', '')} {slot.get('time_of_day', '')}".strip()
 
 
 def _window_state(window):
@@ -120,7 +126,6 @@ def admin_overview():
 
         auction_date = match_date - timedelta(days=1)
         is_weekend = match_date.weekday() in WEEKEND_WEEKDAYS
-        duty = mongo.db.auction_duty.find_one({"slot_id": sid, "auction_date": auction_date.isoformat()}) or {}
         label = _match_label(slot)
         kickoff = slot.get("match_time") or slot.get("start_time") or ""
 
@@ -144,8 +149,6 @@ def admin_overview():
             "captains": captains,
             "attendance_credited": credited,
             "auction": {"id": str(auction["_id"]), "status": auction_status} if auction else None,
-            "duty": {"lead_id": duty.get("lead_id"), "backup_id": duty.get("backup_id"),
-                     "start_slot": DUTY_SLOT_LABELS.get(duty.get("start_slot"))} if is_weekend else None,
             "steps": _steps(state, len(available_ids), credited, odd, auction_status),
         })
 

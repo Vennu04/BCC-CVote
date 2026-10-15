@@ -27,7 +27,7 @@ export default function Me() {
     try {
       const result = await subscribeToPush();
       setPermission(Notification.permission);
-      if (result === "granted") toast.success("Notifications on — you'll hear when voting opens, auctions start and your duty is due");
+      if (result === "granted") toast.success("Notifications on — you'll hear when voting opens and auctions start");
       else if (result === "denied") toast.error("Notifications are blocked. Turn them on in your browser or phone settings.");
     } catch {
       toast.error("Couldn't turn on notifications — please try again.");

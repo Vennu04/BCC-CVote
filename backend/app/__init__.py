@@ -84,7 +84,6 @@ def create_app(config_name: str = None) -> Flask:
     from .routes.auction import auction_bp
     from .routes.push import push_bp
     from .routes.tournament import tournament_bp
-    from .routes.duty import duty_bp
     from .routes.overview import overview_bp
     from .routes.settings import settings_bp
     from .routes.scheduling import scheduling_bp
@@ -95,7 +94,6 @@ def create_app(config_name: str = None) -> Flask:
     app.register_blueprint(auction_bp, url_prefix="/api")
     app.register_blueprint(push_bp, url_prefix="/api")
     app.register_blueprint(tournament_bp, url_prefix="/api")
-    app.register_blueprint(duty_bp, url_prefix="/api")
     app.register_blueprint(overview_bp, url_prefix="/api")
     app.register_blueprint(settings_bp, url_prefix="/api")
     app.register_blueprint(scheduling_bp, url_prefix="/api")

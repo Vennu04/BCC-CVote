@@ -34,7 +34,6 @@ const Attendance = lazy(() => import("./pages/admin/Attendance"));
 const VotingWindow = lazy(() => import("./pages/admin/VotingWindow"));
 const AdminAuction = lazy(() => import("./pages/admin/Auction"));
 const AdminTournament = lazy(() => import("./pages/admin/Tournament"));
-const AuctionDuty = lazy(() => import("./pages/admin/AuctionDuty"));
 
 function RouteLoading() {
   return (
@@ -93,7 +92,8 @@ export default function App() {
           <Route path="/manage/matches/windows"     element={<AdminRoute><VotingWindow /></AdminRoute>} />
           <Route path="/manage/auction"             element={<Navigate to="/manage/auction/run" replace />} />
           <Route path="/manage/auction/run"         element={<AdminRoute><AdminAuction /></AdminRoute>} />
-          <Route path="/manage/auction/duty"        element={<AdminRoute><AuctionDuty /></AdminRoute>} />
+          {/* The duty roster was removed 2026-10-15 — any admin runs the auction. */}
+          <Route path="/manage/auction/duty"        element={<Navigate to="/manage/auction/run" replace />} />
           <Route path="/manage/players"             element={<Navigate to="/manage/players/people" replace />} />
           <Route path="/manage/players/people"      element={<AdminRoute><ManagePlayers /></AdminRoute>} />
           <Route path="/manage/players/attendance"  element={<AdminRoute><Attendance /></AdminRoute>} />

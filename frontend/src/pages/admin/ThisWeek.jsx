@@ -6,7 +6,7 @@ import Navbar from "../../components/Navbar";
 import ManageHeader from "../../components/ManageHeader";
 import DateRequestsCard from "../../components/DateRequestsCard";
 import { LoadingState } from "../../components/LoadingState";
-import { shortDay } from "../../utils/duty";
+import { shortDay } from "../../utils/formatDate";
 import { STEP_KEYS, activeMatches, computeSteps, defaultMatch, getSitOuts, wasShared } from "../../utils/week";
 import { Check, ChevronRight, Lock, Plus, RefreshCw, Wrench } from "lucide-react";
 
