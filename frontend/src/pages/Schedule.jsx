@@ -16,7 +16,7 @@ const EMPTY_OPTION = { date: "", time: "06:15", end_time: "10:00" };
 
 function whatsappText(p) {
   return [
-    `📅 ${p.label} — pick a match date`,
+    `${p.label} — pick a match date`,
     ...p.options.map((o, i) => `${i + 1}) ${o.text}`),
     "",
     "Captains: open the BCC app → Match dates and tick the ones you can play.",
@@ -47,8 +47,8 @@ function RequestCard({ p, admin, onChanged }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-soft p-4">
-      <p className="text-xs font-bold text-gray-500">Group {p.group} · Match {p.match_number} · suggested by {p.proposed_by}</p>
-      <h3 className="text-lg font-black text-gray-900">{p.label}</h3>
+      <p className="text-xs font-bold text-brand-muted">Group {p.group} · Match {p.match_number} · suggested by {p.proposed_by}</p>
+      <h3 className="text-lg font-black text-brand-ink">{p.label}</h3>
       <ul className="mt-2 space-y-2">
         {p.options.map((o, i) => {
           const on = ticks.includes(i);
@@ -62,7 +62,7 @@ function RequestCard({ p, admin, onChanged }) {
                   <span className="flex-1">{o.text}</span>
                 </button>
               ) : (
-                <span className="flex-1 rounded-2xl bg-gray-50 px-3 py-2.5 font-bold text-gray-900">{o.text}</span>
+                <span className="flex-1 rounded-2xl bg-gray-50 px-3 py-2.5 font-bold text-brand-ink">{o.text}</span>
               )}
               {admin && (
                 <button type="button" disabled={busy} onClick={() => run(() => api.post(`/schedule/proposals/${p.id}/pick`, { option: i }))}
@@ -73,7 +73,7 @@ function RequestCard({ p, admin, onChanged }) {
           );
         })}
       </ul>
-      <p className="text-sm text-gray-600 mt-2">
+      <p className="text-sm text-brand-muted mt-2">
         {p.captains.map((c) => `${c.name}: ${!c.answered ? "hasn't answered" : c.ticked?.length ? `can do ${c.ticked.map((i) => i + 1).join(", ")}` : "can't do any"}`).join(" · ")}
       </p>
       {p.my_turn && (
@@ -116,7 +116,7 @@ function SuggestForm({ fixtures, onSent }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-soft p-4">
-      <h2 className="font-black text-gray-900 mb-2">Suggest dates for a match</h2>
+      <h2 className="font-black text-brand-ink mb-2">Suggest dates for a match</h2>
       <select className="input-field" value={fixtureId} onChange={(e) => setFixtureId(e.target.value)} aria-label="Match">
         <option value="">Choose a match…</option>
         {fixtures.map((f) => (
@@ -126,18 +126,18 @@ function SuggestForm({ fixtures, onSent }) {
       {chosen && !chosen.captains_ready && (
         <p className="text-sm text-amber-800 bg-amber-50 rounded-xl p-2 mt-2">Both teams need a captain first — an admin picks them on the Tournament page.</p>
       )}
-      {chosen?.open_proposal_id && <p className="text-sm text-gray-600 mt-2">Sending new dates replaces the open request for this match.</p>}
+      {chosen?.open_proposal_id && <p className="text-sm text-brand-muted mt-2">Sending new dates replaces the open request for this match.</p>}
       {chosen && chosen.captains_ready && (
         <>
           {options.map((o, i) => (
             <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 mt-3 items-end">
-              <label className="text-xs font-bold text-gray-600">Option {i + 1}
+              <label className="text-xs font-bold text-brand-muted">Option {i + 1}
                 <input type="date" className="input-field mt-1" value={o.date} onChange={(e) => set(i, "date", e.target.value)} />
               </label>
-              <label className="text-xs font-bold text-gray-600">Start
+              <label className="text-xs font-bold text-brand-muted">Start
                 <input type="time" className="input-field mt-1" value={o.time} onChange={(e) => set(i, "time", e.target.value)} />
               </label>
-              <label className="text-xs font-bold text-gray-600">End
+              <label className="text-xs font-bold text-brand-muted">End
                 <input type="time" className="input-field mt-1" value={o.end_time} onChange={(e) => set(i, "end_time", e.target.value)} />
               </label>
               <button type="button" aria-label="Remove option" disabled={options.length === 1}
@@ -175,12 +175,12 @@ export default function Schedule() {
         {proposals === null ? <LoadingState /> : (
           <>
             {proposals.map((p) => <RequestCard key={p.id} p={p} admin={admin} onChanged={load} />)}
-            {proposals.length === 0 && <p className="text-center text-gray-500 py-2">No open date requests.</p>}
+            {proposals.length === 0 && <p className="text-center text-brand-muted py-2">No open date requests.</p>}
           </>
         )}
         {fixtures.length > 0 && <SuggestForm fixtures={fixtures} onSent={load} />}
         {fixtures.length === 0 && !admin && proposals?.length === 0 && (
-          <p className="text-center text-sm text-gray-500">Only captains of a team (picked by an admin) can suggest match dates.</p>
+          <p className="text-center text-sm text-brand-muted">Only captains of a team (picked by an admin) can suggest match dates.</p>
         )}
       </div>
     </div>

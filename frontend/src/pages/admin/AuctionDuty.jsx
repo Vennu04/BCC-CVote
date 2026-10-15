@@ -61,7 +61,7 @@ export default function AuctionDuty() {
         {loading && !data ? (
           <LoadingState />
         ) : forbidden ? (
-          <div className="card text-sm text-gray-600">Auction Duty is only for accounts with full admin rights.</div>
+          <div className="card text-sm text-brand-muted">Auction Duty is only for accounts with full admin rights.</div>
         ) : !data || data.evenings.length === 0 ? (
           <EmptyState message="No upcoming matches in the next 3 weeks. Schedule one in Manage Tournament and it appears here." />
         ) : (
@@ -80,25 +80,25 @@ export function EveningCard({ evening, data, onChanged }) {
     <section className="card space-y-4" aria-label={`Auction for ${evening.match_label}`}>
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-muted">
             Auction evening · {shortDay(evening.auction_date)} · 7:30 – 10:30 PM
           </p>
-          <h2 className="font-bold text-gray-900 text-lg leading-tight">Auction for {evening.match_label}</h2>
-          <p className="text-xs text-gray-500">
+          <h2 className="font-bold text-brand-ink text-lg leading-tight">Auction for {evening.match_label}</h2>
+          <p className="text-xs text-brand-muted">
             {evening.group ? `Group ${evening.group} · ` : ""}Match {shortDay(evening.match_date)}
             {evening.kickoff ? ` · ${evening.kickoff}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {evening.auction_status === "completed" && (
-            <span className="text-xs font-semibold rounded-full border px-2.5 py-1 bg-gray-100 text-gray-600 border-gray-300">Auction done</span>
+            <span className="text-xs font-semibold rounded-full border px-2.5 py-1 bg-gray-100 text-brand-muted border-gray-300">Auction done</span>
           )}
           <span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${coverage.className}`}>{coverage.label}</span>
         </div>
       </header>
 
       {!evening.is_weekend ? (
-        <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+        <p className="text-sm text-brand-muted bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
           Weekday match — the Organiser runs this auction. Nothing to tick.
         </p>
       ) : (
@@ -181,7 +181,7 @@ function MyAvailability({ evening, data, onChanged }) {
           <input id={`captain-${evening.slot_id}`} type="checkbox" checked={captain} onChange={toggleCaptain} className="h-4 w-4 accent-amber-600" />
           I&apos;m a captain in this match
         </label>
-        {saving && <span className="text-xs text-gray-400">Saving…</span>}
+        {saving && <span className="text-xs text-brand-muted">Saving…</span>}
       </div>
     </div>
   );
@@ -192,7 +192,7 @@ function AvailabilityGrid({ evening, data }) {
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-xs text-gray-500">
+          <tr className="text-left text-xs text-brand-muted">
             <th className="font-medium py-1.5 px-1">Admin</th>
             {data.slots.map((s) => <th key={s.code} className="font-medium py-1.5 px-1 text-center whitespace-nowrap">{s.label}</th>)}
           </tr>
@@ -204,14 +204,14 @@ function AvailabilityGrid({ evening, data }) {
             return (
               <tr key={admin.id} className="border-t border-gray-100">
                 <td className="py-1.5 px-1 whitespace-nowrap">
-                  <span className="font-medium text-gray-900">{admin.name}</span>
-                  {admin.id === data.me && <span className="text-xs text-gray-400"> (you)</span>}
+                  <span className="font-medium text-brand-ink">{admin.name}</span>
+                  {admin.id === data.me && <span className="text-xs text-brand-muted"> (you)</span>}
                   {role && (
                     <span className={`ml-2 text-[11px] font-bold rounded-full px-2 py-0.5 ${role === "Lead" ? "bg-pitch-600 text-white" : "bg-sky-100 text-sky-800"}`}>{role}</span>
                   )}
                 </td>
                 {!r ? (
-                  <td colSpan={data.slots.length} className="py-1.5 px-1 text-center text-xs text-gray-400 italic">no reply yet</td>
+                  <td colSpan={data.slots.length} className="py-1.5 px-1 text-center text-xs text-brand-muted italic">no reply yet</td>
                 ) : r.captain ? (
                   <td colSpan={data.slots.length} className="py-1.5 px-1 text-center text-xs text-amber-700">
                     <Crown size={12} className="inline -mt-0.5" /> Captain in this match — can&apos;t run it
@@ -310,7 +310,7 @@ function Assignment({ evening, data, onChanged }) {
           <span>Starts <b>{slotLabelOf(data.slots, evening.start_slot)}</b></span>
           <span>· Lead <b>{nameOf(data.admins, evening.lead_id)}</b></span>
           <span>· Backup {evening.backup_id ? <b>{nameOf(data.admins, evening.backup_id)}</b> : <span className="text-amber-700 font-medium">still needed</span>}</span>
-          {evening.assigned_by && <span className="text-xs text-gray-400">(confirmed by {evening.assigned_by})</span>}
+          {evening.assigned_by && <span className="text-xs text-brand-muted">(confirmed by {evening.assigned_by})</span>}
         </p>
         <button className="btn-secondary text-sm" onClick={() => { setForm(initial); setEditing(true); }}>Change</button>
       </div>
@@ -327,7 +327,7 @@ function Assignment({ evening, data, onChanged }) {
           <span>· Backup {evening.suggestion.backup_id ? <b>{nameOf(data.admins, evening.suggestion.backup_id)}</b> : <span className="text-amber-700 font-medium">nobody else free yet</span>}</span>
         </p>
       ) : (
-        <p className="text-sm text-gray-600">Nobody has marked themselves available yet.</p>
+        <p className="text-sm text-brand-muted">Nobody has marked themselves available yet.</p>
       )}
       <div className="flex gap-2">
         {evening.suggestion && (

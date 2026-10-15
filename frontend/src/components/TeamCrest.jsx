@@ -32,11 +32,11 @@ export default function TeamCrest({ name, size = 28 }) {
 export function TeamsVs({ a, b, middle = "VS" }) {
   return (
     <div className="flex items-center justify-between gap-2 my-2">
-      <span className="flex items-center gap-2 min-w-0 flex-1 font-extrabold text-gray-900 leading-tight">
+      <span className="flex items-center gap-2 min-w-0 flex-1 font-extrabold text-[17px] text-brand-ink leading-tight">
         <TeamCrest name={a} /> <span className="break-words">{a}</span>
       </span>
-      <span className="text-xs font-black text-gray-400 shrink-0">{middle}</span>
-      <span className="flex items-center gap-2 min-w-0 flex-1 font-extrabold text-gray-900 leading-tight justify-end text-right">
+      <span className="font-display font-bold text-base text-brand-muted shrink-0">{middle}</span>
+      <span className="flex items-center gap-2 min-w-0 flex-1 font-extrabold text-[17px] text-brand-ink leading-tight justify-end text-right">
         <span className="break-words">{b}</span> <TeamCrest name={b} />
       </span>
     </div>

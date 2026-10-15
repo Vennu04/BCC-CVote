@@ -239,10 +239,10 @@ export default function VotingWindow() {
         <div id="extra" className="card mb-6 scroll-mt-20">
           <div className="flex items-center gap-2 mb-3">
             <CalendarPlus size={18} className="text-pitch-600" />
-            <h2 className="font-bold text-gray-900 flex-1">Add an extra match</h2>
-            <button type="button" onClick={() => setShowExtra(false)} className="text-sm font-semibold text-gray-500 min-h-[44px] px-2">Close</button>
+            <h2 className="font-bold text-brand-ink flex-1">Add an extra match</h2>
+            <button type="button" onClick={() => setShowExtra(false)} className="text-sm font-semibold text-brand-muted min-h-[44px] px-2">Close</button>
           </div>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-brand-muted mb-3">
             For a rain day or a public holiday — any date, not just the usual weekend matches.
           </p>
           <form onSubmit={handleAddSlot} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -322,7 +322,7 @@ export default function VotingWindow() {
             {dayGroups.map((group) => (
               <div key={group.key}>
                 {group.items.length > 1 && (
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-2">
                     {formatDateDisplay(group.label)} — {group.items.length} candidate slots, compare turnout below
                   </p>
                 )}
@@ -335,15 +335,15 @@ export default function VotingWindow() {
                           <div>
                             {matchTeams(slot) ? (
                               <>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">
                                   {slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}
                                 </p>
-                                <h2 className="font-bold text-gray-900">{matchTeams(slot)}</h2>
+                                <h2 className="font-bold text-brand-ink">{matchTeams(slot)}</h2>
                               </>
                             ) : (
                               <>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{slot.day}</p>
-                                <h2 className="font-bold text-gray-900">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
+                                <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">{slot.day}</p>
+                                <h2 className="font-bold text-brand-ink">{slot.match_time || slot.time_of_day} — {slot.time_of_day} Match</h2>
                               </>
                             )}
                             {!slot.is_adhoc && (
@@ -367,13 +367,13 @@ export default function VotingWindow() {
                                     <button
                                       type="button"
                                       onClick={() => setEditingDateSlot(null)}
-                                      className="text-xs text-gray-500 hover:text-gray-700 min-h-[44px] px-2 -my-2 transition-colors duration-150"
+                                      className="text-xs text-brand-muted hover:text-gray-700 min-h-[44px] px-2 -my-2 transition-colors duration-150"
                                     >
                                       Cancel
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <div className="flex items-center gap-2 text-sm text-brand-muted">
                                     <span>{formatDateDisplay(slot.resolved_match_date)}</span>
                                     {slot.date_override && (
                                       <span className="text-xs font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">overridden</span>
@@ -382,7 +382,7 @@ export default function VotingWindow() {
                                       type="button"
                                       onClick={() => setEditingDateSlot(slot.id)}
                                       title="Change date for this week"
-                                      className="text-gray-400 hover:text-pitch-600 active:text-pitch-700 min-h-[44px] min-w-[44px] flex items-center justify-center -my-2 transition-colors duration-150"
+                                      className="text-brand-muted hover:text-pitch-600 active:text-pitch-700 min-h-[44px] min-w-[44px] flex items-center justify-center -my-2 transition-colors duration-150"
                                     >
                                       <Pencil size={12} />
                                     </button>
@@ -392,7 +392,7 @@ export default function VotingWindow() {
                                         onClick={() => handleResetDateOverride(slot.id)}
                                         disabled={savingDateSlot === slot.id}
                                         title="Reset to natural weekend date"
-                                        className="text-gray-400 hover:text-red-600 active:text-red-700 min-h-[44px] min-w-[44px] flex items-center justify-center -my-2 transition-colors duration-150"
+                                        className="text-brand-muted hover:text-red-600 active:text-red-700 min-h-[44px] min-w-[44px] flex items-center justify-center -my-2 transition-colors duration-150"
                                       >
                                         <RotateCcw size={12} />
                                       </button>
@@ -413,7 +413,7 @@ export default function VotingWindow() {
                                 {STATUS_STYLES[win.status]?.label} — {win.opens_at} to {win.closes_at}
                               </Link>
                             ) : win?.status && (
-                              <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
+                              <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-brand-muted"}`}>
                                 <Clock size={12} />
                                 {STATUS_STYLES[win.status]?.label || win.status} — {win.opens_at} to {win.closes_at}
                               </span>
@@ -430,7 +430,7 @@ export default function VotingWindow() {
                         )}
 
                         {suggested && (
-                          <p className="text-xs text-gray-500 mb-3">
+                          <p className="text-xs text-brand-muted mb-3">
                             Suggested: <strong>{suggested.opens_at}</strong> → <strong>{suggested.closes_at}</strong>
                           </p>
                         )}

@@ -5,7 +5,7 @@ export default function WeatherForecast({ weather }) {
 
   if (weather.status === "too_far") {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-gray-400 italic mb-3">
+      <div className="flex items-center gap-1.5 text-xs text-brand-muted mb-1">
         <CloudOff size={12} /> Forecast available closer to the date
       </div>
     );
@@ -13,18 +13,18 @@ export default function WeatherForecast({ weather }) {
 
   if (weather.status !== "ok") {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-gray-400 italic mb-3">
+      <div className="flex items-center gap-1.5 text-xs text-brand-muted mb-1">
         <CloudOff size={12} /> Weather unavailable
       </div>
     );
   }
 
   return (
-    <div className="mb-3 bg-white/60 rounded-lg px-3 py-2 border border-white/80">
-      <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-1.5">
+    <div className="bg-brand-ground rounded-xl px-3 py-2">
+      <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-brand-muted mb-1.5">
         <MapPin size={10} /> {weather.venue}
       </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-700">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[13px] text-brand-ink">
         <span className="flex items-center gap-1">
           <Thermometer size={12} className="text-red-400" />
           {Math.round(weather.temp_c)}°C
@@ -35,7 +35,7 @@ export default function WeatherForecast({ weather }) {
           {weather.rain_chance_pct}% rain
         </span>
         <span className="flex items-center gap-1">
-          <Wind size={12} className="text-gray-400" />
+          <Wind size={12} className="text-brand-muted" />
           {weather.wind_kph} km/h
         </span>
         <span className="flex items-center gap-1">

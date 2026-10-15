@@ -50,10 +50,10 @@ export default function ChangePassword() {
       <div className="max-w-sm mx-auto px-4 py-8">
         <div className="card">
           <div className="flex items-center gap-2 mb-1">
-            <KeyRound size={20} className="text-pitch-600" />
-            <h1 className="text-xl font-bold text-gray-900">Change Password</h1>
+            <KeyRound size={20} className="text-brand-navy" />
+            <h1 className="text-xl font-bold text-brand-ink">Change Password</h1>
           </div>
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="text-sm text-brand-muted mb-6">
             {forced
               ? "You're using a default password — set your own before continuing."
               : "Update your login password."}
@@ -81,7 +81,7 @@ export default function ChangePassword() {
                 value={form.new_password}
                 onChange={(e) => setForm({ ...form, new_password: e.target.value })}
               />
-              <p className="text-xs text-gray-400 mt-1">At least 6 characters, and not all numbers.</p>
+              <p className="text-xs text-brand-muted mt-1">At least 6 characters, and not all numbers.</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>

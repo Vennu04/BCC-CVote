@@ -16,7 +16,7 @@ const EMPTY_FIXTURE = { team1_id: "", team2_id: "", date: "", time: "", venue: "
 // auction state (tournament.py _schedule_info_by_fixture). Reuses the Window
 // Dashboard's chip styles so a match reads the same on both pages.
 function fixtureStage(f) {
-  if (!f.match_slot_id || !f.window_status) return { label: "NOT SCHEDULED", className: "bg-gray-100 text-gray-500", detail: "Add a date and time to schedule it" };
+  if (!f.match_slot_id || !f.window_status) return { label: "NOT SCHEDULED", className: "bg-gray-100 text-brand-muted", detail: "Add a date and time to schedule it" };
   if (f.auction_status === "active") return { label: "AUCTION LIVE", className: "bg-amber-100 text-amber-700" };
   if (f.auction_status === "pending") return { label: "AUCTION READY", className: "bg-amber-100 text-amber-700", detail: "Created — waiting for you to start it" };
   const style = STATUS_STYLES[f.window_status] || STATUS_STYLES.closed;
@@ -168,7 +168,7 @@ export default function AdminTournament() {
       toast.success(
         !created?.match_slot_id ? "Fixture added"
           : created.window_status === "scheduled" ? `Fixture scheduled — voting opens ${created.voting_opens_display}`
-          : "Fixture added — voting window is open! 🗳️"
+          : "Fixture added — voting window is open"
       );
       setNewFixture(EMPTY_FIXTURE);
       fetchData();
@@ -191,7 +191,7 @@ export default function AdminTournament() {
       // venue or result) is not a "voting just started" event.
       const scheduleChanged = ["date", "time", "voting_opens_at"].some((k) => k in edit);
       toast.success(
-        hadNoSlotYet && res.data?.match_slot_id ? "Fixture scheduled — voting window is set up 🗳️"
+        hadNoSlotYet && res.data?.match_slot_id ? "Fixture scheduled — voting window is set up"
           : scheduleChanged && res.data?.match_slot_id ? "Fixture rescheduled — voting window updated"
           : "Fixture updated"
       );
@@ -234,7 +234,7 @@ export default function AdminTournament() {
         <div className="card mb-4">
           <div className="flex items-center gap-2 flex-wrap">
             <Trophy size={18} className="text-pitch-600" />
-            <h2 className="font-black text-gray-900 flex-1">{tournament?.name || "Tournament"}</h2>
+            <h2 className="font-black text-brand-ink flex-1">{tournament?.name || "Tournament"}</h2>
             <button type="button" className="btn-secondary text-sm min-h-[44px]"
               onClick={() => setTourForm({ mode: "groups", name: tournament?.name || "", groups: GROUPS.join(", ") })}>Edit name / groups</button>
             <button type="button" className="btn-primary text-sm min-h-[44px]"
@@ -251,7 +251,7 @@ export default function AdminTournament() {
                 <input className="input-field mt-1" value={tourForm.name} placeholder="e.g. BCC Winter Cup 2027"
                   onChange={(e) => setTourForm({ ...tourForm, name: e.target.value })} />
               </label>
-              <label className="block text-sm font-bold text-gray-700">Groups <span className="font-normal text-gray-500">(separate with commas, e.g. A, B, C, D)</span>
+              <label className="block text-sm font-bold text-gray-700">Groups <span className="font-normal text-brand-muted">(separate with commas, e.g. A, B, C, D)</span>
                 <input className="input-field mt-1" value={tourForm.groups}
                   onChange={(e) => setTourForm({ ...tourForm, groups: e.target.value })} />
               </label>
@@ -281,7 +281,7 @@ export default function AdminTournament() {
               type="button"
               onClick={() => setActiveGroup(g)}
               className={`flex-1 min-w-[4.5rem] py-2.5 rounded-xl font-bold text-sm min-h-[44px] transition-colors duration-150 ${
-                activeGroup === g ? "bg-pitch-600 text-white" : "bg-white text-gray-600 border border-gray-200"
+                activeGroup === g ? "bg-pitch-600 text-white" : "bg-white text-brand-muted border border-gray-200"
               }`}
             >
               Group {g} ({teams.filter((t) => t.group === g).length})
@@ -293,7 +293,7 @@ export default function AdminTournament() {
         <div className="card mb-6">
           <div className="flex items-center gap-2 mb-3">
             <Users size={18} className="text-pitch-600" />
-            <h2 className="font-bold text-gray-900">Group {activeGroup} Teams</h2>
+            <h2 className="font-bold text-brand-ink">Group {activeGroup} Teams</h2>
           </div>
           <div className="space-y-2 mb-4">
             {groupTeams.map((t) => {
@@ -314,8 +314,8 @@ export default function AdminTournament() {
                     disabled={savingTeam === t.id}
                     onChange={(e) => handleSetCaptain(t, e.target.value)}
                   >
-                    <option value="">🧢 Pick captain…</option>
-                    {captains.map((c) => <option key={c.id} value={c.id}>🧢 {c.name}</option>)}
+                    <option value="">Pick captain…</option>
+                    {captains.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                   <button
                     type="button"
@@ -337,7 +337,7 @@ export default function AdminTournament() {
                 </div>
               );
             })}
-            {groupTeams.length === 0 && <p className="text-sm text-gray-400">No teams in this group yet.</p>}
+            {groupTeams.length === 0 && <p className="text-sm text-brand-muted">No teams in this group yet.</p>}
           </div>
           <form onSubmit={handleAddTeam} className="flex items-center gap-2">
             <input
@@ -358,7 +358,7 @@ export default function AdminTournament() {
         <div className="card">
           <div className="flex items-center gap-2 mb-3">
             <Calendar size={18} className="text-pitch-600" />
-            <h2 className="font-bold text-gray-900">Group {activeGroup} Fixtures</h2>
+            <h2 className="font-bold text-brand-ink">Group {activeGroup} Fixtures</h2>
           </div>
           <div className="space-y-3 mb-4">
             {groupFixtures.map((f) => {
@@ -371,7 +371,7 @@ export default function AdminTournament() {
               return (
                 <div key={f.id} className="border border-gray-100 rounded-xl p-3">
                   <div className="flex items-center justify-between mb-1 gap-2">
-                    <span className="text-sm font-semibold text-gray-900">
+                    <span className="text-sm font-semibold text-brand-ink">
                       Match {f.match_number}: {f.team1_name} vs {f.team2_name}
                     </span>
                     <button
@@ -385,7 +385,7 @@ export default function AdminTournament() {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap mb-2">
                     <span className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 ${stage.className}`}>{stage.label}</span>
-                    {stage.detail && <span className="text-xs text-gray-500">{stage.detail}</span>}
+                    {stage.detail && <span className="text-xs text-brand-muted">{stage.detail}</span>}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <input
@@ -428,7 +428,7 @@ export default function AdminTournament() {
                       onChange={(e) => setFixtureEdits({ ...fixtureEdits, [f.id]: { ...edit, result: e.target.value } })}
                     />
                   </div>
-                  <label className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                  <label className="flex items-center gap-2 mt-2 text-xs text-brand-muted">
                     <Clock size={13} className="shrink-0" />
                     <span className="shrink-0">Voting opens</span>
                     <input
@@ -439,7 +439,7 @@ export default function AdminTournament() {
                       onChange={(e) => setFixtureEdits({ ...fixtureEdits, [f.id]: { ...edit, voting_opens_at: e.target.value } })}
                     />
                   </label>
-                  <p className="text-[11px] text-gray-400 mt-1">
+                  <p className="text-[11px] text-brand-muted mt-1">
                     {scheduleLocked
                       ? "An auction already exists for this match, so its date and time are locked."
                       : "Voting closes at kickoff. Leave “Voting opens” blank to open right away."}
@@ -473,7 +473,7 @@ export default function AdminTournament() {
                 </div>
               );
             })}
-            {groupFixtures.length === 0 && <p className="text-sm text-gray-400">No fixtures in this group yet.</p>}
+            {groupFixtures.length === 0 && <p className="text-sm text-brand-muted">No fixtures in this group yet.</p>}
           </div>
           <form onSubmit={handleAddFixture} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <select
@@ -513,7 +513,7 @@ export default function AdminTournament() {
               value={newFixture.venue}
               onChange={(e) => setNewFixture({ ...newFixture, venue: e.target.value })}
             />
-            <label className="flex items-center gap-2 text-xs text-gray-500 sm:col-span-2">
+            <label className="flex items-center gap-2 text-xs text-brand-muted sm:col-span-2">
               <Clock size={13} className="shrink-0" />
               <span className="shrink-0">Voting opens</span>
               <input
@@ -524,7 +524,7 @@ export default function AdminTournament() {
                 onChange={(e) => setNewFixture({ ...newFixture, voting_opens_at: e.target.value })}
               />
             </label>
-            <p className="text-[11px] text-gray-400 sm:col-span-2 -mt-1">
+            <p className="text-[11px] text-brand-muted sm:col-span-2 -mt-1">
               Pick a match date and time to schedule it. Voting closes at kickoff; leave “Voting opens” blank to open right away.
             </p>
             <button type="submit" disabled={addingFixture} className="btn-primary sm:col-span-2 flex items-center justify-center gap-1.5 text-sm py-2">

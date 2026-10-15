@@ -39,7 +39,7 @@ const AuctionDuty = lazy(() => import("./pages/admin/AuctionDuty"));
 function RouteLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500">Loading…</p>
+      <p className="text-brand-muted">Loading…</p>
     </div>
   );
 }
@@ -47,9 +47,8 @@ function RouteLoading() {
 function NotFound() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
-      <div className="text-6xl mb-4">🏏</div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">404 — Stumped!</h1>
-      <p className="text-gray-500 mb-6">This page doesn't exist.</p>
+      <h1 className="text-3xl font-bold text-brand-ink mb-2">404 — Stumped!</h1>
+      <p className="text-brand-muted mb-6">This page doesn't exist.</p>
       <a href="/" className="btn-primary inline-block">Go Home</a>
     </div>
   );

@@ -12,7 +12,7 @@
    additive, not a replacement mechanism. */
 :root {
   /* Colors */
-  --color-primary: #16a34a;       /* pitch-600 */
+  --color-primary: #0f2547;       /* brand navy — focus rings */
   --color-primary-dark: #15803d;  /* pitch-700 */
   --color-primary-light: #4ade80; /* pitch-400 */
   --color-navy: #1e3a5f;
@@ -91,22 +91,22 @@
      the 44px touch-target minimum and share the same radius/transition/
      pressed-state language. Pressed state uses transform+opacity only
      (Android perf ask) — never animates box-shadow/width/height. */
+  /* Unified look (2026-10): gold is the one main action on a screen. */
   .btn-primary {
-    @apply bg-gradient-to-b from-pitch-500 to-pitch-600 hover:from-pitch-600 hover:to-pitch-700
-      text-white font-semibold px-6 py-2.5 rounded-xl shadow-soft
+    @apply bg-brand-gold hover:bg-[#e6a800] text-brand-navy font-extrabold px-6 py-2.5 rounded-xl
       transition-all duration-200 min-h-[44px]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
       active:scale-[0.97] active:brightness-95;
   }
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-6 py-2.5 rounded-xl
-      border border-gray-300 shadow-soft transition-all duration-200 min-h-[44px]
+    @apply bg-white hover:bg-gray-50 text-brand-navy font-bold px-6 py-2.5 rounded-xl
+      border-2 border-brand-navy transition-all duration-200 min-h-[44px]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
       active:scale-[0.97] active:bg-gray-100;
   }
   .btn-danger {
-    @apply bg-gradient-to-b from-red-500 to-red-600 hover:from-red-600 hover:to-red-700
-      text-white font-semibold px-6 py-2.5 rounded-xl shadow-soft
+    @apply bg-[#b42318] hover:bg-[#a1251b]
+      text-white font-bold px-6 py-2.5 rounded-xl
       transition-all duration-200 min-h-[44px]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
       active:scale-[0.97] active:brightness-95;
@@ -130,7 +130,7 @@
   }
 
   .card {
-    @apply bg-white rounded-2xl shadow-soft border border-gray-100 p-6
+    @apply bg-white rounded-2xl shadow-soft p-6
       transition-shadow duration-200;
   }
 
@@ -140,7 +140,7 @@
        in the app (Login, ChangePassword, ResetPassword, admin filters). */
     @apply w-full px-4 py-3 min-h-[44px] border border-gray-300 rounded-xl
       text-base bg-white
-      focus:outline-none focus:ring-2 focus:ring-pitch-500/40 focus:border-pitch-500
+      focus:outline-none focus:ring-2 focus:ring-brand-navy/30 focus:border-brand-navy
       transition-all duration-150
       disabled:opacity-50 disabled:cursor-not-allowed;
   }
@@ -192,7 +192,7 @@
      only chrome/background/brand elements move to blue, per the approved
      mockup. */
   .card-dark {
-    @apply bg-royal-600 border border-sky-400/[0.13] rounded-2xl p-6;
+    @apply bg-white text-brand-ink rounded-2xl p-6;
   }
   /* Lighter sibling of .card-dark — Captain/Player Dashboard only (per user
      feedback that those two should read "a little light compared to
@@ -208,8 +208,7 @@
       disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary-dark {
-    @apply bg-sky-400 hover:bg-sky-300 text-royal-950 font-extrabold px-6 py-2.5 rounded-xl
-      shadow-[0_10px_26px_-8px_rgba(56,189,248,0.4)]
+    @apply bg-brand-gold hover:bg-[#e6a800] text-brand-navy font-extrabold px-6 py-2.5 rounded-xl
       transition-all duration-200 min-h-[44px]
       disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
       active:scale-[0.97] active:brightness-95;

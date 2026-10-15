@@ -26,7 +26,7 @@ export default function YetToVotePanel({ matrix, slotId, noResponseCount, onVote
   }, [matrix, slotId]);
 
   if (noResponseCount === 0) {
-    return <span className="text-gray-400">— {noResponseCount}</span>;
+    return <span className="text-brand-muted">— {noResponseCount}</span>;
   }
 
   const handleMark = async (personId, personName, availability) => {
@@ -47,7 +47,7 @@ export default function YetToVotePanel({ matrix, slotId, noResponseCount, onVote
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-1 text-gray-400 hover:text-gray-600"
+        className="flex items-center gap-1 text-brand-muted hover:text-brand-muted"
       >
         — {noResponseCount} yet to vote {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
       </button>

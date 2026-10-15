@@ -36,16 +36,16 @@ export default function AuctionHome() {
       <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
         <div className="bg-white rounded-2xl shadow-soft p-5 text-center">
           <Gavel className="mx-auto text-gray-300 mb-2" size={36} />
-          <p className="font-bold text-gray-900">No live auction right now</p>
-          <p className="text-sm text-gray-500 mt-1">When an auction you're part of goes live, this tab shows a red dot and opens it straight away.</p>
+          <p className="font-bold text-brand-ink">No live auction right now</p>
+          <p className="text-sm text-brand-muted mt-1">When an auction you're part of goes live, this tab shows a red dot and opens it straight away.</p>
         </div>
         <div className="bg-white rounded-2xl shadow-soft p-4">
-          <h2 className="font-black text-gray-900 mb-2">How the auction works</h2>
+          <h2 className="font-black text-brand-ink mb-2">How the auction works</h2>
           <dl className="divide-y divide-gray-100">
             {rulesText(rules).map(([k, v]) => (
               <div key={k} className="py-2 grid grid-cols-[6.5rem_1fr] gap-3 text-sm">
                 <dt className="font-bold text-gray-700">{k}</dt>
-                <dd className="text-gray-600">{v}</dd>
+                <dd className="text-brand-muted">{v}</dd>
               </div>
             ))}
           </dl>

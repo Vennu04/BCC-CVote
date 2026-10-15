@@ -10,13 +10,15 @@ import { buildWhatsAppSummary, buildPlayerListText, ACTIVE_AUCTION_KEY } from ".
 import {
   STEP_KEYS, STEP_TITLES, computeSteps, groupName, getSitOuts, setSitOut, clearSitOut, wasShared, markShared,
 } from "../../utils/week";
-import { Check, ChevronLeft, X, Copy, Calendar, Clock, MapPin, Users, MessageCircle } from "lucide-react";
+import { Check, ChevronLeft, ChevronDown, ChevronUp, X, Copy, Calendar, Clock, MapPin, Users, MessageCircle } from "lucide-react";
+import { CATEGORY_ORDER } from "../../utils/categories";
+import CategoryTag from "../../components/CategoryTag";
 
 // One guided screen per "This week" step: a single big question, plain
 // numbers, one green button, and a safe way back. Everything here calls the
 // same endpoints the full admin pages use — nothing new on the server.
 
-const CATS = ["extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"];
+const CATS = CATEGORY_ORDER;
 
 // ---------- shared pieces ----------
 function Shell({ stepKey, match, children }) {
@@ -29,10 +31,10 @@ function Shell({ stepKey, match, children }) {
       <div className="bg-brand-navy text-white">
         <div className="max-w-xl mx-auto px-4 pt-3 pb-4">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-white/70">Step {n} of {STEP_KEYS.length}{match ? ` · ${match.label}` : ""}</span>
+            <span className="text-sm font-bold text-white/80">Step {n} of {STEP_KEYS.length}{match ? ` · ${match.label}` : ""}</span>
             <Link to={back} className="flex items-center gap-1 text-sm font-bold text-white/80 min-h-[44px] px-2 -mr-2"><X size={18} /> Close</Link>
           </div>
-          <h1 className="text-2xl font-black">{STEP_TITLES[stepKey]}</h1>
+          <h1 className="font-display font-extrabold text-[30px] uppercase tracking-wide leading-none">{STEP_TITLES[stepKey]}</h1>
           {steps.length > 0 && (
             <div className="flex gap-1 mt-3" aria-hidden="true">
               {steps.map((s) => (
@@ -49,8 +51,8 @@ function Shell({ stepKey, match, children }) {
 
 const Question = ({ children, hint }) => (
   <>
-    <h2 className="text-2xl font-black text-gray-900 leading-tight text-balance">{children}</h2>
-    {hint && <p className="text-gray-600 mt-1.5 mb-4">{hint}</p>}
+    <h2 className="text-2xl font-black text-brand-ink leading-tight text-balance">{children}</h2>
+    {hint && <p className="text-brand-muted mt-1.5 mb-4">{hint}</p>}
     {!hint && <div className="h-4" />}
   </>
 );
@@ -58,32 +60,32 @@ const Question = ({ children, hint }) => (
 function Pick({ selected, onClick, children, note }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={!!selected}
-      className={`w-full flex items-center gap-3 text-left rounded-2xl border-2 px-4 min-h-[56px] py-2.5 mb-2 font-bold text-gray-900 transition-colors duration-150 ${
-        selected ? "border-pitch-600 bg-pitch-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
-      <span className="flex-1">{children}{note && <span className="block text-sm font-semibold text-gray-500">{note}</span>}</span>
-      {selected && <Check size={20} className="text-pitch-700" strokeWidth={3} />}
+      className={`w-full flex items-center gap-3 text-left rounded-2xl border-2 px-4 min-h-[56px] py-2.5 mb-2 font-bold text-brand-ink transition-colors duration-150 ${
+        selected ? "border-brand-navy bg-[#eef2f8]" : "border-brand-line bg-white hover:border-gray-300"}`}>
+      <span className="flex-1">{children}{note && <span className="block text-sm font-semibold text-brand-muted">{note}</span>}</span>
+      {selected && <Check size={20} className="text-brand-navy" strokeWidth={3} />}
     </button>
   );
 }
 
 function Big({ kind = "green", children, ...rest }) {
   const cls = {
-    green: "bg-pitch-700 text-white border-pitch-700",
-    white: "bg-white text-brand-navy border-gray-300",
-    red: "bg-white text-red-700 border-red-200",
+    green: "bg-brand-gold text-brand-navy border-brand-gold",
+    white: "bg-white text-brand-navy border-brand-navy",
+    red: "bg-white text-[#a1251b] border-[#f3c4bf]",
   }[kind];
   return (
     <button type="button" {...rest}
-      className={`w-full min-h-[56px] rounded-2xl border-2 font-black text-lg mt-3 flex items-center justify-center gap-2 px-4 transition-transform duration-150 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100 ${cls}`}>
+      className={`w-full min-h-[56px] rounded-2xl border-2 font-extrabold text-lg mt-3 flex items-center justify-center gap-2 px-4 transition-transform duration-150 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100 ${cls}`}>
       {children}
     </button>
   );
 }
 
 function BigLink({ to, kind = "green", children }) {
-  const cls = kind === "green" ? "bg-pitch-700 text-white border-pitch-700" : "bg-white text-brand-navy border-gray-300";
+  const cls = kind === "green" ? "bg-brand-gold text-brand-navy border-brand-gold" : "bg-white text-brand-navy border-brand-navy";
   return (
-    <Link to={to} className={`w-full min-h-[56px] rounded-2xl border-2 font-black text-lg mt-3 flex items-center justify-center gap-2 px-4 ${cls}`}>
+    <Link to={to} className={`w-full min-h-[56px] rounded-2xl border-2 font-extrabold text-lg mt-3 flex items-center justify-center gap-2 px-4 ${cls}`}>
       {children}
     </Link>
   );
@@ -94,10 +96,10 @@ const Card = ({ children, className = "" }) => <div className={`bg-white rounded
 function Count3({ a, b, c }) {
   return (
     <div className="grid grid-cols-3 gap-2 mb-3">
-      {[[a, "✅ Playing"], [b, "❌ Not"], [c, "❔ No answer"]].map(([v, l]) => (
+      {[[a, "In", "text-pitch-700"], [b, "Out", "text-[#b42318]"], [c, "No answer", "text-brand-navy"]].map(([v, l, tone]) => (
         <div key={l} className="bg-white rounded-2xl shadow-soft py-3 text-center">
-          <span className="block text-3xl font-black text-brand-navy tabular-nums">{v ?? "—"}</span>
-          <span className="block text-xs font-bold text-gray-600">{l}</span>
+          <span className={`block font-display font-extrabold text-[34px] leading-none tabular-nums ${tone}`}>{v ?? "—"}</span>
+          <span className="block text-xs font-bold text-brand-muted mt-1">{l}</span>
         </div>
       ))}
     </div>
@@ -173,9 +175,9 @@ function SetupStep() {
                 className={`flex-1 min-w-[5rem] min-h-[48px] rounded-2xl font-black ${group === g ? "bg-brand-navy text-white" : "bg-white text-gray-700 shadow-soft"}`}>Group {g}</button>
             ))}
           </div>
-          <BigLink to="/schedule" kind="white">📅 Or let the two captains agree a date</BigLink>
+          <BigLink to="/schedule" kind="white">Or let the two captains agree a date</BigLink>
           <div className="h-3" />
-          {list.length === 0 && <p className="text-gray-600">No open fixtures in Group {group}.</p>}
+          {list.length === 0 && <p className="text-brand-muted">No open fixtures in Group {group}.</p>}
           {list.map((fx) => (
             <Pick key={fx.id} onClick={() => choose(fx)}
               note={fx.date ? `Now ${formatDateDisplay(fx.date)}${fx.time ? ` · ${time12(fx.time)}` : ""} — tap to move it` : "Not scheduled yet"}>
@@ -231,7 +233,7 @@ function SetupStep() {
       {page === 4 && (
         <>
           <Question hint="Voting always closes when the match starts.">When should voting open?</Question>
-          <Pick selected={form.opens === "now"} onClick={() => setForm({ ...form, opens: "now" })}>🟢 Right now</Pick>
+          <Pick selected={form.opens === "now"} onClick={() => setForm({ ...form, opens: "now" })}>Right now</Pick>
           <Pick selected={form.opens === "later"} onClick={() => setForm({ ...form, opens: "later" })}>⏰ Later — I'll pick a time</Pick>
           {form.opens === "later" && (
             <>
@@ -249,9 +251,9 @@ function SetupStep() {
           <Card>
             <TeamsVs a={f.team1_name} b={f.team2_name} />
             <dl className="divide-y divide-gray-100 text-base">
-              {[["📅 Day", formatDateDisplay(form.date)], ["🕕 Time", `${time12(form.time)}${form.endTime ? ` – ${time12(form.endTime)}` : ""}`], ["📍 Ground", form.venue || "—"],
-                ["🗳 Voting opens", form.opens === "now" ? "Right now" : form.opensAt.replace("T", " at ")]].map(([k, v]) => (
-                <div key={k} className="flex justify-between py-2.5"><dt className="text-gray-600">{k}</dt><dd className="font-bold text-gray-900">{v}</dd></div>
+              {[["Day", formatDateDisplay(form.date)], ["Time", `${time12(form.time)}${form.endTime ? ` – ${time12(form.endTime)}` : ""}`], ["Ground", form.venue || "—"],
+                ["Voting opens", form.opens === "now" ? "Right now" : form.opensAt.replace("T", " at ")]].map(([k, v]) => (
+                <div key={k} className="flex justify-between py-2.5"><dt className="text-brand-muted">{k}</dt><dd className="font-bold text-brand-ink">{v}</dd></div>
               ))}
             </dl>
           </Card>
@@ -267,6 +269,8 @@ function SetupStep() {
 function VotesStep({ match, reload }) {
   const [dash, setDash] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [openGroups, setOpenGroups] = useState({});
+  const [showAllPending, setShowAllPending] = useState(false);
   const load = useCallback(() => api.get("/admin/dashboard").then((r) => setDash(r.data)).catch(() => {}), []);
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
@@ -317,89 +321,114 @@ function VotesStep({ match, reload }) {
     }
   };
 
+  const IN_BTN = "min-h-[44px] px-3 rounded-xl bg-pitch-50 text-pitch-800 font-extrabold inline-flex items-center gap-1 disabled:opacity-50";
+  const OUT_BTN = "min-h-[44px] px-3 rounded-xl bg-[#fce8e6] text-[#a1251b] font-extrabold inline-flex items-center gap-1 disabled:opacity-50";
+  const REMOVE_BTN = "min-h-[44px] px-3 rounded-xl border border-brand-line bg-white text-brand-ink font-bold disabled:opacity-50";
+  // Small groups stay open; big ones start folded so the page stays short.
+  const isOpen = (key, size) => openGroups[key] ?? size <= 4;
+  const toggle = (key, size) => setOpenGroups((o) => ({ ...o, [key]: !isOpen(key, size) }));
+  const pendingShown = showAllPending ? pending : pending.slice(0, 6);
+
   return (
     <Shell stepKey="votes" match={match}>
       <Question hint="This updates by itself every few seconds.">Who's playing?</Question>
       <Count3 a={summary?.available} b={summary?.not_available} c={summary?.no_response} />
-      {summary?.maybe > 0 && <p className="text-sm text-gray-600 -mt-1 mb-3">🤔 {summary.maybe} marked “maybe” by an admin.</p>}
-      <Card>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="font-black text-gray-900">Haven't answered</h3>
-          <span className="text-xs text-gray-500">answer for them</span>
-        </div>
-        {!dash ? <LoadingState /> : pending.length === 0 ? (
-          <p className="text-gray-600 py-2">Everyone has answered 🎉</p>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {pending.map((p) => (
-              <li key={p.id} className="flex items-center gap-2 py-2">
-                <span className="flex-1 font-semibold text-gray-900">{p.name}</span>
-                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "available")}
-                  className="min-h-[44px] px-3 rounded-xl bg-pitch-50 text-pitch-800 font-black disabled:opacity-50">✓ In</button>
-                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")}
-                  className="min-h-[44px] px-3 rounded-xl bg-red-50 text-red-700 font-black disabled:opacity-50">✕ Out</button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {summary?.maybe > 0 && <p className="text-sm text-brand-muted -mt-1 mb-3">{summary.maybe} marked “maybe” by an admin.</p>}
+
       {captainRows.length > 0 && (
         <Card>
-          <h3 className="font-black text-gray-900 mb-1">🧢 Captains</h3>
-          <ul className="divide-y divide-gray-100">
+          <h3 className="text-xs font-extrabold tracking-wider uppercase text-brand-muted mb-1">Captains · not in the auction</h3>
+          <ul className="divide-y divide-brand-line">
             {captainRows.map((c) => (
-              <li key={c.id} className="flex items-center gap-2 py-2">
+              <li key={c.id} className="flex items-center gap-2 py-2 min-h-[48px]">
                 <span className="flex-1 min-w-0">
-                  <span className="block font-semibold text-gray-900">{c.name}</span>
-                  <span className="block text-xs text-gray-500">{c.team_name} · not in the auction</span>
+                  <span className="font-bold text-brand-ink">{c.name}</span>
+                  <span className="text-sm text-brand-muted"> · {c.team_name}</span>
                 </span>
-                <span className={`text-xs font-black rounded-full px-2.5 py-1 ${c.answer === "available" ? "bg-pitch-50 text-pitch-800" : c.answer === "not_available" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"}`}>
-                  {c.answer === "available" ? "Playing" : c.answer === "not_available" ? "Not playing" : "No answer yet"}
+                <span className={`text-xs font-extrabold rounded-full px-2.5 py-1 ${c.answer === "available" ? "bg-pitch-50 text-pitch-800" : c.answer === "not_available" ? "bg-[#fce8e6] text-[#a1251b]" : "bg-[#e6e9ee] text-[#334155]"}`}>
+                  {c.answer === "available" ? "In" : c.answer === "not_available" ? "Out" : "No answer yet"}
                 </span>
               </li>
             ))}
           </ul>
         </Card>
       )}
-      <Card>
+
+      <div className="flex items-center justify-between mt-4 mb-2 px-1">
+        <h3 className="font-extrabold text-brand-ink text-lg">Playing <span className="font-display text-2xl text-pitch-700">{pool.length}</span></h3>
+        <span className="text-xs text-brand-muted text-right"><b>Out</b> = not coming · <b>Remove</b> = clear their answer</span>
+      </div>
+      {!dash ? <LoadingState /> : pool.length === 0 ? (
+        <Card><p className="text-brand-muted">Nobody yet.</p></Card>
+      ) : playingGroups.map((g) => {
+        const key = g.cat || "none";
+        const open = isOpen(key, g.people.length);
+        const odd = !g.cat || g.people.length % 2;
+        return (
+          <div key={key} className="bg-white rounded-2xl shadow-soft mb-2.5 overflow-hidden">
+            <button type="button" onClick={() => toggle(key, g.people.length)} aria-expanded={open}
+              className="w-full flex items-center justify-between gap-2 px-4 min-h-[56px]">
+              <span className="flex items-center gap-2">
+                <CategoryTag category={g.cat} />
+                <span className="font-extrabold text-brand-ink">{g.people.length} playing</span>
+              </span>
+              <span className="flex items-center gap-2 text-xs font-extrabold">
+                <span className={odd ? "text-[#7a4f00] bg-[#fff3d1] rounded-full px-2 py-0.5" : "text-pitch-700"}>{!g.cat ? "Needs a group" : odd ? "Odd" : "Even"}</span>
+                {open ? <ChevronUp size={18} className="text-brand-muted" /> : <ChevronDown size={18} className="text-brand-muted" />}
+              </span>
+            </button>
+            {open && (
+              <ol className="divide-y divide-brand-line border-t border-brand-line px-4">
+                {g.people.map((p) => (
+                  <li key={p.id} className="flex items-center gap-2 py-1.5 min-h-[52px]">
+                    <span className="flex-1 min-w-0 font-bold text-brand-ink">{p.name}</span>
+                    <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")} className={OUT_BTN}>Out</button>
+                    <button type="button" disabled={busy === p.id} onClick={() => remove(p)} className={REMOVE_BTN}>Remove</button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        );
+      })}
+
+      <Card className="mt-4">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="font-black text-gray-900">✅ Playing ({pool.length})</h3>
-          <span className="text-xs text-gray-500">by group · captains not counted</span>
+          <h3 className="font-extrabold text-brand-ink">Haven't answered ({pending.length})</h3>
+          <span className="text-xs text-brand-muted">answer for them</span>
         </div>
-        <p className="text-xs text-gray-500 mb-1"><b>Out</b> = not coming. <b>Remove</b> = take their answer away.</p>
-        {!dash ? <LoadingState /> : pool.length === 0 ? (
-          <p className="text-gray-600 py-2">Nobody yet.</p>
-        ) : playingGroups.map((g) => (
-          <div key={g.cat || "none"} className="mt-2">
-            <h4 className={`text-sm font-black rounded-lg px-2 py-1 ${!g.cat || g.people.length % 2 ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>
-              {g.cat ? groupName(g.cat) : "No group yet"} ({g.people.length}){g.cat && g.people.length % 2 ? " · odd" : ""}
-            </h4>
-            <ol className="divide-y divide-gray-100">
-              {g.people.map((p, i) => (
-                <li key={p.id} className="flex items-center gap-2 py-2">
-                  <span className="w-6 text-right text-sm text-gray-400 tabular-nums">{i + 1}</span>
-                  <span className="flex-1 min-w-0 font-semibold text-gray-900">{p.name}</span>
-                  <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")}
-                    className="min-h-[44px] px-3 rounded-xl bg-red-50 text-red-700 font-black disabled:opacity-50">✕ Out</button>
-                  <button type="button" disabled={busy === p.id} onClick={() => remove(p)}
-                    className="min-h-[44px] px-3 rounded-xl bg-gray-100 text-gray-700 font-black disabled:opacity-50">Remove</button>
+        {!dash ? <LoadingState /> : pending.length === 0 ? (
+          <p className="text-brand-muted py-2">Everyone has answered.</p>
+        ) : (
+          <>
+            <ul className="divide-y divide-brand-line">
+              {pendingShown.map((p) => (
+                <li key={p.id} className="flex items-center gap-2 py-1.5 min-h-[52px]">
+                  <span className="flex-1 font-bold text-brand-ink">{p.name}</span>
+                  <button type="button" disabled={busy === p.id} onClick={() => mark(p, "available")} className={IN_BTN}><Check size={15} strokeWidth={3} /> In</button>
+                  <button type="button" disabled={busy === p.id} onClick={() => mark(p, "not_available")} className={OUT_BTN}><X size={15} strokeWidth={3} /> Out</button>
                 </li>
               ))}
-            </ol>
-          </div>
-        ))}
+            </ul>
+            {pending.length > 6 && (
+              <button type="button" onClick={() => setShowAllPending((v) => !v)}
+                className="w-full min-h-[44px] mt-1 text-sm font-bold text-brand-navy flex items-center justify-center gap-1">
+                {showAllPending ? <>Show fewer <ChevronUp size={16} /></> : <>Show all {pending.length} <ChevronDown size={16} /></>}
+              </button>
+            )}
+          </>
+        )}
       </Card>
+
       {notPlaying.length > 0 && (
         <Card>
-          <h3 className="font-black text-gray-900 mb-1">❌ Not playing ({notPlaying.length})</h3>
-          <ul className="divide-y divide-gray-100">
+          <h3 className="font-extrabold text-brand-ink mb-1">Not playing ({notPlaying.length})</h3>
+          <ul className="divide-y divide-brand-line">
             {notPlaying.map((p) => (
-              <li key={p.id} className="flex items-center gap-2 py-2">
-                <span className="flex-1 font-semibold text-gray-700">{p.name}</span>
-                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "available")}
-                  className="min-h-[44px] px-3 rounded-xl bg-pitch-50 text-pitch-800 font-black disabled:opacity-50">✓ In</button>
-                <button type="button" disabled={busy === p.id} onClick={() => remove(p)}
-                  className="min-h-[44px] px-3 rounded-xl bg-gray-100 text-gray-700 font-black disabled:opacity-50">Remove</button>
+              <li key={p.id} className="flex items-center gap-2 py-1.5 min-h-[52px]">
+                <span className="flex-1 font-semibold text-brand-muted">{p.name}</span>
+                <button type="button" disabled={busy === p.id} onClick={() => mark(p, "available")} className={IN_BTN}><Check size={15} strokeWidth={3} /> In</button>
+                <button type="button" disabled={busy === p.id} onClick={() => remove(p)} className={REMOVE_BTN}>Remove</button>
               </li>
             ))}
           </ul>
@@ -514,8 +543,8 @@ function CategoryPicker({ person, onDone, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={onCancel}>
       <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Choose a group for ${person.name}`}>
-        <h3 className="text-xl font-black text-gray-900">Which group is {person.name} in?</h3>
-        <p className="text-sm text-gray-600 mb-3">This changes their group for every auction from now on.</p>
+        <h3 className="text-xl font-black text-brand-ink">Which group is {person.name} in?</h3>
+        <p className="text-sm text-brand-muted mb-3">This changes their group for every auction from now on.</p>
         <div className="grid grid-cols-2 gap-2">
           {CATS.map((c) => (
             <button key={c} type="button" disabled={busy} onClick={() => save(c)}
@@ -534,7 +563,7 @@ function CaptainsNote({ captains }) {
   if (!captains?.length) return null;
   return (
     <Card className="ring-2 ring-pitch-200">
-      <p className="text-gray-800">🧢 <b>{captains.map((c) => `${c.name} (${c.team_name})`).join(" and ")}</b>{" "}
+      <p className="text-brand-ink"><b>{captains.map((c) => `${c.name} (${c.team_name})`).join(" and ")}</b>{" "}
         {captains.length > 1 ? "are captains" : "is a captain"} in this match, so they're not in any group.</p>
     </Card>
   );
@@ -572,7 +601,7 @@ function OddStep({ match, reload }) {
           return (
             <div key={g.category} className={`bg-white rounded-2xl shadow-soft py-3 text-center ${n % 2 ? "ring-2 ring-red-500" : ""}`}>
               <span className="block text-3xl font-black tabular-nums text-brand-navy">{n}</span>
-              <span className="block text-sm font-bold text-gray-600">{groupName(g.category)}{n % 2 ? " · odd" : ""}</span>
+              <span className="block text-sm font-bold text-brand-muted">{groupName(g.category)}{n % 2 ? " · odd" : ""}</span>
             </div>
           );
         })}
@@ -582,7 +611,7 @@ function OddStep({ match, reload }) {
         const chosen = sitOuts[g.category] && nameOf(g, sitOuts[g.category]);
         return (
           <Card key={g.category} className={chosen ? "" : "ring-2 ring-red-200"}>
-            <h3 className="font-black text-gray-900 text-lg">{groupName(g.category)} has {g.count} players</h3>
+            <h3 className="font-black text-brand-ink text-lg">{groupName(g.category)} has {g.count} players</h3>
             {chosen ? (
               <div className="flex items-center justify-between gap-2 mt-2">
                 <p className="text-gray-800"><b>{chosen}</b> sits out this auction only.</p>
@@ -590,13 +619,13 @@ function OddStep({ match, reload }) {
               </div>
             ) : (
               <>
-                <p className="text-gray-600 mb-2">Easiest: pick one player to sit out this week. Their profile doesn't change.</p>
+                <p className="text-brand-muted mb-2">Easiest: pick one player to sit out this week. Their profile doesn't change.</p>
                 {[...g.players].sort((a, b) => (b.user_id === g.suggested_holdout_id) - (a.user_id === g.suggested_holdout_id)).map((p) => (
                   <Pick key={p.user_id} onClick={() => choose(g.category, p.user_id)} note={p.user_id === g.suggested_holdout_id ? "Suggested — would be released last anyway" : null}>
                     {p.name}
                   </Pick>
                 ))}
-                <p className="text-gray-600 mt-3 mb-1">Or move someone into another group:</p>
+                <p className="text-brand-muted mt-3 mb-1">Or move someone into another group:</p>
                 <div className="flex flex-wrap gap-2">
                   {g.players.map((p) => (
                     <button key={p.user_id} type="button" onClick={() => setMoving({ ...p, category: g.category })}
@@ -611,8 +640,8 @@ function OddStep({ match, reload }) {
 
       {missing.length > 0 && (
         <Card className="ring-2 ring-amber-200">
-          <h3 className="font-black text-gray-900">No group yet</h3>
-          <p className="text-gray-600 mb-2">These people are playing but have no group. (The two captains don't need one.)</p>
+          <h3 className="font-black text-brand-ink">No group yet</h3>
+          <p className="text-brand-muted mb-2">These people are playing but have no group. (The two captains don't need one.)</p>
           <div className="flex flex-wrap gap-2">
             {missing.map((p) => (
               <button key={p.user_id} type="button" onClick={() => setMoving(p)} className="min-h-[44px] px-3 rounded-xl bg-amber-50 text-amber-900 font-bold">{p.name} — give a group</button>
@@ -621,7 +650,7 @@ function OddStep({ match, reload }) {
         </Card>
       )}
 
-      {unresolved.length === 0 && odd.length + missing.length === 0 && <Card className="ring-2 ring-pitch-200"><b className="text-pitch-800">All four groups are even ✓</b></Card>}
+      {unresolved.length === 0 && odd.length + missing.length === 0 && <Card className="ring-2 ring-pitch-200"><b className="text-pitch-800">All groups are even ✓</b></Card>}
       <Big disabled={unresolved.length > 0} onClick={() => navigate(`/manage?slot=${match.slot_id}`)}>{unresolved.length ? "Pick who sits out first" : "Done"}</Big>
       {moving && <CategoryPicker person={moving} onCancel={() => setMoving(null)} onDone={() => { setMoving(null); load(); reload(); }} />}
     </Shell>
@@ -707,8 +736,8 @@ function StartStep({ match }) {
           : <Big onClick={() => openRun(match.auction.id)}>Open the auction</Big>}
         {createdList && (
           <div className="mt-6">
-            <p className="font-black text-gray-900 flex items-center gap-2 mb-1"><MessageCircle size={18} /> Player list for the captains</p>
-            <p className="text-sm text-gray-600 mb-3">Post it in the auction WhatsApp group before you start.</p>
+            <p className="font-black text-brand-ink flex items-center gap-2 mb-1"><MessageCircle size={18} /> Player list for the captains</p>
+            <p className="text-sm text-brand-muted mb-3">Post it in the auction WhatsApp group before you start.</p>
             <PlayerListCard text={createdList} />
           </div>
         )}
@@ -741,7 +770,7 @@ function StartStep({ match }) {
 
   if (!captains) return <Shell stepKey="start" match={match}><LoadingState /></Shell>;
   const pickList = (current, set, other) => captains.filter((c) => c.id !== other?.id).map((c) => (
-    <Pick key={c.id} selected={current?.id === c.id} onClick={() => set(c)} note={c.team_name || null}>🧢 {c.name}</Pick>
+    <Pick key={c.id} selected={current?.id === c.id} onClick={() => set(c)} note={c.team_name || null}>{c.name}</Pick>
   ));
 
   return (
@@ -764,7 +793,7 @@ function StartStep({ match }) {
         {!preview ? <LoadingState /> : preview.error ? <Card>{preview.error}</Card> : (<>
           {stillOdd.map((g) => (
             <Card key={g.category} className="ring-2 ring-red-200">
-              <p className="font-black text-gray-900 mb-2">{groupName(g.category)} is odd ({g.count}) — who sits out? (needed before the list)</p>
+              <p className="font-black text-brand-ink mb-2">{groupName(g.category)} is odd ({g.count}) — who sits out? (needed before the list)</p>
               {[...g.players].sort((x, y) => (y.user_id === g.suggested_holdout_id) - (x.user_id === g.suggested_holdout_id)).slice(0, 4).map((p) => (
                 <Pick key={p.user_id} onClick={() => { setSitOut(match.slot_id, g.category, p.user_id); setSitOutsState(getSitOuts(match.slot_id)); }}
                   note={p.user_id === g.suggested_holdout_id ? "Suggested" : null}>{p.name}</Pick>
@@ -773,7 +802,7 @@ function StartStep({ match }) {
           ))}
           {missing.length > 0 && (
             <Card className="ring-2 ring-amber-200">
-              <p className="font-bold text-gray-900">{missing.map((p) => p.name).join(", ")} {missing.length > 1 ? "have" : "has"} no group yet.</p>
+              <p className="font-bold text-brand-ink">{missing.map((p) => p.name).join(", ")} {missing.length > 1 ? "have" : "has"} no group yet.</p>
               <Link to={`/manage/step/odd?slot=${match.slot_id}`} className="text-pitch-700 font-bold">Give them a group in step 5 ›</Link>
             </Card>
           )}
@@ -786,8 +815,8 @@ function StartStep({ match }) {
         <Question hint={`${a.name} vs ${b.name}`}>Ready to create the auction?</Question>
         {!preview ? <LoadingState /> : preview.error ? <Card>{preview.error}</Card> : (
           <Card>
-            <p className="font-bold text-gray-900 mb-1 flex items-center gap-2"><Users size={18} /> {groups.reduce((n, g) => n + g.count, 0) - excluded.length} players in the pool</p>
-            <p className="text-gray-600">{groups.map((g) => `${g.count - (excluded.some((uid) => g.players.some((p) => p.user_id === uid)) ? 1 : 0)} ${groupName(g.category)}`).join(" · ")}</p>
+            <p className="font-bold text-brand-ink mb-1 flex items-center gap-2"><Users size={18} /> {groups.reduce((n, g) => n + g.count, 0) - excluded.length} players in the pool</p>
+            <p className="text-brand-muted">{groups.map((g) => `${g.count - (excluded.some((uid) => g.players.some((p) => p.user_id === uid)) ? 1 : 0)} ${groupName(g.category)}`).join(" · ")}</p>
           </Card>
         )}
         <Big onClick={create} disabled={busy || !listReady}>{busy ? "Creating…" : "Create auction"}</Big>
@@ -831,7 +860,7 @@ function ShareStep({ match }) {
       <Big onClick={copy} disabled={!auction}><Copy size={20} /> Copy for WhatsApp</Big>
       {shared && (
         <>
-          <Card className="ring-2 ring-pitch-200 mt-3"><b className="text-pitch-800">All steps done for this match 🎉</b></Card>
+          <Card className="ring-2 ring-pitch-200 mt-3"><b className="text-pitch-800">All steps done for this match</b></Card>
           <BigLink to={`/manage?slot=${match.slot_id}`} kind="white">Back to This week</BigLink>
         </>
       )}

@@ -21,14 +21,8 @@ import { Gavel, PlayCircle, StopCircle, RefreshCw, Copy, Pause, CheckCircle2, Fl
 import { LoadingState } from "../../components/LoadingState";
 
 import { buildWhatsAppSummary, ACTIVE_AUCTION_KEY as STORAGE_KEY } from "../../utils/auctionShare";
+import { CATEGORY_LABELS as GROUP_LABELS, CATEGORIES } from "../../utils/categories";
 
-const GROUP_LABELS = {
-  extra_power_allrounder: "Extra Power — All-Rounders",
-  extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power — All-Rounders",
-  power_batsman: "Power — Batsmen",
-  classic: "Classic",
-};
 
 // Same cadence as the Voting Windows page's turnout monitoring — frequent
 // enough to watch confirmations land live while deciding which slot to run,
@@ -38,7 +32,7 @@ const SLOT_POLL_INTERVAL_MS = 5000;
 // "Auction created — 24 players: 4 EP All-rounders · 6 EP Batsmen · 8 Power · 6 Classic"
 export function auctionCreatedMessage(groupCounts) {
   const counts = groupCounts || {};
-  const names = { extra_power_allrounder: "EP All-rounders", extra_power_batsman: "EP Batsmen", power: "Power All-rounders", power_batsman: "Power Batters", classic: "Classic" };
+  const names = Object.fromEntries(Object.entries(CATEGORIES).map(([k, c]) => [k, c.name]));
   const parts = Object.keys(names).filter((k) => counts[k]).map((k) => `${counts[k]} ${names[k]}`);
   const total = Object.values(counts).reduce((a, b) => a + (Number(b) || 0), 0);
   return parts.length ? `Auction created — ${total} players: ${parts.join(" · ")}` : "Auction created";
@@ -440,7 +434,7 @@ export default function AdminAuction() {
           <div className="flex items-center gap-3">
             {auction?.status === "active" && <CountdownBadge endsAtIso={auction.ends_at_iso} />}
             {auctionId && (
-              <button onClick={handleNewAuction} className="flex items-center gap-1 text-xs text-gray-500 hover:text-pitch-600 active:text-pitch-700 min-h-[44px] px-2 -my-2 transition-colors duration-150">
+              <button onClick={handleNewAuction} className="flex items-center gap-1 text-xs text-brand-muted hover:text-pitch-600 active:text-pitch-700 min-h-[44px] px-2 -my-2 transition-colors duration-150">
                 <RefreshCw size={13} /> Start a new auction
               </button>
             )}
@@ -450,8 +444,8 @@ export default function AdminAuction() {
 
         {!auctionId && slots.length > 0 && (
           <div className="card">
-            <h2 className="font-bold text-gray-900 mb-1">Compare Available Slots</h2>
-            <p className="text-xs text-gray-500 mb-3">
+            <h2 className="font-bold text-brand-ink mb-1">Compare Available Slots</h2>
+            <p className="text-xs text-brand-muted mb-3">
               Live turnout per candidate slot — pick whichever has enough confirmed players
               in each category before setting up the auction below.
             </p>
@@ -479,17 +473,17 @@ export default function AdminAuction() {
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <div>
-                      {matchTeams(slot) && <p className="text-sm font-bold text-gray-900">{matchTeams(slot)}</p>}
+                      {matchTeams(slot) && <p className="text-sm font-bold text-brand-ink">{matchTeams(slot)}</p>}
                       <p className="text-xs font-semibold text-gray-700">{matchWhen(slot)}</p>
                     </div>
                     {win?.status && (
-                      <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-gray-600"}`}>
+                      <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 whitespace-nowrap ${STATUS_STYLES[win.status]?.className || "bg-gray-100 text-brand-muted"}`}>
                         {STATUS_STYLES[win.status]?.label || win.status}
                       </span>
                     )}
                   </div>
                   {win?.closes_at && (
-                    <p className="text-[11px] text-gray-400 mb-2">📅 {win.closes_at}</p>
+                    <p className="text-[11px] text-brand-muted mb-2">{win.closes_at}</p>
                   )}
                   <ConfirmedPlayersPanel voteMatrix={voteMatrix} slotId={slot.id} matchCaptains={matchCaptains[slot.id]} compact />
                 </button>
@@ -500,7 +494,7 @@ export default function AdminAuction() {
 
         {!auctionId && (
           <div className="card">
-            <h2 className="font-bold text-gray-900 mb-3">Set Up Auction</h2>
+            <h2 className="font-bold text-brand-ink mb-3">Set Up Auction</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Match Slot</label>
@@ -519,7 +513,7 @@ export default function AdminAuction() {
               </div>
 
               {selectedSlotId && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-brand-muted">
                   {availableVoterCount} player(s) voted available for this slot — that's the pool that gets
                   auctioned. Captain A/B below can be any captain (they run the draft; they don't need to
                   have voted themselves).
@@ -559,7 +553,7 @@ export default function AdminAuction() {
               </div>
 
               {loadingBalance && (
-                <p className="text-xs text-gray-400">Checking category balance…</p>
+                <p className="text-xs text-brand-muted">Checking category balance…</p>
               )}
 
               {unbalancedGroups.length > 0 && (
@@ -610,12 +604,12 @@ export default function AdminAuction() {
         )}
 
         {!auctionId && (
-          <div id="practice" className="card border-2 border-amber-200 scroll-mt-20">
+          <div id="practice" className="card scroll-mt-20">
             <div className="flex items-center gap-2 mb-1">
-              <FlaskConical size={16} className="text-amber-600" />
-              <h2 className="font-bold text-gray-900">Practice Auction (Rehearsal)</h2>
+              <FlaskConical size={18} className="text-brand-navy" />
+              <h2 className="font-extrabold text-brand-ink">Practice auction (rehearsal)</h2>
             </div>
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-xs text-brand-muted mb-3">
               Let two captains try out the live-bidding screen with any players you pick — no real votes,
               budgets, or player stats are touched. Same "Join Auction" navbar badge as a real auction, so
               captains rehearse the exact flow they'll use live — you can also copy a direct link below.
@@ -667,7 +661,7 @@ export default function AdminAuction() {
                       disabled={!practiceCaptainAId || !practiceCaptainBId}
                       className="text-xs font-medium text-pitch-600 border border-pitch-300 rounded-lg px-2.5 py-1 hover:bg-pitch-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                     >
-                      🎲 Auto-pick per category
+                      Auto-pick per category
                     </button>
                   </div>
                 </div>
@@ -681,12 +675,12 @@ export default function AdminAuction() {
                       />
                       <span className="text-gray-800">{p.name}</span>
                       {p.auction_category && (
-                        <span className="text-xs text-gray-400">{GROUP_LABELS[p.auction_category] || p.auction_category}</span>
+                        <span className="text-xs text-brand-muted">{GROUP_LABELS[p.auction_category] || p.auction_category}</span>
                       )}
                     </label>
                   ))}
                   {practicePlayerCandidates.length === 0 && (
-                    <p className="text-xs text-gray-400 px-3 py-2">No other captains/players to pick from yet.</p>
+                    <p className="text-xs text-brand-muted px-3 py-2">No other captains/players to pick from yet.</p>
                   )}
                 </div>
               </div>
@@ -730,23 +724,23 @@ export default function AdminAuction() {
 
             {auction.status === "pending" && (
               <div className="card text-center py-6">
-                <p className="text-gray-600 mb-1">Auction created — not started yet.</p>
+                <p className="text-brand-muted mb-1">Auction created — not started yet.</p>
                 <p className="text-sm mb-4">
                   {auction.captain_a_joined && auction.captain_b_joined ? (
-                    <span className="text-green-700 font-medium">✅ Both captains have joined — ready to start.</span>
+                    <span className="text-pitch-700 font-bold">Both captains have joined — ready to start.</span>
                   ) : auction.is_test ? (
                     <span className="text-amber-700">
                       Practice auctions don't show up in the navbar — use "Copy Practice Link" above and send it to both captains directly.
                     </span>
                   ) : (
-                    <span className="text-gray-500">Waiting for both captains — tell them to open the app and tap the red LIVE button.</span>
+                    <span className="text-brand-muted">Waiting for both captains — tell them to open the app and tap the red LIVE button.</span>
                   )}
                 </p>
                 <div className="flex items-center justify-center gap-5 mb-4 text-sm">
                   {[auction.captain_a, auction.captain_b].map((c, i) => {
                     const joined = i === 0 ? auction.captain_a_joined : auction.captain_b_joined;
                     return (
-                      <span key={c.captain_id} className={`flex items-center gap-1.5 ${joined ? "text-green-700 font-medium" : "text-gray-400"}`}>
+                      <span key={c.captain_id} className={`flex items-center gap-1.5 ${joined ? "text-green-700 font-medium" : "text-brand-muted"}`}>
                         {joined ? <CheckCircle2 size={15} /> : <span className="w-2.5 h-2.5 rounded-full border-2 border-gray-300" />}
                         {c.name}
                       </span>
@@ -761,7 +755,7 @@ export default function AdminAuction() {
                     <StopCircle size={13} /> Cancel
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-3">
+                <p className="text-xs text-brand-muted mt-3">
                   You don't have to wait — Start works either way, and releases the first player automatically.
                 </p>
               </div>
@@ -770,7 +764,7 @@ export default function AdminAuction() {
             {auction.status === "active" && (
               <div className="card">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <h2 className="font-black text-gray-900 text-lg">Running the auction</h2>
+                  <h2 className="font-black text-brand-ink text-lg">Running the auction</h2>
                   <div className="flex items-center gap-3">
                     {auction.auto_release_category && (
                       auction.is_paused ? (
@@ -800,7 +794,7 @@ export default function AdminAuction() {
                 </div>
 
                 {auction.auto_release_category && (
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="text-xs text-brand-muted mb-3">
                     {auction.is_paused ? (
                       <>⏸ Paused on <strong>{GROUP_LABELS[auction.auto_release_category]}</strong> — no new player comes up until you press Resume.</>
                     ) : (
@@ -822,11 +816,11 @@ export default function AdminAuction() {
 
                 {auction.current_player && (
                   <div className="border border-gray-200 rounded-lg p-3 mb-3 space-y-2">
-                    <p className="font-black text-gray-900">Bid for a captain</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-black text-brand-ink">Bid for a captain</p>
+                    <p className="text-xs text-brand-muted">
                       For a captain bidding out loud or on a call. Same rules as their own tap.
                     </p>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-brand-muted">
                       Current bid: <strong>{auction.current_player.current_high_bid}</strong>
                       {auction.current_player.current_high_bidder
                         ? <> — {auction.current_player.current_high_bidder}</>
@@ -878,7 +872,7 @@ export default function AdminAuction() {
                                 onClick={() => handleProxyBid(c.captain_id, amt)}
                                 disabled={isCurrentLeader || proxying === `${c.captain_id}:bid`}
                                 title={`Bid ${amt}`}
-                                className="text-sm font-bold py-1 px-3 min-h-[44px] rounded-xl border border-gray-200 text-gray-700 bg-gray-50 hover:bg-pitch-50 hover:border-pitch-300 hover:text-pitch-700 active:scale-[0.97] disabled:opacity-40 disabled:hover:bg-gray-50 disabled:hover:border-gray-200 disabled:hover:text-gray-600 transition-all duration-150 whitespace-nowrap"
+                                className="text-sm font-bold py-1 px-3 min-h-[44px] rounded-xl border border-gray-200 text-gray-700 bg-gray-50 hover:bg-pitch-50 hover:border-pitch-300 hover:text-pitch-700 active:scale-[0.97] disabled:opacity-40 disabled:hover:bg-gray-50 disabled:hover:border-gray-200 disabled:hover:text-brand-muted transition-all duration-150 whitespace-nowrap"
                               >
                                 +{[0.5, 1, 2][i]} → {amt}
                               </button>
@@ -890,14 +884,14 @@ export default function AdminAuction() {
                   </div>
                 )}
                 <details className="rounded-xl border border-gray-200 px-3 py-2 mt-1">
-                  <summary className="text-sm font-semibold text-gray-600 cursor-pointer min-h-[36px] flex items-center">Release a player by hand (not needed normally)</summary>
+                  <summary className="text-sm font-semibold text-brand-muted cursor-pointer min-h-[36px] flex items-center">Release a player by hand (not needed normally)</summary>
                   <div className="pt-2">
                 {Object.entries(GROUP_LABELS).map(([group, label]) => {
                   const count = (auction.available_players || []).filter((p) => p.category === group).length;
                   if (count === 0) return null;
                   return (
                     <div key={group} className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label} <span className="text-gray-400 normal-case font-normal">({count} left)</span></p>
+                      <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">{label} <span className="text-brand-muted normal-case font-normal">({count} left)</span></p>
                       <button
                         onClick={() => handleRelease(group)}
                         disabled={releasing === group || !!auction.current_player}
@@ -911,7 +905,7 @@ export default function AdminAuction() {
                   </div>
                 </details>
                 {(auction.available_players || []).length === 0 && (
-                  <p className="text-sm text-gray-500 mt-2">All players have been sold or given out.</p>
+                  <p className="text-sm text-brand-muted mt-2">All players have been sold or given out.</p>
                 )}
               </div>
             )}
@@ -954,8 +948,8 @@ export default function AdminAuction() {
                   <div key={c.captain_id} className="card">
                     <div className="flex items-center justify-between mb-2">
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-                        <h3 className="font-bold text-gray-900">{c.name}</h3>
+                        <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide">{label}</p>
+                        <h3 className="font-bold text-brand-ink">{c.name}</h3>
                       </div>
                       {!pricesHidden && (
                         <span className={`text-sm font-semibold ${c.is_drained ? "text-red-600" : "text-pitch-700"}`}>
@@ -963,13 +957,13 @@ export default function AdminAuction() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mb-2">{c.roster_count} players picked</p>
+                    <p className="text-xs text-brand-muted mb-2">{c.roster_count} players picked</p>
                     {c.roster?.length > 0 && (
                       <div className="border-t pt-2 space-y-1">
                         {c.roster.map((p) => (
                           <div key={p.user_id} className="flex items-center justify-between text-xs">
                             <span className="text-gray-800">{p.name}</span>
-                            <span className="text-gray-400">
+                            <span className="text-brand-muted">
                               {GROUP_LABELS[p.category] || p.category}
                               {!pricesHidden && (
                                 <> — {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick"

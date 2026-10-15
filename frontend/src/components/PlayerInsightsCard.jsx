@@ -1,18 +1,12 @@
 import { CheckCircle2, XCircle, Shield } from "lucide-react";
+import { CATEGORY_LABELS as GROUP_LABELS } from "../utils/categories";
 
-const GROUP_LABELS = {
-  extra_power_allrounder: "Extra Power — All-Rounders",
-  extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power — All-Rounders",
-  power_batsman: "Power — Batsmen",
-  classic: "Classic",
-};
 
 function Stat({ label, value }) {
   return (
     <div>
-      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className="text-sm font-semibold text-gray-800">{value ?? "—"}</p>
+      <p className="text-[11px] font-bold text-brand-muted uppercase tracking-wide">{label}</p>
+      <p className="font-display font-bold text-xl leading-tight text-brand-ink">{value ?? "—"}</p>
     </div>
   );
 }
@@ -27,13 +21,13 @@ export default function PlayerInsightsCard({ player }) {
   const { insights, release_order: ro } = player;
 
   return (
-    <div className="card border-2 border-cricket-navy/10">
+    <div className="card !p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Shield size={15} className="text-cricket-navy" />
-          <h3 className="font-bold text-gray-900 text-sm">Player Insights</h3>
+          <h3 className="font-extrabold text-brand-ink">Player insights</h3>
         </div>
-        <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1 capitalize">
+        <span className="text-xs font-medium text-brand-muted bg-gray-100 rounded-full px-2.5 py-1 capitalize">
           {insights.role || "player"}
         </span>
       </div>
@@ -47,13 +41,13 @@ export default function PlayerInsightsCard({ player }) {
 
       <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
         {insights.attendance_percentage != null && (
-          <span className="text-gray-500">
+          <span className="text-brand-muted">
             Attendance: <strong className="text-gray-800">{insights.attendance_percentage}%</strong>
             {" "}({insights.matches_present ?? 0}/{insights.total_matches ?? 0})
           </span>
         )}
         {insights.team_name && (
-          <span className="text-gray-500">Team: <strong className="text-gray-800">{insights.team_name}</strong></span>
+          <span className="text-brand-muted">Team: <strong className="text-gray-800">{insights.team_name}</strong></span>
         )}
         <span className={`flex items-center gap-1 font-medium rounded-full px-2 py-0.5 ${
           insights.next_match_available ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600"
@@ -64,7 +58,7 @@ export default function PlayerInsightsCard({ player }) {
         </span>
       </div>
 
-      <div className="border-t pt-2.5 text-xs text-gray-500">
+      <div className="border-t pt-2.5 text-xs text-brand-muted">
         <p>
           <strong className="text-gray-700">Release order:</strong>{" "}
           {ro.index} of {ro.of_total} overall · {ro.category_index} of {ro.category_of_total} in {GROUP_LABELS[ro.category] || ro.category}

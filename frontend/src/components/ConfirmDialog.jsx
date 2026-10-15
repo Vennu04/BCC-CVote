@@ -13,8 +13,8 @@ export default function ConfirmDialog({ open, title = "Are you sure?", message, 
       onClick={onCancel}
     >
       <div className="card max-w-sm w-full shadow-soft-lg" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-semibold text-gray-900 mb-2">{title}</h3>
-        <p className="text-sm text-gray-600 mb-5">{message}</p>
+        <h3 className="font-semibold text-brand-ink mb-2">{title}</h3>
+        <p className="text-sm text-brand-muted mb-5">{message}</p>
         <div className="flex justify-end gap-3">
           <button onClick={onCancel} className="btn-secondary text-sm py-2.5 px-4">
             {cancelLabel}

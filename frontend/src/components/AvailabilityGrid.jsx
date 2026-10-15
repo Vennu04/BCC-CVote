@@ -6,9 +6,9 @@ const BADGE = {
   maybe:         "badge-maybe",
 };
 const LABEL = {
-  available:     "✅ Available",
-  not_available: "❌ Not Available",
-  maybe:         "🤔 Maybe",
+  available:     "Available",
+  not_available: "Not available",
+  maybe:         "Maybe",
 };
 
 export default function AvailabilityGrid({ matrix, slots }) {

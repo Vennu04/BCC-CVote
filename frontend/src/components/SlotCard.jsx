@@ -14,8 +14,8 @@ function WindowStatus({ windowInfo }) {
 
   if (windowInfo?.is_cancelled) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-red-700 bg-red-50 rounded-full px-2.5 py-1">
-        <AlertTriangle size={11} />
+      <span className="inline-flex items-center gap-1.5 text-xs font-extrabold rounded-full px-2.5 py-1 text-[#a1251b] bg-[#fce8e6]">
+        <AlertTriangle size={12} />
         Match Cancelled{windowInfo.cancel_reason ? ` — ${windowInfo.cancel_reason}` : ""}
       </span>
     );
@@ -23,8 +23,8 @@ function WindowStatus({ windowInfo }) {
 
   if (windowInfo?.not_yet_open) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sky-800 bg-sky-50 rounded-full px-2.5 py-1">
-        <Clock size={11} />
+      <span className="inline-flex items-center gap-1.5 text-xs font-extrabold rounded-full px-2.5 py-1 text-[#334155] bg-[#e6e9ee]">
+        <Clock size={12} />
         Voting opens {windowInfo.opens_at}
       </span>
     );
@@ -32,8 +32,8 @@ function WindowStatus({ windowInfo }) {
 
   if (!windowInfo?.is_open) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
-        <Lock size={11} />
+      <span className="inline-flex items-center gap-1.5 text-xs font-extrabold rounded-full px-2.5 py-1 text-[#334155] bg-[#e6e9ee]">
+        <Lock size={12} />
         {windowInfo?.closes_at ? `Voting closed ${windowInfo.closes_at}` : "Voting not open"}
         {windowInfo?.can_revoke && windowInfo?.revoke_deadline ? ` · you can still pull out until ${windowInfo.revoke_deadline}` : ""}
       </span>
@@ -42,9 +42,9 @@ function WindowStatus({ windowInfo }) {
 
   const urgency = !expired && hours === 0 && minutes < 30;
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold rounded-full px-2.5 py-1 ${
-      urgency ? "bg-red-50 text-red-700" : "bg-pitch-50 text-pitch-700"}`}>
-      <Clock size={11} />
+    <span className={`inline-flex items-center gap-1.5 text-xs font-extrabold rounded-full px-2.5 py-1 ${
+      urgency ? "bg-[#fce8e6] text-[#a1251b]" : "bg-[#fff3d1] text-[#7a4f00]"}`}>
+      <Clock size={12} />
       Voting closes in {hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`}
     </span>
   );
@@ -61,9 +61,9 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="bg-white rounded-2xl shadow-soft p-4">
+    <div className="bg-white rounded-2xl shadow-soft p-4 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-gray-500 pt-1">
+        <p className="text-xs font-bold uppercase tracking-wide text-brand-muted pt-1">
           {slot.group ? `Group ${slot.group} · ` : ""}{when}
         </p>
         {windowInfo && <WindowStatus windowInfo={windowInfo} />}
@@ -72,57 +72,63 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
       {hasTeams ? (
         <TeamsVs a={slot.team_a_name} b={slot.team_b_name} />
       ) : (
-        <p className="font-extrabold text-gray-900 text-lg my-2">{slot.description || `${slot.time_of_day} Match`}</p>
+        <p className="font-extrabold text-brand-ink text-xl">{slot.description || `${slot.time_of_day} Match`}</p>
       )}
 
-      {currentVote && (
-        <p className={`text-xs font-bold mb-2 ${
-          currentVote === "available" ? "text-pitch-700" : currentVote === "not_available" ? "text-red-700" : "text-amber-700"}`}>
-          {currentVote === "available" ? "✅ You're in" : currentVote === "not_available" ? "❌ You can't play" : "🤔 Maybe"}
+      {currentVote ? (
+        <p className={`inline-flex items-center gap-1.5 text-sm font-extrabold ${
+          currentVote === "available" ? "text-pitch-700" : currentVote === "not_available" ? "text-[#a1251b]" : "text-[#7a4f00]"}`}>
+          {currentVote === "available" ? <><Check size={16} strokeWidth={3} /> You're in</> : currentVote === "not_available" ? <><X size={16} strokeWidth={3} /> You can't play</> : <><Clock size={16} /> Maybe</>}
         </p>
+      ) : (
+        !disabled && <p className="text-[15px] font-bold text-brand-ink">Are you playing?</p>
       )}
 
       <div className="rounded-lg overflow-hidden">
         <WeatherForecast weather={slot.weather} />
       </div>
 
-      <div className="flex gap-2">
+      <div className="grid grid-cols-2 gap-2.5">
         <button
           type="button"
           onClick={() => onVote(slot.id, "available")}
           disabled={disabled || loading}
           aria-pressed={currentVote === "available"}
-          className={`flex-1 min-h-[46px] rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 border-2 transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 ${
-            currentVote === "available" ? "bg-pitch-700 border-pitch-700 text-white" : "bg-white border-pitch-200 text-pitch-700 hover:bg-pitch-50"}`}
+          className={`min-h-[52px] rounded-2xl font-extrabold text-base flex items-center justify-center gap-1.5 border-2 transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 ${
+            currentVote === "available" ? "bg-pitch-700 border-pitch-700 text-white" : "bg-white border-pitch-700 text-pitch-700 hover:bg-pitch-50"}`}
         >
-          <Check size={16} /> I'm in
+          <Check size={18} strokeWidth={2.6} /> I'm in
         </button>
         <button
           type="button"
           onClick={() => onVote(slot.id, "not_available")}
           disabled={disabled || loading}
           aria-pressed={currentVote === "not_available"}
-          className={`flex-1 min-h-[46px] rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 border-2 transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 ${
-            currentVote === "not_available" ? "bg-red-600 border-red-600 text-white" : "bg-white border-red-200 text-red-700 hover:bg-red-50"}`}
+          className={`min-h-[52px] rounded-2xl font-extrabold text-base flex items-center justify-center gap-1.5 border-2 transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 ${
+            currentVote === "not_available" ? "bg-[#b42318] border-[#b42318] text-white" : "bg-white border-brand-line text-[#a1251b] hover:bg-[#fce8e6]"}`}
         >
-          <X size={16} /> Can't play
+          <X size={18} strokeWidth={2.6} /> Can't play
         </button>
       </div>
 
       {/* Who's in — only revealed once you've cast your own vote */}
       {availablePlayers && (
-        <div className="mt-3 pt-2 border-t border-gray-100">
+        <div className="mt-1 pt-1 border-t border-brand-line">
           <button
             type="button"
             onClick={() => setShowAvailable((v) => !v)}
-            className="flex items-center gap-1.5 text-xs font-bold text-brand-navy min-h-[44px] -my-1"
+            aria-expanded={showAvailable}
+            className="w-full flex items-center justify-between gap-1.5 text-sm min-h-[44px]"
           >
-            <Users size={14} />
-            {availablePlayers.length} in
-            {showAvailable ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            <span className="flex items-center gap-2">
+              <Users size={16} className="text-brand-muted" />
+              <span className="font-display font-extrabold text-2xl leading-none text-pitch-700">{availablePlayers.length}</span>
+              <span className="text-brand-muted">in so far</span>
+            </span>
+            <span className="flex items-center gap-1 font-bold text-brand-navy">{showAvailable ? "Hide" : "See who"} {showAvailable ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
           </button>
           {showAvailable && (
-            <p className="text-xs text-gray-600">
+            <p className="text-sm text-brand-ink leading-relaxed pb-1">
               {availablePlayers.length ? availablePlayers.join(", ") : "No one yet — be the first!"}
             </p>
           )}
@@ -135,9 +141,9 @@ export default function SlotCard({ slot, currentVote, onVote, disabled, loading,
           onClick={() => onRevoke(slot.id)}
           disabled={revoking}
           title={windowInfo.revoke_deadline ? `Available until ${windowInfo.revoke_deadline}` : undefined}
-          className="mt-2 w-full min-h-[44px] flex items-center justify-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 rounded-xl hover:bg-amber-100 active:scale-[0.98] disabled:opacity-50 transition-all duration-150"
+          className="w-full min-h-[48px] flex items-center justify-center gap-1.5 text-sm font-bold text-[#7a4f00] bg-[#fff3d1] rounded-xl hover:bg-[#ffeab0] active:scale-[0.98] disabled:opacity-50 transition-all duration-150"
         >
-          <AlertTriangle size={12} />
+          <AlertTriangle size={15} />
           {revoking ? "Removing…" : "I can't come any more"}
         </button>
       )}
