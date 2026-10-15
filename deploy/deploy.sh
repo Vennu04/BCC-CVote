@@ -10,8 +10,8 @@ cd /opt/bcc-cvote
 
 REGION="ap-south-1"
 
-get_secret() {
-  aws ssm get-parameter --name "$1" --with-decryption --region "$REGION" \
+get_param() {
+  aws ssm get-parameter --name "$1" --region "$REGION" \
     --query Parameter.Value --output text
 }
 
@@ -19,7 +19,7 @@ get_secret() {
 # (e.g. a real domain like a DuckDNS name pointed at the instance's EIP) —
 # falls back to the IP-derived sslip.io hostname if the param isn't set, so
 # this keeps working with zero config on a fresh instance.
-APP_HOSTNAME=$(get_secret /bcc-cvote/prod/app-hostname || echo "")
+APP_HOSTNAME=$(get_param /bcc-cvote/prod/app-hostname || echo "")
 if [ -z "$APP_HOSTNAME" ]; then
   TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
   PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
@@ -27,20 +27,13 @@ if [ -z "$APP_HOSTNAME" ]; then
 fi
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
+# Non-secret settings only. Since 2026-10-16 the backend fetches its own
+# secrets from AWS Secrets Manager at startup (bcc-cvote/prod/app, see
+# backend/app/aws_secrets.py), so no secret is ever written to this file
+# or passed into a container's environment.
 cat > .env <<ENVEOF
 APP_HOSTNAME=${APP_HOSTNAME}
-ACME_EMAIL=$(get_secret /bcc-cvote/prod/acme-email)
-MONGODB_URI=$(get_secret /bcc-cvote/prod/mongodb-uri)
-JWT_SECRET_KEY=$(get_secret /bcc-cvote/prod/jwt-secret)
-SECRET_KEY=$(get_secret /bcc-cvote/prod/app-secret)
-OPENWEATHER_API_KEY=$(get_secret /bcc-cvote/prod/openweather-api-key || echo "")
-SENTRY_DSN=$(get_secret /bcc-cvote/prod/sentry-dsn || echo "")
-VAPID_PUBLIC_KEY=$(get_secret /bcc-cvote/prod/vapid-public-key || echo "")
-# Stored in SSM as a multi-line PEM, which breaks docker compose's --env-file
-# parsing (one KEY=value per line) if written through as-is — base64'd here
-# into a single line, decoded back to PEM by services/push.py before use.
-VAPID_PRIVATE_KEY=$(get_secret /bcc-cvote/prod/vapid-private-key | base64 -w0 || echo "")
-VAPID_CLAIM_EMAIL=$(get_secret /bcc-cvote/prod/vapid-claim-email || echo "mailto:buddybccsupport@gmail.com")
+ACME_EMAIL=$(get_param /bcc-cvote/prod/acme-email)
 ECR_REGISTRY=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
 ENVEOF
 chmod 600 .env

@@ -25,6 +25,11 @@ env:
   # APP_HOSTNAME override via /bcc-cvote/prod/app-hostname), so the old
   # sslip.io URL no longer resolves to a valid cert.
   APP_URL: https://bcccvote.duckdns.org
+  # Identifiers, not secrets. All secrets live in AWS Secrets Manager:
+  # bcc-cvote/ci is read during this run (masked), bcc-cvote/prod/app is
+  # read by the backend itself on the server — see terraform-new-account/secrets.tf.
+  DEPLOY_ROLE_ARN: arn:aws:iam::642195693540:role/bcc-cvote-github-actions-deploy
+  INSTANCE_ID: i-0f25ad49be8739773
 
 # How a deploy works (2026-10-15/16):
 # - Every image is fingerprinted by the git tree hash of its folder and
@@ -47,19 +52,24 @@ jobs:
       builds: ${{ steps.plan.outputs.builds }}
       copy: ${{ steps.plan.outputs.copy }}
       deploy: ${{ steps.plan.outputs.deploy }}
+      sync: ${{ steps.plan.outputs.sync }}
       tag_backend: ${{ steps.plan.outputs.tag_backend }}
       tag_frontend: ${{ steps.plan.outputs.tag_frontend }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Configure AWS credentials (OIDC, new account)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Compare with prod and with PR builds
         id: plan
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
         run: bash .github/scripts/plan-images.sh
 
   backend-tests:
@@ -108,11 +118,18 @@ jobs:
       - name: Configure AWS credentials (OIDC, new account)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
+
+      # CI secrets from AWS Secrets Manager -> masked env vars CI_<KEY>.
+      - name: Read CI secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        with:
+          secret-ids: CI,bcc-cvote/ci
+          parse-json-secrets: true
 
       - uses: docker/setup-buildx-action@v3
 
@@ -127,7 +144,7 @@ jobs:
           tags: ${{ env.ECR_REGISTRY }}/${{ matrix.repo }}:${{ matrix.tag }}
           build-args: |
             VITE_API_URL=
-            VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
+            VITE_SENTRY_DSN=${{ env.CI_VITE_SENTRY_DSN }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
@@ -156,7 +173,7 @@ jobs:
       - name: Configure AWS credentials (OIDC, new account)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
@@ -213,24 +230,27 @@ jobs:
           if [ "$HEAD_SHA" != "$GITHUB_SHA" ]; then
             echo "::notice::main has moved on to ${HEAD_SHA::8} — skipping this deploy; the newer run deploys instead."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
-          elif [ -z "${{ needs.plan.outputs.deploy }}" ]; then
-            echo "::notice::Prod already runs this exact backend/ and frontend/ code — nothing to deploy."
+          elif [ -z "${{ needs.plan.outputs.deploy }}" ] && [ "${{ needs.plan.outputs.sync }}" != "true" ]; then
+            echo "::notice::Prod already runs this exact backend/, frontend/ and deploy/ — nothing to deploy."
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: actions/checkout@v7
+        if: steps.fresh.outputs.deploy == 'true'
+
       - name: Configure AWS credentials (OIDC, new account)
         if: steps.fresh.outputs.deploy == 'true'
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.NEW_AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       # The server pulls `:latest`; point it at this commit's tested images
       # (same digest as tree-<hash>), and leave a commit tag for history.
       - name: Promote to latest
-        if: steps.fresh.outputs.deploy == 'true'
+        if: steps.fresh.outputs.deploy == 'true' && needs.plan.outputs.deploy != ''
         env:
           TAG_BACKEND: ${{ needs.plan.outputs.tag_backend }}
           TAG_FRONTEND: ${{ needs.plan.outputs.tag_frontend }}
@@ -258,11 +278,24 @@ jobs:
       - name: Trigger deploy via SSM RunCommand
         if: steps.fresh.outputs.deploy == 'true'
         id: deploy
+        # Ships this commit's deploy/ files (compose, Caddyfile, deploy.sh)
+        # to the server, then runs deploy.sh — so the server always runs the
+        # deploy files from git, not whatever was there when it was built.
         run: |
+          PARAMS=$(jq -n \
+            --arg dep "$(base64 -w0 deploy/deploy.sh)" \
+            --arg cmp "$(base64 -w0 deploy/docker-compose.prod.yml)" \
+            --arg cad "$(base64 -w0 deploy/Caddyfile)" \
+            '{commands: [
+              "set -e", "cd /opt/bcc-cvote",
+              "echo \($dep) | base64 -d > deploy.sh.new && chmod 755 deploy.sh.new && mv deploy.sh.new deploy.sh",
+              "echo \($cmp) | base64 -d > docker-compose.prod.yml.new && mv docker-compose.prod.yml.new docker-compose.prod.yml",
+              "echo \($cad) | base64 -d > Caddyfile.new && mv Caddyfile.new Caddyfile",
+              "/opt/bcc-cvote/deploy.sh"]}')
           CMD_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.NEW_INSTANCE_ID }}" \
+            --instance-ids "${{ env.INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["/opt/bcc-cvote/deploy.sh"]' \
+            --parameters "$PARAMS" \
             --region ${{ env.AWS_REGION }} \
             --query "Command.CommandId" --output text)
           echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
@@ -271,13 +304,13 @@ jobs:
           for _ in $(seq 1 150); do
             sleep 2
             STATUS=$(aws ssm get-command-invocation \
-              --command-id "$CMD_ID" --instance-id "${{ secrets.NEW_INSTANCE_ID }}" \
+              --command-id "$CMD_ID" --instance-id "${{ env.INSTANCE_ID }}" \
               --region ${{ env.AWS_REGION }} --query Status --output text 2>/dev/null || echo "Pending")
             [ "$STATUS" != "InProgress" ] && [ "$STATUS" != "Pending" ] && break
           done
 
           aws ssm get-command-invocation \
-            --command-id "$CMD_ID" --instance-id "${{ secrets.NEW_INSTANCE_ID }}" \
+            --command-id "$CMD_ID" --instance-id "${{ env.INSTANCE_ID }}" \
             --region ${{ env.AWS_REGION }} \
             --query '[Status,StandardOutputContent,StandardErrorContent]' --output text
 
@@ -286,16 +319,20 @@ jobs:
             exit 1
           fi
 
+      # Site up (frontend) AND backend answering a login with its database
+      # and secrets: a wrong password must come back 401, not 5xx/timeout.
       - name: Smoke test
         if: steps.fresh.outputs.deploy == 'true'
         run: |
-          for _ in $(seq 1 20); do
-            CODE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 "${{ env.APP_URL }}/" || echo "000")
-            if [ "$CODE" = "200" ]; then
-              echo "smoke test passed ($CODE)"
+          for _ in $(seq 1 30); do
+            SITE=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 "${{ env.APP_URL }}/" || echo "000")
+            API=$(curl -sk -o /dev/null -w '%{http_code}' -m 10 -X POST "${{ env.APP_URL }}/api/auth/login" \
+              -H 'Content-Type: application/json' -d '{"team_code":"ZZSMOKE","password":"not-a-real-password"}' || echo "000")
+            if [ "$SITE" = "200" ] && [ "$API" = "401" ]; then
+              echo "smoke test passed (site $SITE, api $API)"
               exit 0
             fi
             sleep 3
           done
-          echo "::error::smoke test failed after retries"
+          echo "::error::smoke test failed (site $SITE, api $API)"
           exit 1

@@ -185,3 +185,27 @@ docker run --rm -v "$PWD":/repo -w /repo/terraform-new-account \
 server is first created, and before 2026-10-16 any edit under `deploy/` made
 `plan` want to destroy and rebuild prod. Always read the plan for
 `must be replaced` before applying.
+
+## Secrets (2026-10-16)
+
+All secrets live in **AWS Secrets Manager** (`terraform-new-account/secrets.tf`).
+Terraform creates the secret containers only — values are set out of band,
+so no secret is ever in Terraform state, in git, or in GitHub.
+
+| Secret | Keys | Who reads it, how |
+|---|---|---|
+| `bcc-cvote/prod/app` | MONGODB_URI, JWT_SECRET_KEY, SECRET_KEY, OPENWEATHER_API_KEY, VAPID_PRIVATE_KEY (base64 PEM), VAPID_PUBLIC_KEY, VAPID_CLAIM_EMAIL, SENTRY_DSN | The backend itself at startup (`backend/app/aws_secrets.py`) via the instance role. Not on disk, not in `.env`, not in the container's environment (`docker inspect` shows only `APP_SECRETS_ID`). |
+| `bcc-cvote/ci` | SONAR_TOKEN, VITE_SENTRY_DSN | GitHub Actions during a run (`aws-actions/aws-secretsmanager-get-secrets`), masked in logs. |
+
+Change a value (JSON object; write it to a 0600 file, then delete the file):
+
+```
+aws secretsmanager put-secret-value --secret-id bcc-cvote/prod/app \
+  --secret-string file://secret.json --profile bcc-cvote-new --region ap-south-1
+```
+
+The backend picks up a changed value on its next restart/deploy.
+
+Non-secret settings (`app-hostname`, `acme-email`) stay in SSM Parameter
+Store as plain strings. The instance requires IMDSv2 with hop limit 2 so the
+backend container can use the instance role.

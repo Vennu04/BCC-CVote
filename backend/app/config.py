@@ -1,6 +1,12 @@
 import os
 from datetime import timedelta
 
+from .aws_secrets import load_into_environ
+
+# Production secrets come from AWS Secrets Manager (see aws_secrets.py) and
+# must be in the environment before the settings below are read.
+load_into_environ()
+
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "bcc-cvote-dev-secret")

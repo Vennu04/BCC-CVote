@@ -60,7 +60,15 @@ resource "aws_iam_role" "github_actions_ci" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:pull_request"
+        }
+        StringLike = {
+          # PR checks, plus Dev CI's push runs (they need the CI secrets for
+          # SonarCloud). This role still can't touch prod.
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_repo}:pull_request",
+            "repo:${var.github_repo}:ref:refs/heads/main",
+            "repo:${var.github_repo}:ref:refs/heads/develop",
+          ]
         }
       }
     }]
@@ -88,6 +96,12 @@ resource "aws_iam_role_policy" "github_actions_ci" {
           "ecr:PutImage", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload"
         ]
         Resource = [aws_ecr_repository.backend_ci.arn, aws_ecr_repository.frontend_ci.arn]
+      },
+      {
+        Sid      = "ReadCiSecrets"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.ci.arn
       }
     ]
   })

@@ -10,6 +10,10 @@ jobs:
   security-scan:
     name: Security & Quality Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
 
     services:
       mongodb:
@@ -87,14 +91,29 @@ jobs:
           ignore-unfixed: true
 
       # ── SonarCloud ────────────────────────────────────────────────────────
-      # Skipped on Dependabot PRs: GitHub doesn't give them repo secrets, so
-      # SONAR_TOKEN is empty there. The scan still runs on main after merge.
-      - name: SonarCloud scan
+      # SONAR_TOKEN comes from AWS Secrets Manager (bcc-cvote/ci), read with
+      # the CI role and masked in logs. Dependabot PRs can't assume AWS
+      # roles, so they skip this; it still runs on main after merge.
+      - name: Configure AWS credentials (CI role)
         if: github.actor != 'dependabot[bot]'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::642195693540:role/bcc-cvote-github-actions-ci
+          aws-region: ap-south-1
+
+      - name: Read CI secrets
+        if: github.actor != 'dependabot[bot]'
+        uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        with:
+          secret-ids: CI,bcc-cvote/ci
+          parse-json-secrets: true
+
+      - name: SonarCloud scan
+        if: github.actor != 'dependabot[bot]' && env.CI_SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ env.CI_SONAR_TOKEN }}
         with:
           args: >
             -Dsonar.projectKey=Vennu04_BCC-CVote
@@ -144,6 +163,12 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Read CI secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        with:
+          secret-ids: CI,bcc-cvote/ci
+          parse-json-secrets: true
+
       - name: Already built?
         id: have
         run: |
@@ -165,7 +190,7 @@ jobs:
           tags: ${{ env.ECR_REGISTRY }}/bcc-cvote-${{ matrix.image }}-ci:${{ steps.tag.outputs.TAG }}
           build-args: |
             VITE_API_URL=
-            VITE_SENTRY_DSN=${{ secrets.VITE_SENTRY_DSN }}
+            VITE_SENTRY_DSN=${{ env.CI_VITE_SENTRY_DSN }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
