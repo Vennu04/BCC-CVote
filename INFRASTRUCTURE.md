@@ -161,12 +161,51 @@ instead. `deploy.sh` already handles a missing value gracefully (`|| echo ""`) f
 
 ## Build once, promote on merge (2026-10-16)
 
-Added outside Terraform (its state was dropped 2026-09-02), via the AWS CLI:
+Managed in Terraform: `terraform-new-account/cicd.tf` (state:
+`s3://bcc-cvote-newacct-tfstate/prod/terraform.tfstate`, versioning on since
+2026-10-16).
 
 | Resource | Purpose |
 |---|---|
 | ECR `bcc-cvote-backend-ci`, `bcc-cvote-frontend-ci` | Images built by PR checks, tagged `tree-<hash>` (git tree hash of the image's folder). Lifecycle: expire after 14 days. |
 | IAM role `bcc-cvote-github-actions-ci` | Assumable only by `repo:Vennu04/BCC-CVote:pull_request`; can push/pull the two `*-ci` repos and nothing else (cannot touch the prod repos, `latest`, SSM or the instance). |
-| `bcc-cvote-github-actions-deploy` → statement `ReadPrBuilds` | Lets Prod CD read the `*-ci` repos to copy a PR's image into the prod repo. |
+| `bcc-cvote-github-actions-deploy` → statement `ReadPrBuilds` (`main.tf`) | Lets Prod CD read the `*-ci` repos to copy a PR's image into the prod repo. |
 
 Flow: Dev CI (`pr-images` job) builds + Trivy-scans each image on the PR and pushes it to `*-ci`. On merge, Prod CD's plan (`.github/scripts/plan-images.sh`) finds the same `tree-<hash>`: unchanged → skip, already in prod repo → retag, in `*-ci` → `crane copy`, otherwise → build. Only the deploy job moves `latest`, after tests pass.
+
+Running Terraform (from the repo root, so `deploy/` files resolve):
+
+```
+docker run --rm -v "$PWD":/repo -w /repo/terraform-new-account \
+  -v "$HOME/.aws":/root/.aws:ro -e AWS_PROFILE=bcc-cvote-new \
+  hashicorp/terraform:1.9.8 plan
+```
+
+`aws_instance.app` ignores `ami` and `user_data`: both only matter when a
+server is first created, and before 2026-10-16 any edit under `deploy/` made
+`plan` want to destroy and rebuild prod. Always read the plan for
+`must be replaced` before applying.
+
+## Secrets (2026-10-16)
+
+All secrets live in **AWS Secrets Manager** (`terraform-new-account/secrets.tf`).
+Terraform creates the secret containers only — values are set out of band,
+so no secret is ever in Terraform state, in git, or in GitHub.
+
+| Secret | Keys | Who reads it, how |
+|---|---|---|
+| `bcc-cvote/prod/app` | MONGODB_URI, JWT_SECRET_KEY, SECRET_KEY, OPENWEATHER_API_KEY, VAPID_PRIVATE_KEY (base64 PEM), VAPID_PUBLIC_KEY, VAPID_CLAIM_EMAIL, SENTRY_DSN | The backend itself at startup (`backend/app/aws_secrets.py`) via the instance role. Not on disk, not in `.env`, not in the container's environment (`docker inspect` shows only `APP_SECRETS_ID`). |
+| `bcc-cvote/ci` | SONAR_TOKEN, VITE_SENTRY_DSN | GitHub Actions during a run (`aws-actions/aws-secretsmanager-get-secrets`), masked in logs. |
+
+Change a value (JSON object; write it to a 0600 file, then delete the file):
+
+```
+aws secretsmanager put-secret-value --secret-id bcc-cvote/prod/app \
+  --secret-string file://secret.json --profile bcc-cvote-new --region ap-south-1
+```
+
+The backend picks up a changed value on its next restart/deploy.
+
+Non-secret settings (`app-hostname`, `acme-email`) stay in SSM Parameter
+Store as plain strings. The instance requires IMDSv2 with hop limit 2 so the
+backend container can use the instance role.

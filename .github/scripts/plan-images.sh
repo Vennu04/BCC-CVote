@@ -38,7 +38,17 @@ for IMG in backend frontend; do
     retag) deploy="$deploy $IMG" ;;
   esac
 done
+# deploy/ (compose, Caddyfile, deploy.sh) is shipped to the server on every
+# deploy; a change there alone is reason enough to deploy.
+sync=false
+if [ -z "${BEFORE_SHA:-}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ] \
+   || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null \
+   || ! git diff --quiet "${BEFORE_SHA}" HEAD -- deploy/; then
+  sync=true
+fi
+echo "deploy/ changed: $sync"
 {
+  echo "sync=$sync"
   echo "matrix={\"include\":$include}"
   echo "builds=$(echo "$include" | jq -r 'map(.image) | join(" ")')"
   echo "copy=${copy# }"
