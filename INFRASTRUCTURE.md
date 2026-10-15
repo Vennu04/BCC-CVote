@@ -158,3 +158,15 @@ instead. `deploy.sh` already handles a missing value gracefully (`|| echo ""`) f
   needs: (1) `NEW_INSTANCE_ID` GitHub secret updated, (2) SSM agent confirmed online + cloud-init
   finished, (3) one manual `/opt/bcc-cvote/deploy.sh` run via SSM (first deploy on a fresh
   instance has no images to pull until this runs).
+
+## Build once, promote on merge (2026-10-16)
+
+Added outside Terraform (its state was dropped 2026-09-02), via the AWS CLI:
+
+| Resource | Purpose |
+|---|---|
+| ECR `bcc-cvote-backend-ci`, `bcc-cvote-frontend-ci` | Images built by PR checks, tagged `tree-<hash>` (git tree hash of the image's folder). Lifecycle: expire after 14 days. |
+| IAM role `bcc-cvote-github-actions-ci` | Assumable only by `repo:Vennu04/BCC-CVote:pull_request`; can push/pull the two `*-ci` repos and nothing else (cannot touch the prod repos, `latest`, SSM or the instance). |
+| `bcc-cvote-github-actions-deploy` → statement `ReadPrBuilds` | Lets Prod CD read the `*-ci` repos to copy a PR's image into the prod repo. |
+
+Flow: Dev CI (`pr-images` job) builds + Trivy-scans each image on the PR and pushes it to `*-ci`. On merge, Prod CD's plan (`.github/scripts/plan-images.sh`) finds the same `tree-<hash>`: unchanged → skip, already in prod repo → retag, in `*-ci` → `crane copy`, otherwise → build. Only the deploy job moves `latest`, after tests pass.
