@@ -56,7 +56,7 @@ jobs:
 
       - name: Compare with what prod runs
         id: plan
-        run: .github/scripts/plan-images.sh
+        run: bash .github/scripts/plan-images.sh
 
   backend-tests:
     name: Backend Tests
