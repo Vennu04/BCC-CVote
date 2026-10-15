@@ -181,3 +181,20 @@ jobs:
       - name: Push PR build
         if: steps.have.outputs.built != 'true'
         run: docker push "${{ env.ECR_REGISTRY }}/bcc-cvote-${{ matrix.image }}-ci:${{ steps.tag.outputs.TAG }}"
+
+  # Terraform for the live account: formatting + validation on every PR.
+  # (No AWS access needed — plan/apply stay a reviewed manual step.)
+  terraform:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform-new-account
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate

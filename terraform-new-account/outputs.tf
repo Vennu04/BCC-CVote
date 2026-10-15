@@ -40,3 +40,8 @@ output "manual_first_deploy_command" {
   value       = "aws ssm send-command --instance-ids ${aws_instance.app.id} --document-name AWS-RunShellScript --parameters commands='[\"/opt/bcc-cvote/deploy.sh\"]' --region ap-south-1 --profile bcc-cvote-new"
   description = "Run once, after the first image has been pushed to ECR and SSM secrets are set for real"
 }
+
+output "github_actions_ci_role_arn" {
+  description = "Role the PR checks assume (dev-ci.yml pr-images job)"
+  value       = aws_iam_role.github_actions_ci.arn
+}

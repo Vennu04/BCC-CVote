@@ -125,8 +125,8 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Resource = [aws_ecr_repository.backend.arn, aws_ecr_repository.frontend.arn]
       },
       {
-        Effect   = "Allow"
-        Action   = ["ssm:SendCommand"]
+        Effect = "Allow"
+        Action = ["ssm:SendCommand"]
         Resource = [
           "arn:aws:ec2:${var.aws_region}:*:instance/${aws_instance.app.id}",
           "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript"
@@ -136,6 +136,14 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Effect   = "Allow"
         Action   = ["ssm:GetCommandInvocation", "ssm:DescribeInstanceInformation", "ssm:ListCommandInvocations"]
         Resource = "*"
+      },
+      {
+        # Read the images PR checks built (cicd.tf) so a merge can copy the
+        # exact scanned image into the prod repo instead of building again.
+        Sid      = "ReadPrBuilds"
+        Effect   = "Allow"
+        Action   = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = [aws_ecr_repository.backend_ci.arn, aws_ecr_repository.frontend_ci.arn]
       }
     ]
   })
@@ -322,8 +330,13 @@ resource "aws_instance" "app" {
 
   tags = merge(local.common_tags, { Name = "bcc-cvote-app" })
 
+  # user_data only runs when an instance is first created (it bootstraps
+  # /opt/bcc-cvote from deploy/), and the AMI lookup always returns the
+  # newest image — neither should ever replace the running server. Without
+  # user_data here, any edit under deploy/ made `plan` want to destroy and
+  # rebuild prod (found 2026-10-16).
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [ami, user_data]
   }
 }
 
