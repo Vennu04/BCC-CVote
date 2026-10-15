@@ -1,13 +1,7 @@
 import { useState } from "react";
 import { Info, ChevronDown, ChevronUp } from "lucide-react";
+import { CATEGORY_LABELS as GROUP_LABELS } from "../utils/categories";
 
-const GROUP_LABELS = {
-  extra_power_allrounder: "Extra Power — All-Rounders",
-  extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power — All-Rounders",
-  power_batsman: "Power — Batsmen",
-  classic: "Classic",
-};
 
 // Pulls every number from the live auction response (points_budget,
 // starting_price, session_minutes, group_quotas) instead of hardcoding a
@@ -25,14 +19,14 @@ export default function AuctionRulesNote({ auction }) {
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between text-left"
       >
-        <span className="flex items-center gap-2 font-semibold text-gray-900 text-sm">
+        <span className="flex items-center gap-2 font-semibold text-brand-ink text-sm">
           <Info size={16} className="text-pitch-600" /> Auction Rules
         </span>
-        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        {open ? <ChevronUp size={16} className="text-brand-muted" /> : <ChevronDown size={16} className="text-brand-muted" />}
       </button>
 
       {open && (
-        <div className="mt-3 pt-3 border-t space-y-3 text-xs text-gray-600">
+        <div className="mt-3 pt-3 border-t space-y-3 text-xs text-brand-muted">
           <div>
             <p className="font-semibold text-gray-800 mb-1">Points &amp; Pricing</p>
             <ul className="list-disc list-inside space-y-0.5">

@@ -7,6 +7,8 @@ import { LoadingState, EmptyState } from "../../components/LoadingState";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { useConfirm } from "../../hooks/useConfirm";
 import { UserPlus, Edit2, Check, X, Shield, KeyRound, ChevronDown, ChevronUp, Search, Copy } from "lucide-react";
+import { CATEGORIES, CATEGORY_ORDER } from "../../utils/categories";
+import CategoryTag from "../../components/CategoryTag";
 
 // Both password-generation flows (Add Player's default password, Reset
 // Password's temp password) used to leave admin reading the value out of a
@@ -48,25 +50,17 @@ function showPasswordToast(label, password) {
 }
 
 const AUCTION_CATEGORY_OPTIONS = [
-  { value: "",                       label: "Not set" },
-  { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
-  { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
-  { value: "power",                  label: "Power — All-Rounder" },
-  { value: "power_batsman",          label: "Power — Batsman" },
-  { value: "classic",                label: "Classic" },
+  { value: "", label: "Not set" },
+  ...CATEGORY_ORDER.map((k) => ({ value: k, label: CATEGORIES[k].label })),
 ];
 
 // Separate from AUCTION_CATEGORY_OPTIONS above: "" means "no filter applied"
 // here (vs. "clear the category" in the per-row edit dropdown), so unset
 // players need their own sentinel value to stay filterable.
 const AUCTION_CATEGORY_FILTER_OPTIONS = [
-  { value: "",                       label: "All Categories" },
-  { value: "unset",                  label: "Not set" },
-  { value: "extra_power_allrounder", label: "Extra Power — All-Rounder" },
-  { value: "extra_power_batsman",    label: "Extra Power — Batsman" },
-  { value: "power",                  label: "Power — All-Rounder" },
-  { value: "power_batsman",          label: "Power — Batsman" },
-  { value: "classic",                label: "Classic" },
+  { value: "", label: "All Categories" },
+  { value: "unset", label: "Not set" },
+  ...CATEGORY_ORDER.map((k) => ({ value: k, label: CATEGORIES[k].label })),
 ];
 
 const ROLE_FILTER_OPTIONS = [
@@ -76,7 +70,7 @@ const ROLE_FILTER_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-gray-600" },
+  { value: "not_played",  label: "Not played match yet", color: "bg-gray-100 text-brand-muted" },
   { value: "in_progress", label: "In-Progress",          color: "bg-blue-100 text-blue-700" },
   { value: "qualified",   label: "Qualified",            color: "bg-green-100 text-green-700" },
   { value: "eliminated",  label: "Eliminated",           color: "bg-red-100 text-red-700" },
@@ -334,7 +328,7 @@ export default function ManagePlayers() {
   const renderStatsForm = (p) => (
     <div className="flex flex-wrap items-end gap-4">
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Bat Avg</label>
+        <label className="block text-xs font-medium text-brand-muted mb-1">Bat Avg</label>
         <input
           type="number" step="0.01" min="0"
           className="input-field py-1.5 text-sm w-24"
@@ -343,7 +337,7 @@ export default function ManagePlayers() {
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Strike Rate</label>
+        <label className="block text-xs font-medium text-brand-muted mb-1">Strike Rate</label>
         <input
           type="number" step="0.01" min="0"
           className="input-field py-1.5 text-sm w-24"
@@ -352,7 +346,7 @@ export default function ManagePlayers() {
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Bowl Avg</label>
+        <label className="block text-xs font-medium text-brand-muted mb-1">Bowl Avg</label>
         <input
           type="number" step="0.01" min="0"
           className="input-field py-1.5 text-sm w-24"
@@ -361,7 +355,7 @@ export default function ManagePlayers() {
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Economy</label>
+        <label className="block text-xs font-medium text-brand-muted mb-1">Economy</label>
         <input
           type="number" step="0.01" min="0"
           className="input-field py-1.5 text-sm w-24"
@@ -433,7 +427,7 @@ export default function ManagePlayers() {
         {!loading && players.length > 0 && (
           <div className="flex flex-wrap gap-3 mb-4">
             <div className="relative max-w-sm flex-1 min-w-[200px]">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" />
               <input
                 type="text"
                 className="input-field pl-9"
@@ -473,6 +467,22 @@ export default function ManagePlayers() {
           </div>
         )}
 
+        {/* Group chips — one tap to see just one auction group (same filter as the dropdown) */}
+        {!loading && (
+          <div className="flex gap-1.5 flex-wrap mb-3" role="group" aria-label="Filter by group">
+            {[{ value: "", short: "All", chip: "bg-white text-brand-ink" }, ...CATEGORY_ORDER.map((k) => ({ value: k, short: CATEGORIES[k].short, chip: CATEGORIES[k].chip }))].map((c) => {
+              const on = categoryFilter === c.value;
+              const n = c.value ? players.filter((p) => p.auction_category === c.value).length : players.length;
+              return (
+                <button key={c.value || "all"} type="button" aria-pressed={on} onClick={() => setCategoryFilter(c.value)}
+                  className={`min-h-[40px] px-3 rounded-full text-xs font-extrabold tracking-wide ${on ? "bg-brand-navy text-white" : c.chip}`}>
+                  {c.short} <span className="opacity-80">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Player list */}
         {loading ? (
           <LoadingState />
@@ -483,7 +493,7 @@ export default function ManagePlayers() {
                 header has a scrolling ancestor to stick within. */}
             <div className="hidden sm:block max-h-[75vh] overflow-y-auto overflow-x-auto rounded-xl">
               <table className="min-w-full text-sm">
-                <thead className="bg-gradient-to-r from-cricket-navy to-cricket-navy-light text-white sticky top-0 z-10">
+                <thead className="bg-brand-navy text-white sticky top-0 z-10">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">#</th>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
@@ -507,7 +517,7 @@ export default function ManagePlayers() {
                     return (
                     <Fragment key={p.id}>
                       <tr className={`border-b last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
-                        <td className="px-4 py-3 text-gray-400 font-mono">{i + 1}</td>
+                        <td className="px-4 py-3 text-brand-muted font-mono">{i + 1}</td>
 
                         {/* Code */}
                         <td className="px-4 py-3">
@@ -533,7 +543,7 @@ export default function ManagePlayers() {
                               onChange={e => setEditRow({ ...editRow, name: e.target.value })}
                             />
                           ) : (
-                            <span className="font-medium text-gray-900">{p.name}</span>
+                            <span className="font-medium text-brand-ink">{p.name}</span>
                           )}
                         </td>
 
@@ -559,7 +569,7 @@ export default function ManagePlayers() {
                               <select
                                 value={p.role}
                                 onChange={e => handleRoleChange(p, e.target.value)}
-                                className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                                className={`flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cricket-navy/30 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-brand-muted bg-gray-100"}`}
                               >
                                 <option value="player">Player</option>
                                 <option value="captain">Captain</option>
@@ -584,7 +594,7 @@ export default function ManagePlayers() {
                               placeholder="Team name"
                             />
                           ) : (
-                            <span className="text-gray-800 font-medium">{p.team_name || <span className="text-gray-400 italic">—</span>}</span>
+                            <span className="text-gray-800 font-medium">{p.team_name || <span className="text-brand-muted italic">—</span>}</span>
                           )}
                         </td>
 
@@ -653,7 +663,7 @@ export default function ManagePlayers() {
                                 </button>
                                 <button
                                   onClick={() => setEditId(null)}
-                                  className="icon-btn -my-2.5 bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                  className="icon-btn -my-2.5 bg-gray-100 text-brand-muted hover:bg-gray-200"
                                   title="Cancel"
                                 >
                                   <X size={14} />
@@ -684,7 +694,7 @@ export default function ManagePlayers() {
                       {statsExpanded && (
                         <tr className="border-b bg-blue-50/40">
                           <td colSpan={9} className="px-4 py-3">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                            <p className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-2">
                               Player Insights — {p.name}
                             </p>
                             {renderStatsForm(p)}
@@ -718,9 +728,10 @@ export default function ManagePlayers() {
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="bg-cricket-navy text-white text-xs font-bold px-2 py-1 rounded shrink-0">{p.team_code}</span>
-                        <span className="font-medium text-gray-900 truncate">{p.name}</span>
+                        <span className="font-bold text-brand-ink truncate">{p.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        {p.auction_category && <CategoryTag category={p.auction_category} />}
                         {isAdmin ? (
                           <span className="text-xs font-medium text-indigo-700 bg-indigo-50 rounded-full px-2 py-0.5">Admin</span>
                         ) : isCaptain ? (
@@ -728,9 +739,9 @@ export default function ManagePlayers() {
                             <Shield size={10} /> Captain
                           </span>
                         ) : (
-                          <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Player</span>
+                          <span className="text-xs font-medium text-brand-muted bg-gray-100 rounded-full px-2 py-0.5">Player</span>
                         )}
-                        {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                        {isExpanded ? <ChevronUp size={16} className="text-brand-muted" /> : <ChevronDown size={16} className="text-brand-muted" />}
                       </div>
                     </button>
 
@@ -739,12 +750,12 @@ export default function ManagePlayers() {
                         {isEditing && (
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Code</label>
+                              <label className="block text-xs font-medium text-brand-muted mb-1">Code</label>
                               <input className="input-field py-1.5 text-sm uppercase" value={editRow.team_code}
                                 onChange={e => setEditRow({ ...editRow, team_code: e.target.value.toUpperCase() })} />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                              <label className="block text-xs font-medium text-brand-muted mb-1">Name</label>
                               <input className="input-field py-1.5 text-sm" value={editRow.name}
                                 onChange={e => setEditRow({ ...editRow, name: e.target.value })} />
                             </div>
@@ -752,7 +763,7 @@ export default function ManagePlayers() {
                         )}
 
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-gray-500">Role</span>
+                          <span className="text-brand-muted">Role</span>
                           <div className="flex items-center gap-2">
                             {isAdmin ? (
                               <span
@@ -765,7 +776,7 @@ export default function ManagePlayers() {
                               <select
                                 value={p.role}
                                 onChange={e => handleRoleChange(p, e.target.value)}
-                                className={`text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-gray-500 bg-gray-100"}`}
+                                className={`text-xs font-medium rounded-full px-2.5 py-2.5 min-h-[44px] border-0 ${isCaptain ? "text-cricket-navy bg-blue-50" : "text-brand-muted bg-gray-100"}`}
                               >
                                 <option value="player">Player</option>
                                 <option value="captain">Captain</option>
@@ -782,7 +793,7 @@ export default function ManagePlayers() {
 
                         {isCaptain && (
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-gray-500">Team Name</span>
+                            <span className="text-brand-muted">Team Name</span>
                             {isEditing ? (
                               <input className="input-field py-1.5 text-sm flex-1 max-w-[60%]" placeholder="Team name"
                                 value={editRow.team_name} onChange={e => setEditRow({ ...editRow, team_name: e.target.value })} />
@@ -798,7 +809,7 @@ export default function ManagePlayers() {
                             {AUCTION_CATEGORY_OPTIONS.filter(opt => opt.value).map(opt => (
                               <button key={opt.value} type="button" onClick={() => handleAuctionCategoryChange(p, opt.value)}
                                 aria-pressed={p.auction_category === opt.value}
-                                className={`min-h-[48px] rounded-xl border-2 text-sm font-bold ${p.auction_category === opt.value ? "border-pitch-600 bg-pitch-50 text-pitch-800" : "border-gray-200 bg-white text-gray-700"}`}>
+                                className={`min-h-[48px] rounded-xl border-2 text-sm font-bold ${p.auction_category === opt.value ? "border-brand-navy bg-[#eef2f8] text-brand-navy" : "border-gray-200 bg-white text-gray-700"}`}>
                                 {opt.label}
                               </button>
                             ))}
@@ -807,7 +818,7 @@ export default function ManagePlayers() {
 
                         {isCaptain && (
                           <div className="flex items-center justify-between">
-                            <span className="text-gray-500">Status</span>
+                            <span className="text-brand-muted">Status</span>
                             <select
                               value={p.tournament_status || "not_played"}
                               onChange={e => handleStatusChange(p, e.target.value)}
@@ -856,7 +867,7 @@ export default function ManagePlayers() {
                               </button>
                               <button
                                 onClick={() => setEditId(null)}
-                                className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 active:scale-[0.96] transition-all duration-150"
+                                className="flex items-center gap-1 text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-gray-100 text-brand-muted hover:bg-gray-200 active:scale-[0.96] transition-all duration-150"
                               >
                                 <X size={13} /> Cancel
                               </button>
@@ -892,12 +903,12 @@ export default function ManagePlayers() {
                 </button>
               ) : (
                 <>
-                  <h3 className="font-bold text-gray-900 mb-2">Removed people ({removed.length})</h3>
-                  {removed.length === 0 ? <p className="text-sm text-gray-500">Nobody has been removed.</p> : (
+                  <h3 className="font-bold text-brand-ink mb-2">Removed people ({removed.length})</h3>
+                  {removed.length === 0 ? <p className="text-sm text-brand-muted">Nobody has been removed.</p> : (
                     <ul className="divide-y divide-gray-100">
                       {removed.map((p) => (
                         <li key={p.id} className="flex items-center gap-2 py-2">
-                          <span className="flex-1 text-sm"><b className="text-gray-900">{p.name}</b> <span className="text-gray-500">· {p.team_code} · {p.role}</span></span>
+                          <span className="flex-1 text-sm"><b className="text-brand-ink">{p.name}</b> <span className="text-brand-muted">· {p.team_code} · {p.role}</span></span>
                           <button type="button" onClick={() => handleReactivate(p)}
                             className="text-xs py-1.5 px-3 min-h-[44px] rounded-lg bg-pitch-50 text-pitch-800 font-bold">Bring back</button>
                         </li>

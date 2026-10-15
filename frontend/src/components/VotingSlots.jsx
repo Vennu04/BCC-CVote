@@ -1,5 +1,5 @@
 import SlotCard from "./SlotCard";
-import { CheckCircle, RefreshCw, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle, RefreshCw, XCircle, AlertTriangle, CalendarX2 } from "lucide-react";
 
 // Home's list of match cards + the "not playing this weekend" shortcut.
 export default function VotingSlots({ voting }) {
@@ -12,8 +12,7 @@ export default function VotingSlots({ voting }) {
     return (
       <div className="flex items-center justify-center h-48">
         <div className="text-center">
-          <div className="text-4xl mb-2">🏏</div>
-          <p className="text-gray-500">Loading slots…</p>
+          <p className="text-brand-muted font-semibold">Loading slots…</p>
         </div>
       </div>
     );
@@ -23,8 +22,8 @@ export default function VotingSlots({ voting }) {
     return (
       <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
         <AlertTriangle className="mx-auto text-amber-500 mb-3" size={36} />
-        <p className="text-gray-900 font-semibold">Couldn't load your voting slots</p>
-        <p className="text-gray-500 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <p className="text-brand-ink font-semibold">Couldn't load your voting slots</p>
+        <p className="text-brand-muted text-sm mt-1 mb-4">Check your connection and try again</p>
         <button onClick={fetchVotes} className="btn-secondary inline-flex items-center gap-1.5">
           <RefreshCw size={14} /> Retry
         </button>
@@ -38,14 +37,14 @@ export default function VotingSlots({ voting }) {
   return (
     <>
       <div className="flex items-center justify-between mb-3 gap-2">
-        <h2 className="text-xs font-black uppercase tracking-wider text-gray-500">Your matches</h2>
+        <h2 className="text-xs font-extrabold uppercase tracking-wider text-brand-muted">Your matches</h2>
         <div className="flex items-center gap-1">
           {error && (
             <span className="flex items-center gap-1 text-xs text-amber-700" title="Showing last known data — refresh failed">
               <AlertTriangle size={13} /> Refresh failed
             </span>
           )}
-          <button onClick={fetchVotes} className="icon-btn text-gray-500 hover:text-brand-navy" aria-label="Refresh matches">
+          <button onClick={fetchVotes} className="icon-btn text-brand-muted hover:text-brand-navy" aria-label="Refresh matches">
             <RefreshCw size={16} />
           </button>
         </div>
@@ -60,9 +59,9 @@ export default function VotingSlots({ voting }) {
 
       {rows.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
-          <div className="text-5xl mb-3">🏏</div>
-          <p className="text-gray-800 font-semibold">No slots available yet</p>
-          <p className="text-gray-500 text-sm mt-1">The organizer hasn't set up this weekend's slots</p>
+          <CalendarX2 className="mx-auto text-brand-muted mb-3" size={36} />
+          <p className="text-brand-ink font-bold">No slots available yet</p>
+          <p className="text-brand-muted text-sm mt-1">The organizer hasn't set up this weekend's slots</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

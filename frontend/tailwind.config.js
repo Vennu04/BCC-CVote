@@ -8,25 +8,30 @@ export default {
         // bg-pitch-600 / text-cricket-gold / etc. across the app keeps
         // working unchanged. Only added a couple of intermediate shades
         // (300/400) needed for gradients, and gold-dark for gradient buttons.
+        // Green now means one thing only — "in / playing / done" — so the
+        // scale is a deeper, calmer green that reads well on white.
         pitch: {
-          50:  "#f0fdf4",
-          100: "#dcfce7",
-          200: "#bbf7d0",
-          300: "#86efac",
-          400: "#4ade80",
-          500: "#22c55e",
-          600: "#16a34a",
-          700: "#15803d",
-          800: "#166534",
-          900: "#14532d",
+          50:  "#e3f4e8",
+          100: "#cdebd7",
+          200: "#a8dab8",
+          300: "#7fc497",
+          400: "#4ea56e",
+          500: "#2a8a4f",
+          600: "#1b733e",
+          700: "#14632f",
+          800: "#0f4d24",
+          900: "#0b3a1b",
         },
+        // 2026-10 unified look: the older cricket/royal palettes now point at
+        // the same navy + gold family as `brand`, so every screen reads as
+        // one app without touching each old class name.
         cricket: {
-          red:      "#dc2626",
-          gold:     "#f59e0b",
-          "gold-dark": "#d97706",
-          navy:     "#1e3a5f",
-          "navy-light": "#2d4d78",
-          cream:    "#fef9ee",
+          red:      "#b42318",
+          gold:     "#f5b301",
+          "gold-dark": "#c48f00",
+          navy:     "#0f2547",
+          "navy-light": "#1d3a6b",
+          cream:    "#fff8e6",
         },
         // New — deep royal-blue chrome for Login + Admin/Captain/Player
         // Dashboard ONLY (per the approved mockup). Every other page keeps
@@ -36,23 +41,28 @@ export default {
         // Stumps-style app frame (2026-09 redesign): navy top bar, gold
         // accents, light grey ground behind white cards.
         brand: {
-          navy: "#132a52",
+          navy: "#0f2547",
           "navy-light": "#1d3a6b",
+          "navy-mid": "#13294d",
           gold: "#f5b301",
-          ground: "#eef1f5",
+          "gold-dark": "#c48f00",
+          ground: "#f2f4f7",
+          ink: "#0f172a",
+          muted: "#5b6474",
+          line: "#e6e9ee",
         },
         royal: {
-          950: "#030d24", // deepest page background (Admin/Login)
-          900: "#051836", // page background, mid gradient stop (Admin/Login); also Captain/Player's page bg
-          800: "#061630", // top nav bar; also Captain/Player's page bg mid gradient stop
-          700: "#0a1a38", // ticker strip
-          600: "#0d1b33", // Admin card background
+          950: "#0b1d3a", // unified look: the royal-blue screens now use the brand navy family
+          900: "#0f2547",
+          800: "#0f2547",
+          700: "#13294d",
+          600: "#13294d",
           // One step lighter than 600 — Captain/Player Dashboard cards only,
           // so those two pages read as a visibly lighter tint of the same
           // royal-blue family, not a different palette. Added here rather
           // than reusing 600 so the two dashboards' cards are genuinely
           // lighter, not just sitting on a lighter page background.
-          500: "#15305c",
+          500: "#1d3a6b",
         },
       },
       // System font stack only — no CDN webfont (offline-safe, matches the
@@ -61,6 +71,10 @@ export default {
       // which silently broke the app's own "must work offline" requirement;
       // removed there too.
       fontFamily: {
+        // Scoreboard numbers and screen titles (bids, clocks, points,
+        // counts). Bundled with the app via @fontsource — no CDN, still
+        // works offline.
+        display: ["'Barlow Condensed'", "system-ui", "sans-serif"],
         sans: [
           "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto",
           "system-ui", "sans-serif",

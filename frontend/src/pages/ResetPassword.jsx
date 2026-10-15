@@ -36,19 +36,18 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-cricket-navy via-pitch-800 to-cricket-navy px-4 py-8 safe-top safe-bottom safe-x">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-brand-navy px-5 py-8 safe-top safe-bottom safe-x">
       <div className="text-center mb-8">
-        <div className="text-6xl mb-3">🏏</div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">BCC-CVote</h1>
-        <p className="text-gray-400 text-xs mt-1">Powered by {COMPANY_NAME}</p>
+        <h1 className="font-display font-extrabold text-4xl text-white tracking-wide">BCC <span className="text-brand-gold">CVOTE</span></h1>
+        <p className="text-white/70 text-xs mt-1">Powered by {COMPANY_NAME}</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-soft-lg w-full max-w-sm p-8">
+      <div className="bg-white rounded-3xl shadow-soft-lg w-full max-w-sm p-6">
         <div className="flex items-center gap-2 mb-1">
-          <KeyRound size={20} className="text-pitch-600" />
-          <h2 className="text-xl font-bold text-gray-900">Reset Password</h2>
+          <KeyRound size={20} className="text-brand-navy" />
+          <h2 className="text-xl font-bold text-brand-ink">Reset Password</h2>
         </div>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-sm text-brand-muted mb-6">
           Enter your team code and current password to set a new one — no need to sign in first.
         </p>
 
@@ -86,7 +85,7 @@ export default function ResetPassword() {
               value={form.new_password}
               onChange={(e) => setForm({ ...form, new_password: e.target.value })}
             />
-            <p className="text-xs text-gray-400 mt-1">At least 6 characters, and not all numbers.</p>
+            <p className="text-xs text-brand-muted mt-1">At least 6 characters, and not all numbers.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
@@ -101,8 +100,8 @@ export default function ResetPassword() {
           </button>
         </form>
 
-        <p className="text-xs text-gray-400 text-center mt-6">
-          Forgot your current password too? <Link to="/login" className="underline text-pitch-700 font-medium">Contact your organizer</Link> for a manual reset.
+        <p className="text-xs text-brand-muted text-center mt-6">
+          Forgot your current password too? <Link to="/login" className="underline text-brand-navy font-semibold">Contact your organizer</Link> for a manual reset.
         </p>
       </div>
     </div>

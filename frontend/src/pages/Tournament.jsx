@@ -53,14 +53,14 @@ export function TournamentView({ view }) {
       <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
         <AlertTriangle className="mx-auto text-amber-500 mb-3" size={36} />
         <p className="text-gray-800 font-semibold">Couldn't load tournament data</p>
-        <p className="text-gray-500 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <p className="text-brand-muted text-sm mt-1 mb-4">Check your connection and try again</p>
         <button onClick={fetchData} className="btn-secondary inline-flex items-center gap-1.5"><RefreshCw size={14} /> Retry</button>
       </div>
     );
   }
 
   if (teams.length === 0) {
-    return <>{picker}<div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4 text-gray-500">Tournament data hasn't been set up yet — check back soon.</div></>;
+    return <>{picker}<div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4 text-brand-muted">Tournament data hasn't been set up yet — check back soon.</div></>;
   }
 
   const chips = (
@@ -72,7 +72,7 @@ export function TournamentView({ view }) {
         return (
           <button key={g} type="button" onClick={() => setGroup(g)} aria-pressed={on}
             className={`shrink-0 px-4 min-h-[40px] rounded-full text-sm font-bold transition-colors duration-150 ${
-              on ? "bg-brand-navy text-white" : "bg-white text-gray-600 shadow-soft"}`}>
+              on ? "bg-brand-navy text-white" : "bg-white text-brand-muted shadow-soft"}`}>
             {g === "all" ? "All groups" : `Group ${g}`}
           </button>
         );
@@ -91,17 +91,17 @@ export function TournamentView({ view }) {
         {chips}
         <div className="bg-white rounded-2xl shadow-soft p-4">
           <div className="flex items-baseline justify-between mb-2">
-            <h2 className="font-black text-gray-900">Group {g}</h2>
-            <span className="text-xs text-gray-500">{groupTeams.length} teams · {played}/{total} matches played</span>
+            <h2 className="font-black text-brand-ink">Group {g}</h2>
+            <span className="text-xs text-brand-muted">{groupTeams.length} teams · {played}/{total} matches played</span>
           </div>
           {groupTeams.length === 0 ? (
-            <p className="text-sm text-gray-500">No teams in this group yet.</p>
+            <p className="text-sm text-brand-muted">No teams in this group yet.</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {groupTeams.map((t) => (
                 <li key={t.id} className="flex items-center gap-3 py-2.5">
                   <TeamCrest name={t.name} size={30} />
-                  <span className="font-semibold text-gray-900">{t.name}</span>
+                  <span className="font-semibold text-brand-ink">{t.name}</span>
                 </li>
               ))}
             </ul>
@@ -131,9 +131,9 @@ function FixtureSection({ title, items, empty }) {
   if (items.length === 0 && !empty) return null;
   return (
     <section className="mb-5">
-      <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">{title}</h2>
+      <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted mb-2">{title}</h2>
       {items.length === 0 ? (
-        <p className="text-sm text-gray-500 bg-white rounded-2xl shadow-soft px-4 py-3">{empty}</p>
+        <p className="text-sm text-brand-muted bg-white rounded-2xl shadow-soft px-4 py-3">{empty}</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {items.map((f) => <FixtureCard key={f.id} f={f} />)}
@@ -147,19 +147,19 @@ function FixtureCard({ f }) {
   const chip = f.result
     ? { label: "Result", cls: "bg-amber-50 text-amber-800" }
     : f.date
-      ? { label: f.date < todayIst() ? "Played" : "Scheduled", cls: "bg-gray-100 text-gray-600" }
+      ? { label: f.date < todayIst() ? "Played" : "Scheduled", cls: "bg-gray-100 text-brand-muted" }
       : { label: "TBD", cls: "bg-amber-50 text-amber-800" };
   return (
     <div className="bg-white rounded-2xl shadow-soft p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-brand-muted">
           Group {f.group} · Match {f.match_number}
           {f.date ? ` · ${formatDateDisplay(f.date)}${f.time ? ` · ${f.time}` : ""}` : ""}
         </span>
         <span className={`text-[11px] font-bold rounded-full px-2.5 py-0.5 ${chip.cls}`}>{chip.label}</span>
       </div>
       <TeamsVs a={f.team1_name} b={f.team2_name} />
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-brand-muted">
         {f.venue && <span className="flex items-center gap-1"><MapPin size={12} /> {f.venue}</span>}
         {f.result && <span className="text-pitch-700 font-semibold">{f.result}</span>}
       </div>

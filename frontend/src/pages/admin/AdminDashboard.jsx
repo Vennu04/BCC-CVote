@@ -131,7 +131,7 @@ export default function VotesInsights() {
           <>
             {/* To do */}
             <section className="bg-white rounded-2xl shadow-soft p-4">
-              <h2 className="font-black text-gray-900 mb-1">Things to check across all matches</h2>
+              <h2 className="font-black text-brand-ink mb-1">Things to check across all matches</h2>
               {(overview?.todos || []).length === 0 ? (
                 <p className="flex items-center gap-2 text-sm text-pitch-700 font-semibold py-1"><CheckCircle2 size={16} /> Nothing needs you right now.</p>
               ) : (
@@ -141,10 +141,10 @@ export default function VotesInsights() {
                       <Link to={t.link} className="flex items-start gap-3 py-2.5 hover:bg-gray-50 -mx-2 px-2 rounded-lg">
                         <span className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${TODO_DOT[t.level]}`} />
                         <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-bold text-gray-900">{t.title}</span>
-                          <span className="block text-xs text-gray-500">{t.detail}</span>
+                          <span className="block text-sm font-bold text-brand-ink">{t.title}</span>
+                          <span className="block text-xs text-brand-muted">{t.detail}</span>
                         </span>
-                        <ChevronRight size={16} className="text-gray-400 mt-1" />
+                        <ChevronRight size={16} className="text-brand-muted mt-1" />
                       </Link>
                     </li>
                   ))}
@@ -154,9 +154,9 @@ export default function VotesInsights() {
 
             {/* Matches */}
             <section>
-              <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Matches</h2>
+              <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted mb-2">Matches</h2>
               {visibleSlots.length === 0 ? (
-                <p className="bg-white rounded-2xl shadow-soft px-4 py-6 text-center text-sm text-gray-500">No match slots to show.</p>
+                <p className="bg-white rounded-2xl shadow-soft px-4 py-6 text-center text-sm text-brand-muted">No match slots to show.</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {visibleSlots.map((slot) => (
@@ -180,7 +180,7 @@ export default function VotesInsights() {
             {/* Insights */}
             {insights && (
               <section>
-                <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Insights</h2>
+                <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted mb-2">Insights</h2>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                   <InsightBarCard title="Attendance Trend" icon={<Users size={16} className="text-brand-navy" />}
                     items={insights.attendance_trend.map((m) => ({ label: m.label, value: m.attendee_count }))}
@@ -207,7 +207,7 @@ export default function VotesInsights() {
 function MenuItem({ icon: Icon, onClick, children }) {
   return (
     <button onClick={onClick} className="w-full flex items-center gap-2 px-3 min-h-[42px] text-sm text-left hover:bg-gray-50">
-      <Icon size={15} className="text-gray-500" /> {children}
+      <Icon size={15} className="text-brand-muted" /> {children}
     </button>
   );
 }
@@ -218,14 +218,14 @@ function MatchProgressCard({ slot, ov, matrix, onVoteSet }) {
     <div className="bg-white rounded-2xl shadow-soft overflow-hidden">
       <div className="p-4 pb-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-gray-500">{slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}</span>
-          <span className={`text-[10px] font-bold rounded-full px-2.5 py-1 border border-black/5 shrink-0 ${status?.className || "bg-gray-100 text-gray-600"}`}>
+          <span className="text-xs text-brand-muted">{slot.group ? `Group ${slot.group} · ` : ""}{matchWhen(slot)}</span>
+          <span className={`text-[10px] font-bold rounded-full px-2.5 py-1 border border-black/5 shrink-0 ${status?.className || "bg-gray-100 text-brand-muted"}`}>
             {status?.label || slot.window?.status || "NO WINDOW"}
           </span>
         </div>
         {slot.team_a_name && slot.team_b_name
           ? <TeamsVs a={slot.team_a_name} b={slot.team_b_name} />
-          : <p className="font-extrabold text-gray-900 my-2">{slot.day} {slot.time_of_day}</p>}
+          : <p className="font-extrabold text-brand-ink my-2">{slot.day} {slot.time_of_day}</p>}
         {ov && (
           <>
             <div className="flex gap-1 mt-1" aria-label="Progress">
@@ -234,7 +234,7 @@ function MatchProgressCard({ slot, ov, matrix, onVoteSet }) {
                   className={`flex-1 h-1.5 rounded-full ${s.state === "done" ? "bg-pitch-600" : s.state === "current" ? "bg-brand-gold" : "bg-gray-200"}`} />
               ))}
             </div>
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-[11px] text-brand-muted mt-1">
               {ov.steps.map((s) => (
                 <span key={s.key} className={s.state === "current" ? "font-bold text-gray-800" : ""}>
                   {STEP_LABELS[s.key]}{s.key !== "auction" ? " ▸ " : ""}
@@ -247,7 +247,7 @@ function MatchProgressCard({ slot, ov, matrix, onVoteSet }) {
           </>
         )}
         {slot.weather?.status === "ok" && (
-          <p className="text-[11px] text-gray-500 mt-1">☀ {Math.round(slot.weather.temp_c)}°C · 🌧 {slot.weather.rain_chance_pct}% rain</p>
+          <p className="text-[11px] text-brand-muted mt-1">{Math.round(slot.weather.temp_c)}°C · {slot.weather.rain_chance_pct}% rain</p>
         )}
       </div>
       {/* Scoreboard strip */}
@@ -257,8 +257,8 @@ function MatchProgressCard({ slot, ov, matrix, onVoteSet }) {
           <span className="block text-[10px] font-bold uppercase tracking-wider text-white/55">Available</span>
         </span>
         <span className="text-xs text-white/70 flex-1 flex gap-3 flex-wrap">
-          <span>🤔 {slot.maybe} maybe</span>
-          <span>❌ {slot.not_available} out</span>
+          <span>{slot.maybe} maybe</span>
+          <span>{slot.not_available} out</span>
         </span>
       </div>
       <div className="px-4 py-2 text-xs">
@@ -275,17 +275,17 @@ function InsightBarCard({ title, icon, items, emptyLabel, valuePrefix = "", valu
     <div className="bg-white rounded-2xl shadow-soft p-4">
       <div className="flex items-center gap-2 mb-3">
         {icon}
-        <h3 className="font-bold text-gray-900 text-sm">{title}</h3>
+        <h3 className="font-bold text-brand-ink text-sm">{title}</h3>
       </div>
       {items.length === 0 ? (
-        <p className="text-xs text-gray-500 text-center py-4">{emptyLabel}</p>
+        <p className="text-xs text-brand-muted text-center py-4">{emptyLabel}</p>
       ) : (
         <div className="space-y-2">
           {items.map((item, i) => (
             <div key={`${item.label}-${i}`} className="text-xs">
-              <div className="flex justify-between text-gray-600 mb-0.5">
+              <div className="flex justify-between text-brand-muted mb-0.5">
                 <span className="truncate pr-2">{item.label}</span>
-                <span className="font-bold text-gray-900 shrink-0">{valuePrefix}{item.value}{valueSuffix}</span>
+                <span className="font-bold text-brand-ink shrink-0">{valuePrefix}{item.value}{valueSuffix}</span>
               </div>
               <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full bg-brand-navy rounded-full" style={{ width: `${Math.max(2, (item.value / max) * 100)}%` }} />

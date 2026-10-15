@@ -11,24 +11,18 @@ import AuctionChat from "../components/AuctionChat";
 import UpcomingPlayers, { NextUpStrip } from "../components/UpcomingPlayers";
 import { useAuth } from "../context/AuthContext";
 import { useAuction } from "../hooks/useAuction";
-import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap, AlertTriangle } from "lucide-react";
+import { Gavel, ThumbsDown, Trophy, Gift, FlaskConical, Bell, Zap, AlertTriangle, Check, Minus, Plus } from "lucide-react";
 import {
   playTurnAlertSound, vibrateTurnAlert, flashTabTitle,
   notificationsSupported, requestTurnNotificationPermission, showTurnNotification,
 } from "../utils/turnAlert";
+import { CATEGORY_LABELS as GROUP_LABELS, CATEGORY_ORDER, CATEGORIES } from "../utils/categories";
+import CategoryTag from "../components/CategoryTag";
 
-const GROUP_LABELS = {
-  extra_power_allrounder: "Extra Power — All-Rounders",
-  extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power — All-Rounders",
-  power_batsman: "Power — Batsmen",
-  classic: "Classic",
-};
 
 // Fixed order/labels for every auction — not derived from the data, so a
 // category with zero players left still shows up as "(0 left)" instead of
 // disappearing, giving captains a stable 4-row layout to plan around.
-const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"];
 
 function AvailablePlayersPool({ auction }) {
   const players = auction.available_players || [];
@@ -44,17 +38,17 @@ function AvailablePlayersPool({ auction }) {
 
   return (
     <div className="card">
-      <h3 className="font-bold text-gray-900 mb-3 text-sm">Available Players</h3>
+      <h3 className="font-extrabold text-brand-ink mb-3">Available players</h3>
       <div className="space-y-4">
         {CATEGORY_ORDER.map((cat) => {
           const list = byCategory[cat];
           return (
             <div key={cat}>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                {GROUP_LABELS[cat]} <span className="text-gray-400 normal-case font-normal">({list.length} left)</span>
+              <p className="flex items-center gap-2 mb-1.5">
+                <CategoryTag category={cat} full /> <span className="text-xs text-brand-muted">({list.length} left)</span>
               </p>
               {list.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">None remaining</p>
+                <p className="text-xs text-brand-muted">None remaining</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {list.map((p) => {
@@ -62,13 +56,13 @@ function AvailablePlayersPool({ auction }) {
                     return (
                       <span
                         key={p.id}
-                        className={`text-xs rounded-full px-2.5 py-1 ${
+                        className={`inline-flex items-center gap-1 text-sm rounded-full px-3 py-1 ${
                           isCurrent
-                            ? "bg-amber-100 text-amber-800 border border-amber-300 font-semibold"
-                            : "bg-gray-100 text-gray-700"
+                            ? "bg-brand-gold text-brand-navy font-extrabold"
+                            : "bg-brand-ground text-brand-ink"
                         }`}
                       >
-                        {isCurrent && "🔨 "}{p.name}
+                        {isCurrent && <Gavel size={13} aria-label="Up now" />}{p.name}
                       </span>
                     );
                   })}
@@ -89,27 +83,31 @@ function CaptainCard({ summary, isYou, startingPrice }) {
   // this just shows the final name-only roster instead of any numbers.
   const pricesHidden = summary.points_remaining == null;
   return (
-    <div className={`card ${isYou ? "border-2 border-pitch-400" : ""}`}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-bold text-gray-900">{summary.name}{isYou && " (You)"}</h3>
-        {!pricesHidden && <span className="text-sm font-semibold text-pitch-700">{summary.points_remaining} pts left</span>}
+    <div className={`card !p-4 ${isYou ? "ring-2 ring-brand-navy" : ""}`}>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="font-extrabold text-brand-ink">{summary.name}{isYou && " (You)"}</h3>
+        {!pricesHidden && (
+          <span className="text-sm text-brand-muted">
+            <span className="font-display font-extrabold text-2xl text-brand-navy">{summary.points_remaining}</span> pts left
+          </span>
+        )}
       </div>
-      <p className="text-xs text-gray-500 mb-2">{summary.roster_count} players picked</p>
-      <div className="space-y-1 mb-3">
-        {Object.entries(summary.group_counts || {}).map(([group, count]) => (
-          <div key={group} className="flex items-center justify-between text-xs text-gray-600">
-            <span>{GROUP_LABELS[group] || group}</span>
-            <span className="font-medium">{count}</span>
+      <p className="text-xs text-brand-muted mb-2">{summary.roster_count} players picked</p>
+      <div className="grid grid-cols-5 gap-1 mb-3 text-center">
+        {CATEGORY_ORDER.filter((g) => g in (summary.group_counts || {})).map((group) => (
+          <div key={group} className="rounded-lg bg-brand-ground py-1.5">
+            <div className="font-display font-bold text-lg leading-none text-brand-ink">{summary.group_counts[group]}</div>
+            <div className="text-[10px] font-extrabold text-brand-muted mt-0.5" title={GROUP_LABELS[group]}>{CATEGORIES[group]?.short || group}</div>
           </div>
         ))}
       </div>
       {summary.roster?.length > 0 && (
-        <div className="border-t pt-2 space-y-1">
+        <div className="border-t border-brand-line pt-2 space-y-1">
           {summary.roster.map((p) => (
             <div key={p.user_id} className="flex items-center justify-between text-xs">
-              <span className="text-gray-800">{p.name}</span>
+              <span className="text-brand-ink font-semibold">{p.name}</span>
               {!pricesHidden && (
-                <span className="text-gray-400">
+                <span className="text-brand-muted">
                   {p.assigned_via === "leftover_free" || p.assigned_via === "free_pick"
                     ? "free"
                     // p.price is the full sold price (base + extra) — only the extra
@@ -123,6 +121,31 @@ function CaptainCard({ summary, isYou, startingPrice }) {
         </div>
       )}
     </div>
+  );
+}
+
+// The five groups in release order: done (both halves filled), now (the
+// player up for bidding is from it) or still to come.
+function GroupProgress({ auction }) {
+  const quotas = auction.group_quotas || {};
+  const now = auction.current_player?.category || auction.auto_release_category;
+  const filled = (g) => (auction.captain_a?.group_counts?.[g] || 0) + (auction.captain_b?.group_counts?.[g] || 0);
+  const groups = CATEGORY_ORDER.filter((g) => (quotas[g] || 0) > 0);
+  if (groups.length === 0) return null;
+  return (
+    <ol aria-label="Groups" className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}>
+      {groups.map((g) => {
+        const done = filled(g) >= 2 * quotas[g];
+        const isNow = !done && g === now;
+        return (
+          <li key={g} aria-current={isNow ? "step" : undefined}
+            className={`rounded-lg py-1.5 text-center text-[11px] font-extrabold tracking-wide flex items-center justify-center gap-0.5 ${
+              isNow ? CATEGORIES[g].chip + " ring-2 ring-brand-navy" : done ? "bg-pitch-50 text-pitch-700" : "bg-white text-brand-muted"}`}>
+            {done && <Check size={12} strokeWidth={3} aria-label="done" />}{CATEGORIES[g].short}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -302,7 +325,7 @@ export default function Auction() {
     return (
       <div className="min-h-screen bg-brand-ground">
         <Navbar />
-        <div className="max-w-3xl mx-auto px-4 py-8 text-gray-500 text-sm">Loading auction…</div>
+        <div className="max-w-3xl mx-auto px-4 py-8 text-brand-muted text-sm">Loading auction…</div>
       </div>
     );
   }
@@ -318,7 +341,7 @@ export default function Auction() {
           <div className="card text-center py-12">
             <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
             <p className="text-gray-700 font-medium">Couldn't load this auction</p>
-            <p className="text-gray-400 text-sm mt-1 mb-4">Check your connection and try again</p>
+            <p className="text-brand-muted text-sm mt-1 mb-4">Check your connection and try again</p>
             <button onClick={refetch} className="btn-secondary">
               Retry
             </button>
@@ -332,7 +355,7 @@ export default function Auction() {
     return (
       <div className="min-h-screen bg-brand-ground">
         <Navbar />
-        <div className="max-w-3xl mx-auto px-4 py-8 text-gray-500 text-sm">Auction not found.</div>
+        <div className="max-w-3xl mx-auto px-4 py-8 text-brand-muted text-sm">Auction not found.</div>
       </div>
     );
   }
@@ -361,15 +384,21 @@ export default function Auction() {
       <div className="bg-brand-navy text-white">
         <div className="max-w-3xl mx-auto px-4 pt-3 pb-4 flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-black leading-tight">{auction.status === "completed" ? "Auction result" : "Live auction"}</h1>
-            <p className="text-sm text-white/60">{auction.is_test ? "Practice auction" : auction.match_label || ""}</p>
+            {auction.status === "active" && (
+              <p className="inline-flex items-center gap-1.5 text-xs font-extrabold tracking-wider text-[#ff8a99]">
+                <span className="w-2 h-2 rounded-full bg-[#ff8a99] animate-pulse" /> LIVE
+              </p>
+            )}
+            <h1 className="font-display font-extrabold text-[30px] uppercase tracking-wide leading-none">{auction.status === "completed" ? "Auction result" : "Live auction"}</h1>
+            <p className="text-sm text-white/80 mt-1">{auction.is_test ? "Practice auction" : auction.match_label || ""}</p>
           </div>
           <CountdownBadge endsAtIso={auction.status === "active" ? auction.ends_at_iso : null} />
         </div>
       </div>
-      <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 py-4 space-y-3.5">
+        {auction.status === "active" && <GroupProgress auction={auction} />}
         {needsMyTurn && (
-          <div className="flex items-center gap-2 bg-amber-400 border-2 border-amber-500 text-amber-950 rounded-lg px-4 py-3 text-sm font-bold animate-pulse">
+          <div className="flex items-center gap-2 bg-brand-gold text-brand-navy rounded-2xl px-4 py-3 text-[15px] font-extrabold animate-pulse">
             <Zap size={18} className="shrink-0" />
             {auction.current_player?.current_high_bidder
               ? `${auction.current_player.current_high_bidder} just bid ${auction.current_player.current_high_bid} on ${auction.current_player?.name} — your move!`
@@ -380,44 +409,43 @@ export default function Auction() {
           <button
             type="button"
             onClick={handleEnableNotifications}
-            className="flex items-center gap-2 text-xs font-medium text-pitch-700 border border-pitch-300 rounded-lg px-3 py-2 hover:bg-pitch-50 w-fit"
+            className="flex items-center gap-2 text-sm font-bold text-brand-navy border-2 border-brand-navy rounded-xl px-3 min-h-[44px] hover:bg-white w-fit"
           >
             <Bell size={14} /> Enable turn alerts (notifies you even if you switch apps)
           </button>
         )}
         {auction.is_test && (
-          <div className="flex items-center gap-2 bg-amber-100 border-2 border-amber-400 text-amber-900 rounded-lg px-4 py-2.5 text-sm font-semibold">
+          <div className="flex items-center gap-2 bg-[#fff3d1] text-[#7a4f00] rounded-2xl px-4 py-2.5 text-sm font-bold">
             <FlaskConical size={16} /> PRACTICE AUCTION — no real votes, budgets, or player stats are affected
           </div>
         )}
         {auction.status === "pending" && (
-          <div className="card text-center py-8 text-gray-600">Waiting for the admin to start the auction…</div>
+          <div className="card text-center py-8 text-brand-muted font-semibold">Waiting for the admin to start the auction…</div>
         )}
         {auction.status === "completed" && (
-          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm font-medium">
+          <div className="flex items-center gap-2 bg-pitch-50 text-pitch-800 rounded-2xl px-4 py-3 text-sm font-bold">
             <Trophy size={18} /> Auction complete — final rosters below.
           </div>
         )}
 
         {auction.status === "active" && (
-          <div className="rounded-2xl bg-brand-navy text-white p-4 shadow-soft">
+          <div className="rounded-3xl bg-white p-5 shadow-soft-lg ring-2 ring-brand-gold">
             {auction.current_player ? (
               <>
-                <p className="inline-block text-[11px] font-black uppercase tracking-wide bg-brand-gold text-brand-navy rounded-full px-2.5 py-0.5">
-                  {GROUP_LABELS[auction.current_player.category] || auction.current_player.category}
-                </p>
-                <h2 className="text-2xl font-black mt-1.5 mb-1">{auction.current_player.name}</h2>
-                <p className="text-sm text-white/70">
-                  {/* current_high_bid is the full price (base + extra) — only the extra
-                      counts against anyone's 17-pt budget, so it's spelled out here too. */}
-                  Current bid: <strong>{auction.current_player.current_high_bid}</strong>
-                  {" "}({(auction.current_player.current_high_bid - auction.starting_price).toFixed(1)} extra)
-                  {auction.current_player.current_high_bidder && ` — ${auction.current_player.current_high_bidder}`}
-                </p>
-
+                <CategoryTag category={auction.current_player.category} full />
+                <h2 className="text-[30px] font-extrabold text-brand-ink leading-tight mt-2">{auction.current_player.name}</h2>
+                <div className="flex items-end justify-between gap-3 border-t border-brand-line mt-3 pt-3">
+                  <span className="text-sm text-brand-muted font-bold">
+                    {auction.current_player.current_high_bidder ? `Top bid · ${auction.current_player.current_high_bidder}` : "Starting price"}
+                    {/* current_high_bid is the full price (base + extra) — only the extra
+                        counts against anyone's 17-pt budget, so it's spelled out here too. */}
+                    <span className="block font-normal">{(auction.current_player.current_high_bid - auction.starting_price).toFixed(1)} extra points</span>
+                  </span>
+                  <span className="font-display font-extrabold text-5xl leading-none text-brand-navy tabular-nums">{auction.current_player.current_high_bid}</span>
+                </div>
               </>
             ) : (
-              <p className="text-white/70 text-sm text-center py-3">Waiting for the admin to release the next player…</p>
+              <p className="text-brand-muted text-sm font-semibold text-center py-3">Waiting for the next player to come up…</p>
             )}
           </div>
         )}
@@ -427,12 +455,12 @@ export default function Auction() {
         {auction.status !== "completed" && hasQueue && <NextUpStrip upcoming={auction.upcoming} onSeeAll={showAllUpcoming} />}
 
         {freePickable.length > 0 && (
-          <div className="card border-2 border-amber-300 bg-amber-50">
+          <div className="card !p-4 bg-[#fff3d1]">
             <div className="flex items-center gap-2 mb-2">
-              <Gift size={18} className="text-amber-700" />
-              <h3 className="font-bold text-amber-900">Free Pick Available</h3>
+              <Gift size={18} className="text-[#7a4f00]" />
+              <h3 className="font-extrabold text-[#7a4f00]">Free pick available</h3>
             </div>
-            <p className="text-xs text-amber-700 mb-3">
+            <p className="text-sm text-[#7a4f00] mb-3">
               The other captain has no points left — you can take any player still left, free, up to your half of each group.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -441,7 +469,7 @@ export default function Auction() {
                   key={p.id}
                   onClick={() => freePick(p.id)}
                   disabled={freePicking === p.id}
-                  className="text-sm py-1.5 px-3 rounded-lg border border-amber-400 text-amber-800 bg-white hover:bg-amber-100 disabled:opacity-50"
+                  className="text-sm min-h-[44px] px-3 rounded-xl bg-white text-brand-ink font-bold hover:bg-brand-ground disabled:opacity-50"
                 >
                   {freePicking === p.id ? "Picking…" : `${p.name} — ${GROUP_LABELS[p.category] || p.category}`}
                 </button>
@@ -456,7 +484,7 @@ export default function Auction() {
           {panels.map((p) => (
             <button key={p.key} type="button" role="tab" aria-selected={panel === p.key} onClick={() => setActivePanel(p.key)}
               className={`flex-1 shrink-0 min-h-[40px] px-3 rounded-xl text-sm font-bold transition-colors duration-150 ${
-                panel === p.key ? "bg-brand-navy text-white" : "text-gray-600 hover:bg-gray-50"}`}>
+                panel === p.key ? "bg-brand-navy text-white" : "text-brand-muted hover:bg-brand-ground"}`}>
               {p.label}
             </button>
           ))}
@@ -474,20 +502,20 @@ export default function Auction() {
         {panel === "feed" && (
           <>
           <div className="card">
-            <h3 className="font-bold text-gray-900 mb-3 text-sm">Live Feed</h3>
+            <h3 className="font-extrabold text-brand-ink mb-3">Live feed</h3>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {(auction.bid_feed || []).length === 0 && (
-                <p className="text-xs text-gray-400">No bids yet.</p>
+                <p className="text-sm text-brand-muted">No bids yet.</p>
               )}
               {(auction.bid_feed || []).map((b, i) => (
-                <div key={i} className="text-sm bg-gray-50 rounded-lg px-3 py-2">
+                <div key={i} className="text-sm bg-brand-ground rounded-xl px-3 py-2">
                   <span className="font-semibold">{b.captain_name}</span>{" "}
                   {b.action === "bid" && <>bid <strong>{b.amount}</strong> on {b.player_name}</>}
-                  {b.action === "drop" && <>👎🏾 dropped {b.player_name}</>}
+                  {b.action === "drop" && <>passed on {b.player_name}</>}
                   {b.action === "leftover_free" && <>got {b.player_name} free (the other half was full)</>}
                   {b.action === "free_pick" && <>free-picked {b.player_name} (opponent's purse drained)</>}
-                  {b.action === "timeout_drop" && <>⏱️ {b.player_name} — no bid or drop within {auction.release_timeout_seconds || 30}s, moved to the back of the category</>}
-                  <span className="text-gray-400 text-xs ml-2">{b.created_at}</span>
+                  {b.action === "timeout_drop" && <>{b.player_name} — no bid or drop within {auction.release_timeout_seconds || 30}s, moved to the back of the category</>}
+                  <span className="text-brand-muted text-xs ml-2">{b.created_at}</span>
                 </div>
               ))}
             </div>
@@ -500,7 +528,7 @@ export default function Auction() {
         {panel !== "feed" && auction.status === "completed" && <ReleaseOrderLog auctionId={id} />}
 
         {auction.status === "active" && auction.current_player && (
-          <div className="sticky bottom-[calc(64px+env(safe-area-inset-bottom,0px))] lg:bottom-4 z-30 bg-white rounded-2xl shadow-soft-lg border border-gray-200 p-3">
+          <div className="sticky bottom-[calc(66px+env(safe-area-inset-bottom,0px))] lg:bottom-4 z-30 bg-white rounded-3xl shadow-soft-lg ring-1 ring-brand-line p-3.5">
                 {canBid ? (
                   <div className="space-y-2.5">
                     {/* Points in plain words: every player starts at the base price for
@@ -508,10 +536,10 @@ export default function Auction() {
                     {myRemaining != null && (
                       <div>
                         <div className="flex items-baseline justify-between text-sm">
-                          <span className="font-bold text-gray-900">{myRemaining} of {auction.points_budget} points left</span>
-                          <span className="text-gray-500">this bid uses {Math.max(0, (parseFloat(amount) || 0) - auction.starting_price).toFixed(1)}</span>
+                          <span className="text-brand-muted"><span className="font-display font-extrabold text-2xl text-brand-navy">{myRemaining}</span> of {auction.points_budget} points left</span>
+                          <span className="text-brand-muted">this bid uses {Math.max(0, (parseFloat(amount) || 0) - auction.starting_price).toFixed(1)}</span>
                         </div>
-                        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden mt-1">
+                        <div className="h-2.5 rounded-full bg-brand-ground overflow-hidden mt-1">
                           <div className="h-full rounded-full bg-brand-gold" style={{ width: `${Math.max(0, Math.min(100, (myRemaining / auction.points_budget) * 100))}%` }} />
                         </div>
                       </div>
@@ -521,7 +549,7 @@ export default function Auction() {
                     <div className="grid grid-cols-4 gap-2">
                       {[[-0.5, "−0.5"], [0.5, "+0.5"], [1, "+1"], [2, "+2"]].map(([d, label]) => (
                         <button key={label} type="button" onClick={() => stepAmount(d)}
-                          className="min-h-[48px] rounded-xl border-2 border-gray-200 bg-white text-base font-black text-brand-navy active:bg-gray-100"
+                          className="min-h-[48px] rounded-xl bg-brand-ground font-display text-xl font-extrabold text-brand-navy active:bg-brand-line"
                           aria-label={d < 0 ? "Lower the bid by 0.5" : `Raise the bid by ${d}`}>
                           {label}
                         </button>
@@ -529,17 +557,17 @@ export default function Auction() {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        className="flex-[2] min-h-[56px] rounded-2xl bg-pitch-700 text-white text-xl font-black disabled:opacity-50"
+                        className="flex-[2] min-h-[58px] rounded-2xl bg-brand-gold text-brand-navy text-xl font-extrabold disabled:opacity-50 active:scale-[0.98] transition-transform"
                         disabled={bidding || !amount}
                         onClick={() => placeBid(parseFloat(amount))}
                       >
                         {bidding ? "Bidding…" : `Bid ${parseFloat(amount || 0).toFixed(1)}`}
                       </button>
                       {iAmCurrentLeader ? (
-                        <span className="flex-1 text-xs text-pitch-700 font-bold flex items-center">You're winning — you can't pass while you lead.</span>
+                        <span className="flex-1 text-sm text-pitch-700 font-bold flex items-center gap-1"><Check size={16} strokeWidth={3} className="shrink-0" /> You're winning — you can't pass while you lead.</span>
                       ) : (
                         <button
-                          className="flex-1 min-h-[56px] rounded-2xl border-2 border-red-200 text-red-700 bg-white text-lg font-black flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          className="flex-1 min-h-[58px] rounded-2xl border-2 border-brand-navy text-brand-navy bg-white text-lg font-extrabold flex items-center justify-center gap-1.5 disabled:opacity-50"
                           disabled={dropping}
                           onClick={dropCurrentPlayer}
                         >
@@ -549,7 +577,7 @@ export default function Auction() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">
+                  <p className="text-sm text-brand-muted">
                     {isParticipant ? "Waiting…" : "Only the two assigned captains can bid."}
                   </p>
                 )}

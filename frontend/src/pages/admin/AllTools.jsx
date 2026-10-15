@@ -59,14 +59,14 @@ export default function AllTools() {
             <Link key={to} to={to} className="flex items-center gap-3 bg-white rounded-2xl shadow-soft px-4 min-h-[76px] py-3 hover:bg-gray-50">
               <span className="w-11 h-11 shrink-0 rounded-2xl bg-brand-navy text-white grid place-items-center"><Icon size={20} /></span>
               <span className="flex-1 min-w-0">
-                <span className="block font-black text-gray-900">{title}</span>
-                <span className="block text-sm text-gray-600">{text}</span>
+                <span className="block font-black text-brand-ink">{title}</span>
+                <span className="block text-sm text-brand-muted">{text}</span>
               </span>
-              <ChevronRight size={18} className="text-gray-400" />
+              <ChevronRight size={18} className="text-brand-muted" />
             </Link>
           ))}
         </div>
-        <h2 className="text-xs font-black uppercase tracking-wider text-gray-500 mt-6 mb-2">Download</h2>
+        <h2 className="text-xs font-black uppercase tracking-wider text-brand-muted mt-6 mb-2">Download</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {EXPORTS.map(([endpoint, prefix, ext, label]) => (
             <button key={label} type="button" onClick={() => download(endpoint, prefix, ext)}

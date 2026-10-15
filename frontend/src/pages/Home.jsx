@@ -36,25 +36,27 @@ export default function Home() {
     <div className="min-h-screen bg-brand-ground">
       <Navbar />
       <div className="bg-brand-navy text-white">
-        <div className="max-w-3xl mx-auto px-4 pt-3 pb-5">
-          <h1 className="text-2xl font-black">Hi {firstName} 👋</h1>
-          <p className="text-sm text-white/60">
+        <div className="max-w-3xl mx-auto px-4 pt-4 pb-9">
+          <h1 className="text-[26px] font-extrabold leading-tight">Hi {firstName}</h1>
+          <p className="text-sm text-white/80 mt-0.5">
             {isCaptain ? `Captain${user?.team_name ? ` · ${user.team_name}` : ""}` : "Player"}
             {" · "}{openCount ? `${openCount} match${openCount > 1 ? "es" : ""} open for voting` : "no voting open right now"}
           </p>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 -mt-3 pb-8 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 -mt-5 pb-8 space-y-3.5">
         {liveAuctionId && (
           <Link to={`/auction/${liveAuctionId}`}
-            className="block rounded-2xl p-4 text-white bg-gradient-to-r from-red-700 to-red-600 shadow-soft-lg">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-black bg-white/20 rounded-full px-2 py-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
+            className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 text-white bg-[#c8102e] shadow-soft-lg">
+            <span className="flex flex-col gap-1">
+              <span className="inline-flex items-center gap-1.5 text-xs font-extrabold tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> LIVE NOW
+              </span>
+              <span className="text-[17px] font-extrabold leading-tight">The auction is live</span>
             </span>
-            <span className="flex items-center justify-between mt-1.5">
-              <span className="text-lg font-black">The auction is live</span>
-              <span className="inline-flex items-center gap-1 bg-brand-gold text-brand-navy font-black text-sm rounded-xl px-3 py-2">
+            <span className="flex items-center">
+              <span className="inline-flex items-center gap-1 bg-brand-gold text-brand-navy font-extrabold text-[15px] rounded-xl px-3.5 py-3 whitespace-nowrap">
                 <Gavel size={15} /> Join <ChevronRight size={15} />
               </span>
             </span>
@@ -80,10 +82,10 @@ export default function Home() {
 function Stat({ value, label, to }) {
   const body = (
     <>
-      <span className="block text-2xl font-black text-brand-navy tabular-nums">{value}</span>
-      <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-500">{label}</span>
+      <span className="block font-display font-extrabold text-[30px] leading-none text-brand-navy tabular-nums">{value}</span>
+      <span className="block text-xs font-bold text-brand-muted mt-1">{label}</span>
     </>
   );
-  const cls = "bg-white rounded-2xl shadow-soft py-3 text-center block";
+  const cls = "bg-white rounded-2xl shadow-soft py-3 px-2 text-center block";
   return to ? <Link to={to} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }

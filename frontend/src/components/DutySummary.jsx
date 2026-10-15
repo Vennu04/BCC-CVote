@@ -37,9 +37,9 @@ export default function DutySummary({ variant = "dark" }) {
       <div className="card flex items-start gap-3 border-l-4 border-l-pitch-500">
         <CalendarClock size={20} className="text-pitch-600 mt-0.5 shrink-0" />
         <div className="text-sm">
-          <p className="font-semibold text-gray-900">Tonight&apos;s auction duty — {evening.match_label}</p>
+          <p className="font-semibold text-brand-ink">Tonight&apos;s auction duty — {evening.match_label}</p>
           <p className="text-gray-700">{who}</p>
-          <p className="text-xs text-gray-500 mt-1">Voting stays open until kick-off by default — press <b>Close Early</b> on the Window page before you create the auction.</p>
+          <p className="text-xs text-brand-muted mt-1">Voting stays open until kick-off by default — press <b>Close Early</b> on the Window page before you create the auction.</p>
         </div>
       </div>
     );
@@ -50,9 +50,9 @@ export default function DutySummary({ variant = "dark" }) {
       <div className="flex items-start gap-3">
         <CalendarClock size={20} className="text-amber-600 mt-0.5 shrink-0" />
         <div>
-          <p className="text-[11px] font-bold tracking-wider text-gray-500 uppercase">Next auction duty · {shortDay(evening.auction_date)}</p>
-          <p className="text-sm font-bold text-gray-900">{evening.match_label}</p>
-          <p className="text-xs text-gray-600">{who}</p>
+          <p className="text-[11px] font-bold tracking-wider text-brand-muted uppercase">Next auction duty · {shortDay(evening.auction_date)}</p>
+          <p className="text-sm font-bold text-brand-ink">{evening.match_label}</p>
+          <p className="text-xs text-brand-muted">{who}</p>
         </div>
       </div>
       <span className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${coverage.className}`}>{coverage.label}</span>

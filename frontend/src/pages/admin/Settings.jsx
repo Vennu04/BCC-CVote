@@ -39,7 +39,7 @@ export default function Settings() {
       <ManageHeader hub="tools" subtitle="Auction rules. Changes apply to the next auction — a running one isn't affected." />
       <div className="max-w-xl mx-auto px-4 py-4">
         <div className="bg-white rounded-2xl shadow-soft p-4">
-          <h2 className="font-black text-gray-900 mb-3 flex items-center gap-2"><SlidersHorizontal size={18} /> Auction rules</h2>
+          <h2 className="font-black text-brand-ink mb-3 flex items-center gap-2"><SlidersHorizontal size={18} /> Auction rules</h2>
           {!data ? <LoadingState /> : (
             <>
               <div className="space-y-3">
@@ -51,13 +51,13 @@ export default function Settings() {
                         value={form[f.key] ?? ""} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
                       {String(form[f.key]) !== String(f.default) && (
                         <button type="button" onClick={() => setForm({ ...form, [f.key]: f.default })}
-                          className="text-xs font-bold text-gray-500 whitespace-nowrap min-h-[44px] px-2">Reset to {f.default}</button>
+                          className="text-xs font-bold text-brand-muted whitespace-nowrap min-h-[44px] px-2">Reset to {f.default}</button>
                       )}
                     </span>
                   </label>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-3">The five player groups and the release order stay as they are.</p>
+              <p className="text-xs text-brand-muted mt-3">The five player groups and the release order stay as they are.</p>
               <button type="button" onClick={save} disabled={saving || Object.keys(changed).length === 0}
                 className="btn-primary w-full mt-4 min-h-[48px] disabled:opacity-45">
                 {saving ? "Saving…" : Object.keys(changed).length ? `Save ${Object.keys(changed).length} change${Object.keys(changed).length > 1 ? "s" : ""}` : "No changes"}

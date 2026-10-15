@@ -53,12 +53,12 @@ export default function AuctionChat({ chatFeed, currentUserId, onSend, sending }
 
   return (
     <div className="card">
-      <h3 className="font-bold text-gray-900 mb-3 text-sm flex items-center gap-2">
+      <h3 className="font-bold text-brand-ink mb-3 text-sm flex items-center gap-2">
         <MessageCircle size={16} className="text-pitch-600" /> Auction Chat
       </h3>
       <div ref={scrollRef} className="space-y-2 max-h-64 overflow-y-auto mb-3">
         {feed.length === 0 && (
-          <p className="text-xs text-gray-400">No messages yet — ask here if anything's unclear.</p>
+          <p className="text-xs text-brand-muted">No messages yet — ask here if anything's unclear.</p>
         )}
         {feed.map((m, i) => {
           const isMe = m.sender_id === currentUserId;
@@ -80,7 +80,7 @@ export default function AuctionChat({ chatFeed, currentUserId, onSend, sending }
                   </p>
                 )}
                 <p className="whitespace-pre-wrap break-words">{m.message}</p>
-                <p className={`text-[10px] mt-0.5 ${isMe ? "text-white/70" : "text-gray-400"}`}>{m.created_at}</p>
+                <p className={`text-[10px] mt-0.5 ${isMe ? "text-white/70" : "text-brand-muted"}`}>{m.created_at}</p>
               </div>
             </div>
           );

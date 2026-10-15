@@ -22,13 +22,13 @@ export default function DateRequestsCard({ admin = false }) {
   let title;
   let text;
   if (needMe.length) {
-    title = `📅 ${needMe.length} match date${needMe.length > 1 ? "s" : ""} need your answer`;
+    title = `${needMe.length} match date${needMe.length > 1 ? "s" : ""} need your answer`;
     text = needMe.map((p) => p.label).join(" · ");
   } else if (admin && open) {
-    title = `📅 ${open} date request${open > 1 ? "s" : ""} waiting for captains`;
+    title = `${open} date request${open > 1 ? "s" : ""} waiting for captains`;
     text = "See who has answered, or fix a date yourself";
   } else if (!admin && canSuggest) {
-    title = "📅 Fix your match date";
+    title = "Fix your match date";
     text = "Suggest up to 3 dates — once both captains agree, the match is set";
   } else {
     return null;
@@ -37,10 +37,10 @@ export default function DateRequestsCard({ admin = false }) {
     <Link to="/schedule" className="flex items-center gap-3 bg-white rounded-2xl shadow-soft px-4 py-3 min-h-[64px] ring-2 ring-brand-gold">
       <CalendarCheck size={22} className="text-brand-navy shrink-0" />
       <span className="flex-1 min-w-0">
-        <span className="block font-black text-gray-900">{title}</span>
-        <span className="block text-sm text-gray-600 truncate">{text}</span>
+        <span className="block font-black text-brand-ink">{title}</span>
+        <span className="block text-sm text-brand-muted truncate">{text}</span>
       </span>
-      <ChevronRight size={20} className="text-gray-400 shrink-0" />
+      <ChevronRight size={20} className="text-brand-muted shrink-0" />
     </Link>
   );
 }

@@ -19,10 +19,10 @@ export default function CountdownBadge({ endsAtIso }) {
   const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
   const ss = String(totalSec % 60).padStart(2, "0");
   return (
-    <span className={`text-xs font-semibold rounded-full px-3 py-1 flex items-center gap-1 ${
-      expired ? "bg-gray-100 text-gray-600" : "bg-amber-100 text-amber-700"
+    <span className={`rounded-xl px-3 py-1.5 flex items-center gap-1.5 font-display font-extrabold text-xl leading-none tabular-nums ${
+      expired ? "bg-white/15 text-white" : remainingMs < 5 * 60 * 1000 ? "bg-[#c8102e] text-white" : "bg-white text-brand-navy"
     }`}>
-      <Clock size={12} />
+      <Clock size={16} strokeWidth={2.4} aria-hidden="true" />
       {expired ? "Time's up" : `${mm}:${ss} left`}
     </span>
   );

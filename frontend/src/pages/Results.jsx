@@ -31,11 +31,11 @@ function AttendanceList({ attendance }) {
     <div className="mt-2 space-y-2">
       {groups.map((g) => (
         <div key={g.status} className="text-xs">
-          <span className="flex items-center gap-1 font-medium text-gray-600 mb-1">
+          <span className="flex items-center gap-1 font-medium text-brand-muted mb-1">
             <span className={`w-2 h-2 rounded-full inline-block ${AVAILABILITY_COLOR[g.status]}`} />
             {AVAILABILITY_LABEL[g.status]} ({g.names.length})
           </span>
-          <p className="text-gray-500 pl-3">{g.names.join(", ")}</p>
+          <p className="text-brand-muted pl-3">{g.names.join(", ")}</p>
         </div>
       ))}
     </div>
@@ -74,7 +74,7 @@ export function WhosInView() {
       <div className="bg-white rounded-2xl shadow-soft text-center py-10 px-4">
         <AlertTriangle className="mx-auto text-amber-500 mb-3" size={36} />
         <p className="text-gray-800 font-semibold">Couldn't load results</p>
-        <p className="text-gray-500 text-sm mt-1 mb-4">Check your connection and try again</p>
+        <p className="text-brand-muted text-sm mt-1 mb-4">Check your connection and try again</p>
         <button onClick={fetchResults} className="btn-secondary inline-flex items-center gap-1.5">
           <RefreshCw size={14} /> Retry
         </button>
@@ -86,10 +86,10 @@ export function WhosInView() {
 
   return (
     <div>
-        <p className="text-xs text-gray-500 mb-3">Who can play in each match. Each match has its own voting window.</p>
+        <p className="text-xs text-brand-muted mb-3">Who can play in each match. Each match has its own voting window.</p>
         {summary.length === 0 ? (
           <div className="card text-center py-12">
-            <p className="text-gray-500">No results yet. Voting hasn't started.</p>
+            <p className="text-brand-muted">No results yet. Voting hasn't started.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -100,20 +100,20 @@ export function WhosInView() {
               return (
                 <div key={slot.id} className="bg-white rounded-2xl shadow-soft p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-brand-muted">
                       {slot.group ? `Group ${slot.group} · ` : ""}{slot.day}{slot.resolved_match_date ? ` · ${formatDateDisplay(slot.resolved_match_date)}` : ""} · {slot.match_time || slot.time_of_day}
                     </span>
-                    <span className="text-[11px] font-bold bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5 shrink-0">
+                    <span className="text-[11px] font-bold bg-gray-100 text-brand-muted rounded-full px-2.5 py-0.5 shrink-0">
                       {total_voted}/{total_captains} voted
                     </span>
                   </div>
                   {slot.team_a_name && slot.team_b_name
                     ? <TeamsVs a={slot.team_a_name} b={slot.team_b_name} />
-                    : <p className="font-extrabold text-gray-900 my-2">{slot.description || `${slot.time_of_day} Match`}</p>}
+                    : <p className="font-extrabold text-brand-ink my-2">{slot.description || `${slot.time_of_day} Match`}</p>}
 
                   {window && (
-                    <p className={`text-xs mb-3 ${window.is_open ? "text-green-600" : window.not_yet_open ? "text-sky-700" : "text-gray-400"}`}>
-                      {window.is_open ? `🟢 Open — closes ${window.closes_at}` : window.not_yet_open ? `🕒 Voting opens ${window.opens_at}` : window.closes_at ? `🔴 Closed — was ${window.opens_at} to ${window.closes_at}` : "No window set"}
+                    <p className={`text-xs mb-3 ${window.is_open ? "text-green-600" : window.not_yet_open ? "text-sky-700" : "text-brand-muted"}`}>
+                      {window.is_open ? `Open — closes ${window.closes_at}` : window.not_yet_open ? `Voting opens ${window.opens_at}` : window.closes_at ? `Closed — was ${window.opens_at} to ${window.closes_at}` : "No window set"}
                     </p>
                   )}
 
@@ -154,7 +154,7 @@ export function WhosInView() {
                       </div>
                     )
                   ) : window ? (
-                    <p className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400 flex items-center gap-1">
+                    <p className="mt-3 pt-3 border-t border-gray-100 text-xs text-brand-muted flex items-center gap-1">
                       <Lock size={12} /> Vote for this match to see who else is available
                     </p>
                   ) : null}

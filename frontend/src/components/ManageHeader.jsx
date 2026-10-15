@@ -18,7 +18,7 @@ export default function ManageHeader({ hub, sub, subtitle, actions, title }) {
         {top.map((h) => (
           <Link key={h.key} to={h.to} aria-current={h.key === topActive ? "page" : undefined}
             className={`shrink-0 rounded-full px-4 min-h-[36px] inline-flex items-center text-sm font-bold ${
-              h.key === topActive ? "bg-brand-gold text-brand-navy" : "bg-white/10 text-white/80"}`}>
+              h.key === topActive ? "bg-brand-gold text-brand-navy" : "bg-brand-navy-light text-white"}`}>
             {h.label}
           </Link>
         ))}

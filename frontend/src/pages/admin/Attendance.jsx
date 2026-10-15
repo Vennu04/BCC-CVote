@@ -247,9 +247,9 @@ export default function Attendance() {
         <div className="card mb-6">
           <div className="flex items-center gap-2 mb-1">
             <UserCheck size={16} className="text-pitch-600" />
-            <h2 className="font-bold text-gray-900 text-sm">Suggest Attendance from Votes</h2>
+            <h2 className="font-bold text-brand-ink text-sm">Suggest Attendance from Votes</h2>
           </div>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-brand-muted mb-3">
             Credit everyone who voted "Available" for a match — pick which one, review who's included, then apply.
           </p>
           <div className="flex flex-wrap items-end gap-3">
@@ -277,13 +277,13 @@ export default function Attendance() {
             )}
           </div>
 
-          {suggestSlotId && loadingSuggest && <p className="text-xs text-gray-400 mt-3">Loading…</p>}
+          {suggestSlotId && loadingSuggest && <p className="text-xs text-brand-muted mt-3">Loading…</p>}
 
           {suggestSlotId && !loadingSuggest && suggestData && (
             !suggestData.window ? (
-              <p className="text-xs text-gray-400 mt-3">No voting window has ever been set for this match yet.</p>
+              <p className="text-xs text-brand-muted mt-3">No voting window has ever been set for this match yet.</p>
             ) : suggestData.candidates.length === 0 ? (
-              <p className="text-xs text-gray-400 mt-3">Nobody voted "Available" for this match.</p>
+              <p className="text-xs text-brand-muted mt-3">Nobody voted "Available" for this match.</p>
             ) : (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {suggestData.candidates.map(c => (
@@ -291,7 +291,7 @@ export default function Attendance() {
                     key={c.id}
                     title={c.already_credited ? "Already credited for this match" : "Will be credited"}
                     className={`text-xs font-medium rounded-full px-2.5 py-1 ${
-                      c.already_credited ? "bg-gray-100 text-gray-400 line-through" : "bg-pitch-50 text-pitch-700"
+                      c.already_credited ? "bg-gray-100 text-brand-muted line-through" : "bg-pitch-50 text-pitch-700"
                     }`}
                   >
                     {c.name}
@@ -305,7 +305,7 @@ export default function Attendance() {
         {/* Search */}
         {!loading && rows.length > 0 && (
           <div className="relative mb-4 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-muted" />
             <input
               type="text"
               className="input-field pl-9"
@@ -323,7 +323,7 @@ export default function Attendance() {
             {/* Desktop / tablet: table */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-gradient-to-r from-cricket-navy to-cricket-navy-light text-white">
+                <thead className="bg-brand-navy text-white">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Rank</th>
                     <th className="text-left px-4 py-3 font-semibold whitespace-nowrap">Code</th>
@@ -340,16 +340,16 @@ export default function Attendance() {
                     const withinCutoff = r.rank <= settings.knockout_cutoff;
                     return (
                       <tr key={r.id} className={`border-b last:border-0 ${withinCutoff ? "bg-green-50/60" : i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/30 transition-colors`}>
-                        <td className="px-4 py-3 text-gray-400 font-mono">{r.rank}</td>
+                        <td className="px-4 py-3 text-brand-muted font-mono">{r.rank}</td>
                         <td className="px-4 py-3">
                           <span className="bg-cricket-navy text-white text-xs font-bold px-2.5 py-1 rounded">
                             {r.team_code}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
-                        <td className="px-4 py-3 text-gray-700">{r.matches_present ?? <span className="text-gray-400 italic">—</span>}</td>
-                        <td className="px-4 py-3 text-gray-700">{r.total_matches ?? <span className="text-gray-400 italic">—</span>}</td>
-                        <td className="px-4 py-3 font-medium text-gray-700">{r.attendance_percentage != null ? `${r.attendance_percentage}%` : <span className="text-gray-400 italic">—</span>}</td>
+                        <td className="px-4 py-3 font-medium text-brand-ink">{r.name}</td>
+                        <td className="px-4 py-3 text-gray-700">{r.matches_present ?? <span className="text-brand-muted italic">—</span>}</td>
+                        <td className="px-4 py-3 text-gray-700">{r.total_matches ?? <span className="text-brand-muted italic">—</span>}</td>
+                        <td className="px-4 py-3 font-medium text-gray-700">{r.attendance_percentage != null ? `${r.attendance_percentage}%` : <span className="text-brand-muted italic">—</span>}</td>
                         <td className="px-4 py-3">
                           <input
                             type="checkbox"
@@ -389,30 +389,30 @@ export default function Attendance() {
                       className="w-full flex items-center justify-between gap-2 text-left"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-gray-400 font-mono text-xs w-5 shrink-0">{r.rank}</span>
+                        <span className="text-brand-muted font-mono text-xs w-5 shrink-0">{r.rank}</span>
                         <span className="bg-cricket-navy text-white text-xs font-bold px-2 py-1 rounded shrink-0">{r.team_code}</span>
-                        <span className="font-medium text-gray-900 truncate">{r.name}</span>
+                        <span className="font-medium text-brand-ink truncate">{r.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs font-semibold text-gray-700">
                           {r.attendance_percentage != null ? `${r.attendance_percentage}%` : "—"}
                         </span>
-                        {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                        {isExpanded ? <ChevronUp size={16} className="text-brand-muted" /> : <ChevronDown size={16} className="text-brand-muted" />}
                       </div>
                     </button>
 
                     {isExpanded && (
                       <div className="mt-3 pl-1 space-y-3 text-sm">
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-500">Matches Present</span>
+                          <span className="text-brand-muted">Matches Present</span>
                           <span className="text-gray-700">{r.matches_present ?? "—"}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-500">Total Matches</span>
+                          <span className="text-brand-muted">Total Matches</span>
                           <span className="text-gray-700">{r.total_matches ?? "—"}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-500">Knockout Eligible</span>
+                          <span className="text-brand-muted">Knockout Eligible</span>
                           <input
                             type="checkbox"
                             className="h-4 w-4 cursor-pointer"

@@ -1,14 +1,8 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 import { ChevronDown, ChevronUp, ListOrdered } from "lucide-react";
+import { CATEGORY_LABELS as GROUP_LABELS } from "../utils/categories";
 
-const GROUP_LABELS = {
-  extra_power_allrounder: "Extra Power — All-Rounders",
-  extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power — All-Rounders",
-  power_batsman: "Power — Batsmen",
-  classic: "Classic",
-};
 
 // Same cadence as useAuction's bidding poll, but only while expanded -- a
 // captain who leaves this open sees new releases land without collapsing
@@ -53,22 +47,22 @@ export default function ReleaseOrderLog({ auctionId }) {
       >
         <div className="flex items-center gap-2">
           <ListOrdered size={16} className="text-cricket-navy" />
-          <h3 className="font-bold text-gray-900 text-sm">Release Order Log</h3>
-          <span className="text-xs text-gray-400">(auditable, view-only)</span>
+          <h3 className="font-bold text-brand-ink text-sm">Release Order Log</h3>
+          <span className="text-xs text-brand-muted">(auditable, view-only)</span>
         </div>
-        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        {open ? <ChevronUp size={16} className="text-brand-muted" /> : <ChevronDown size={16} className="text-brand-muted" />}
       </button>
 
       {open && (
         <div className="mt-3 max-h-80 overflow-y-auto">
           {loading && entries.length === 0 ? (
-            <p className="text-xs text-gray-400">Loading…</p>
+            <p className="text-xs text-brand-muted">Loading…</p>
           ) : entries.length === 0 ? (
-            <p className="text-xs text-gray-400">No players released yet.</p>
+            <p className="text-xs text-brand-muted">No players released yet.</p>
           ) : (
             <table className="min-w-full text-xs">
               <thead>
-                <tr className="text-gray-400 text-left">
+                <tr className="text-brand-muted text-left">
                   <th className="font-medium pb-1 pr-3">#</th>
                   <th className="font-medium pb-1 pr-3">Player</th>
                   <th className="font-medium pb-1 pr-3">Category</th>
@@ -78,10 +72,10 @@ export default function ReleaseOrderLog({ auctionId }) {
               <tbody>
                 {entries.map((e) => (
                   <tr key={e.order_index} className="border-t border-gray-100">
-                    <td className="py-1.5 pr-3 text-gray-400 font-mono">{e.order_index}</td>
+                    <td className="py-1.5 pr-3 text-brand-muted font-mono">{e.order_index}</td>
                     <td className="py-1.5 pr-3 text-gray-800 font-medium">{e.player_name}</td>
-                    <td className="py-1.5 pr-3 text-gray-500">{GROUP_LABELS[e.category] || e.category}</td>
-                    <td className="py-1.5 text-gray-400">{e.released_at}</td>
+                    <td className="py-1.5 pr-3 text-brand-muted">{GROUP_LABELS[e.category] || e.category}</td>
+                    <td className="py-1.5 text-brand-muted">{e.released_at}</td>
                   </tr>
                 ))}
               </tbody>

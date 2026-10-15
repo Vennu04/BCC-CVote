@@ -44,7 +44,7 @@ export default function ThisWeek() {
   const doneCount = steps.filter((s) => s.done).length;
 
   const openStep = (step) => {
-    if (step.state === "locked") return toast(step.lock, { icon: "🔒" });
+    if (step.state === "locked") return toast(step.lock);
     navigate(`/manage/step/${step.key}?slot=${selected.slot_id}`);
   };
 
@@ -69,16 +69,15 @@ export default function ThisWeek() {
         <DateRequestsCard admin />
         {error && !overview ? (
           <div className="bg-white rounded-2xl shadow-soft p-6 text-center">
-            <p className="font-bold text-gray-900">Couldn't load this week</p>
+            <p className="font-bold text-brand-ink">Couldn't load this week</p>
             <button onClick={load} className="btn-secondary mt-3">Try again</button>
           </div>
         ) : !overview ? (
           <LoadingState />
         ) : matches.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-soft p-6 text-center">
-            <div className="text-5xl mb-2">🏏</div>
-            <p className="text-lg font-black text-gray-900">No matches coming up</p>
-            <p className="text-sm text-gray-600 mt-1">Start by giving a fixture a date and time.</p>
+            <p className="text-lg font-black text-brand-ink">No matches coming up</p>
+            <p className="text-sm text-brand-muted mt-1">Start by giving a fixture a date and time.</p>
             <Link to="/manage/step/setup" className="btn-primary inline-flex items-center gap-2 mt-4"><Plus size={18} /> Set up a match</Link>
           </div>
         ) : (
@@ -92,7 +91,7 @@ export default function ThisWeek() {
                     <button key={m.slot_id} type="button" aria-pressed={on} onClick={() => setParams({ slot: m.slot_id })}
                       className={`shrink-0 rounded-2xl px-4 min-h-[48px] text-left text-sm font-bold shadow-soft ${on ? "bg-brand-navy text-white" : "bg-white text-gray-700"}`}>
                       <span className="block leading-tight">{m.label}</span>
-                      <span className={`block text-xs font-semibold ${on ? "text-white/60" : "text-gray-500"}`}>
+                      <span className={`block text-xs font-semibold ${on ? "text-white/60" : "text-brand-muted"}`}>
                         {shortDay(m.match_date)} · {left ? `${left} to do` : "all done ✓"}
                       </span>
                     </button>
@@ -104,7 +103,7 @@ export default function ThisWeek() {
             <div className="bg-white rounded-2xl shadow-soft px-4 py-3">
               <div className="flex items-center justify-between text-sm font-bold text-gray-700">
                 <span>{doneCount} of {STEP_KEYS.length} done</span>
-                {doneCount === STEP_KEYS.length && <span className="text-pitch-700">All done for this match 🎉</span>}
+                {doneCount === STEP_KEYS.length && <span className="text-pitch-700">All done for this match</span>}
               </div>
               <div className="flex gap-1 mt-2" aria-hidden="true">
                 {steps.map((s) => (
@@ -119,16 +118,16 @@ export default function ThisWeek() {
                   <button type="button" onClick={() => openStep(s)} aria-disabled={s.state === "locked"}
                     className={`w-full flex items-center gap-3 text-left bg-white rounded-2xl shadow-soft px-4 min-h-[68px] py-3 transition-transform duration-150 active:scale-[0.99] ${
                       s.state === "now" ? "ring-[3px] ring-brand-gold" : ""} ${s.state === "locked" ? "opacity-60" : ""}`}>
-                    <span className={`w-10 h-10 shrink-0 rounded-full grid place-items-center text-base font-black ${
-                      s.state === "done" ? "bg-pitch-600 text-white" : s.state === "now" ? "bg-brand-gold text-brand-navy" : "bg-gray-100 text-gray-500"}`}>
+                    <span className={`w-10 h-10 shrink-0 rounded-full grid place-items-center font-display text-xl font-extrabold ${
+                      s.state === "done" ? "bg-pitch-600 text-white" : s.state === "now" ? "bg-brand-gold text-brand-navy" : "bg-gray-100 text-brand-muted"}`}>
                       {s.state === "done" ? <Check size={20} strokeWidth={3} /> : s.state === "locked" ? <Lock size={16} /> : s.n}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block font-black text-gray-900 text-base leading-tight">{s.title}</span>
-                      <span className="block text-sm text-gray-600">{s.state === "locked" ? s.lock : s.detail}</span>
+                      <span className="block font-black text-brand-ink text-base leading-tight">{s.title}</span>
+                      <span className="block text-sm text-brand-muted">{s.state === "locked" ? s.lock : s.detail}</span>
                     </span>
                     {s.state === "now" && <span className="text-xs font-black bg-brand-gold text-brand-navy rounded-full px-2.5 py-1">Next</span>}
-                    <ChevronRight size={20} className="text-gray-400 shrink-0" />
+                    <ChevronRight size={20} className="text-brand-muted shrink-0" />
                   </button>
                 </li>
               ))}
@@ -139,10 +138,10 @@ export default function ThisWeek() {
         <Link to="/manage/tools" className="flex items-center gap-3 bg-white rounded-2xl shadow-soft px-4 min-h-[64px]">
           <span className="w-10 h-10 rounded-full bg-brand-navy text-white grid place-items-center"><Wrench size={18} /></span>
           <span className="flex-1">
-            <span className="block font-black text-gray-900">All tools</span>
-            <span className="block text-sm text-gray-600">Fixtures, people, practice, votes table, exports and more</span>
+            <span className="block font-black text-brand-ink">All tools</span>
+            <span className="block text-sm text-brand-muted">Fixtures, people, practice, votes table, exports and more</span>
           </span>
-          <ChevronRight size={20} className="text-gray-400" />
+          <ChevronRight size={20} className="text-brand-muted" />
         </Link>
       </div>
     </div>

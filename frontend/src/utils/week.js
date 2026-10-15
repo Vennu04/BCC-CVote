@@ -1,3 +1,4 @@
+import { CATEGORIES } from "./categories";
 // "This week" checklist — the 7 guided steps an admin walks through for one
 // match, worked out from /admin/overview plus two things only this browser
 // knows (who sits out of an odd category, and whether the teams were already
@@ -15,14 +16,7 @@ export const STEP_TITLES = {
   share: "Share the teams",
 };
 
-const GROUP_NAMES = {
-  extra_power_allrounder: "EP All-rounders",
-  extra_power_batsman: "EP Batsmen",
-  power: "Power All-rounders",
-  power_batsman: "Power Batters",
-  classic: "Classic",
-};
-export const groupName = (g) => GROUP_NAMES[g] || g;
+export const groupName = (g) => CATEGORIES[g]?.name || g;
 
 // Per-browser memory, keyed by match.
 const sitOutKey = (slotId) => `bcc_sitouts_${slotId}`;

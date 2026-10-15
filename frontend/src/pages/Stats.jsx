@@ -47,14 +47,14 @@ export default function Stats() {
           <LoadingState />
         ) : active === "knockout" ? (
           <div className="bg-white rounded-2xl shadow-soft p-4">
-            <h2 className="font-black text-gray-900 mb-1">Eligible for knockout matches</h2>
+            <h2 className="font-black text-brand-ink mb-1">Eligible for knockout matches</h2>
             {eligible.length === 0 ? (
-              <p className="text-sm text-gray-500">The knockout list hasn't been published yet.</p>
+              <p className="text-sm text-brand-muted">The knockout list hasn't been published yet.</p>
             ) : (
               <ol className="divide-y divide-gray-100">
                 {eligible.map((e, i) => (
                   <li key={e.name} className={`flex items-center gap-3 py-2 ${e.is_me ? "font-bold" : ""}`}>
-                    <span className="w-6 text-right text-sm font-black text-gray-400 tabular-nums">{i + 1}</span>
+                    <span className="w-6 text-right text-sm font-black text-brand-muted tabular-nums">{i + 1}</span>
                     <span className="flex-1">{e.name}{e.is_me ? " (you)" : ""}</span>
                     <span className="text-sm tabular-nums">{pct(e)}</span>
                   </li>
@@ -66,36 +66,36 @@ export default function Stats() {
           <>
             {me && (
               <div className="rounded-2xl p-4 bg-brand-navy text-white shadow-soft">
-                <p className="text-xs text-white/60">Your rank</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-white/80">Your rank</p>
                 <div className="flex items-end justify-between gap-2">
-                  <span className="text-3xl font-black tabular-nums">#{meIndex + 1} <span className="text-base font-bold text-white/60">of {board.length}</span></span>
+                  <span className="font-display font-extrabold text-5xl leading-none tabular-nums">#{meIndex + 1} <span className="font-sans text-base font-bold text-white/80">of {board.length}</span></span>
                   {me.knockout_eligible && <span className="text-[11px] font-bold bg-pitch-100 text-pitch-800 rounded-full px-2.5 py-1">Knockout eligible</span>}
                 </div>
                 <div className="h-2 rounded-full bg-white/15 mt-2 overflow-hidden">
                   <div className="h-full bg-brand-gold rounded-full" style={{ width: `${Math.min(100, me.attendance_percentage || 0)}%` }} />
                 </div>
-                <p className="text-xs text-white/60 mt-1.5">{me.matches_present} of {me.total_matches} matches · {pct(me)}</p>
+                <p className="text-xs text-white/80 mt-1.5">{me.matches_present} of {me.total_matches} matches · {pct(me)}</p>
               </div>
             )}
             <div className="bg-white rounded-2xl shadow-soft px-4 py-2">
-              <div className="flex text-[11px] font-bold uppercase tracking-wider text-gray-400 py-2 border-b border-gray-100">
+              <div className="flex text-[11px] font-bold uppercase tracking-wider text-brand-muted py-2 border-b border-gray-100">
                 <span className="w-8">#</span><span className="flex-1">Player</span><span className="w-16 text-right">Played</span><span className="w-14 text-right">%</span>
               </div>
               <ol>
                 {board.map((e, i) => (
                   <li key={e.name}
                     className={`flex items-center py-2 text-sm border-b border-gray-50 ${e.is_me ? "bg-amber-50 -mx-4 px-4 font-bold" : ""} ${i === lastEligible ? "border-b-2 border-b-brand-gold" : ""}`}>
-                    <span className="w-8 font-black text-gray-400 tabular-nums">{i + 1}</span>
+                    <span className="w-8 font-black text-brand-muted tabular-nums">{i + 1}</span>
                     <span className="flex-1 min-w-0 truncate">
                       {e.name}{e.is_me ? " (you)" : ""}
                       {e.knockout_eligible && <span className="ml-1.5 text-[10px] font-bold bg-pitch-100 text-pitch-700 rounded-full px-1.5 py-0.5">Eligible</span>}
                     </span>
-                    <span className="w-16 text-right text-gray-500 tabular-nums">{e.matches_present}/{e.total_matches}</span>
+                    <span className="w-16 text-right text-brand-muted tabular-nums">{e.matches_present}/{e.total_matches}</span>
                     <span className="w-14 text-right font-bold tabular-nums">{pct(e)}</span>
                   </li>
                 ))}
               </ol>
-              {lastEligible >= 0 && <p className="text-[11px] text-gray-500 py-2">Gold line = knockout cut-off</p>}
+              {lastEligible >= 0 && <p className="text-[11px] text-brand-muted py-2">Gold line = knockout cut-off</p>}
             </div>
           </>
         )}

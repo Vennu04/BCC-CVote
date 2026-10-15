@@ -5,17 +5,11 @@ import api from "../utils/api";
 import { useConfirm } from "../hooks/useConfirm";
 import ConfirmDialog from "./ConfirmDialog";
 import { Users, ChevronDown, ChevronUp, Check, HelpCircle, X } from "lucide-react";
+import { CATEGORY_ORDER } from "../utils/categories";
+import CategoryTag from "./CategoryTag";
 
 // Same fixed order/labels as the auction pool view (Auction.jsx, admin/Auction.jsx)
 // — kept in sync deliberately so a category reads the same everywhere in the app.
-const GROUP_LABELS = {
-  extra_power_allrounder: "Extra Power — All-Rounders",
-  extra_power_batsman: "Extra Power — Batsmen",
-  power: "Power — All-Rounders",
-  power_batsman: "Power — Batsmen",
-  classic: "Classic",
-};
-const CATEGORY_ORDER = ["extra_power_allrounder", "extra_power_batsman", "power", "power_batsman", "classic"];
 
 const AVAILABILITY_LABELS = {
   available: "Available",
@@ -81,7 +75,7 @@ function NameChip({ person, tone, onMark, markingId }) {
         onClick={() => setOpen((v) => !v)}
         disabled={marking}
         className={`text-xs rounded-full px-2.5 py-1 hover:ring-2 hover:ring-pitch-300 transition-shadow disabled:opacity-50 ${
-          tone === "pending" ? "bg-gray-50 text-gray-400 border border-gray-200" : "bg-gray-100 text-gray-700"
+          tone === "pending" ? "bg-gray-50 text-brand-muted border border-gray-200" : "bg-gray-100 text-gray-700"
         }`}
         title="Click to set or change this person's vote"
       >
@@ -124,7 +118,7 @@ function NameChip({ person, tone, onMark, markingId }) {
 }
 
 function NameChips({ people, tone, onMark, markingId }) {
-  if (people.length === 0) return <p className="text-xs text-gray-400 italic">None yet</p>;
+  if (people.length === 0) return <p className="text-xs text-brand-muted italic">None yet</p>;
   return (
     <div className="flex flex-wrap gap-1.5">
       {people.map((p) => (
@@ -199,7 +193,7 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
           <button
             type="button"
             onClick={() => setShowPending((v) => !v)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+            className="flex items-center gap-1 text-xs text-brand-muted hover:text-brand-muted"
           >
             {pendingTotal} yet to vote {showPending ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
@@ -212,10 +206,10 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
           const odd = confirmed.length % 2 !== 0;
           return (
             <div key={cat}>
-              <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${odd ? "text-red-600" : "text-gray-500"}`}>
-                {GROUP_LABELS[cat]}{" "}
-                <span className={odd ? "normal-case font-semibold" : "text-gray-400 normal-case font-normal"}>
-                  ({confirmed.length}{odd && " ⚠️ odd"})
+              <p className="flex items-center gap-1.5 mb-1">
+                <CategoryTag category={cat} full={!compact} />
+                <span className={`text-xs ${odd ? "font-extrabold text-[#7a4f00] bg-[#fff3d1] rounded-full px-1.5" : "font-semibold text-brand-muted"}`}>
+                  {confirmed.length}{odd && " · odd"}
                 </span>
               </p>
               {!compact && <NameChips people={confirmed} onMark={handleMark} markingId={markingId} />}
@@ -228,15 +222,15 @@ export default function ConfirmedPlayersPanel({ voteMatrix, slotId, excludeIds, 
       </div>
 
       {!compact && matchCaptains?.length > 0 && (
-        <p className="text-xs text-gray-600 mt-2">
-          🧢 {matchCaptains.map((c) => `${c.name} (${c.team_name})`).join(" and ")}{" "}
+        <p className="text-xs text-brand-muted mt-2">
+          {matchCaptains.map((c) => `${c.name} (${c.team_name})`).join(" and ")}{" "}
           {matchCaptains.length > 1 ? "are captains" : "is a captain"} in this match, so they're not in any group.
         </p>
       )}
 
       {!compact && data.uncategorizedConfirmed > 0 && (
-        <p className="text-xs text-red-600 mt-2">
-          ⚠️ {data.uncategorizedConfirmed} confirmed player(s) have no category set.{" "}
+        <p className="text-xs font-bold text-[#7a4f00] mt-2">
+          {data.uncategorizedConfirmed} confirmed player(s) have no category set.{" "}
           <Link to="/manage/players/people" className="underline">Players</Link>
         </p>
       )}

@@ -9,7 +9,7 @@ export { homePathFor };
 function RequireAuth({ role, children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-brand-navy font-semibold">Loading…</span></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (role && user.role !== role) return <Navigate to={homePathFor(user)} replace />;
   // A default-password account must reset it before touching anything else.
@@ -26,7 +26,7 @@ export function ProtectedRoute({ children }) {
 export function AdminRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-brand-navy font-semibold">Loading…</span></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   // role=="admin" is the normal case; a captain/player flagged is_admin=True
   // (see AuthContext's isAdmin) may reach admin routes too, without losing
@@ -52,7 +52,7 @@ export function CaptainRoute({ children }) {
 export function PlayerRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-brand-navy font-semibold">Loading…</span></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   // role=="player" is the normal case; an admin who's also flagged is_player
   // (see isVoter) may reach the player dashboard too, without losing /admin.
@@ -71,7 +71,7 @@ export function PlayerRoute({ children }) {
 export function VoterRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-pitch-600 font-medium">Loading…</span></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><span className="text-brand-navy font-semibold">Loading…</span></div>;
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (!isVoter(user)) return <Navigate to={homePathFor(user)} replace />;
   if (user.must_change_password && location.pathname !== "/change-password") {
