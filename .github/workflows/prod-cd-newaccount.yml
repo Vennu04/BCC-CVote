@@ -4,9 +4,8 @@ name: Prod CD (New Account)
 # decommissioned 2026-08-18 once the old AWS account (661474704151) ran out
 # of free-tier credits. See INFRASTRUCTURE.md for the full architecture and
 # terraform/main.tf's header comment for the decommission record. The name
-# "(New Account)" is kept for continuity with existing GitHub environment/
-# secret naming (NEW_AWS_DEPLOY_ROLE_ARN, NEW_INSTANCE_ID) rather than a
-# functional distinction — there's no "old account" deploy anymore.
+# "(New Account)" is kept for continuity rather than a functional
+# distinction — there's no "old account" deploy anymore.
 
 on:
   push:

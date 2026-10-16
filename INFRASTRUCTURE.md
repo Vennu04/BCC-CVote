@@ -97,8 +97,8 @@ K3s-targeting `prod-cd.yml` was removed in the same decommission). Triggers on e
 `main`, no path filter.
 
 1. **`backend-tests`** — pytest against a throwaway `mongo:7.0` service container.
-2. **`build-and-push`** — GitHub-hosted runner, OIDC auth (`NEW_AWS_DEPLOY_ROLE_ARN`, no
-   static AWS keys), builds + Trivy-scans + pushes both images to ECR, tagged both `:latest`
+2. **`build-and-push`** — GitHub-hosted runner, OIDC auth (deploy role ARN set in the
+   workflow `env`, no static AWS keys), builds + Trivy-scans + pushes both images to ECR, tagged both `:latest`
    and `:<8-char-sha>`.
 3. **`deploy`** — plain GitHub-hosted runner (no self-hosted runner needed, unlike the old
    K3s setup) triggers `/opt/bcc-cvote/deploy.sh` on the instance via **SSM RunCommand**,
@@ -106,13 +106,14 @@ K3s-targeting `prod-cd.yml` was removed in the same decommission). Triggers on e
 
 `deploy.sh` (baked onto the instance by Terraform's `user_data`, re-invoked every deploy):
 - Discovers its own public IP via IMDSv2 (no dependency on how the EIP is wired up)
-- Pulls all 5 secrets from SSM into a fresh `.env` (`chmod 600`)
+- Writes only non-secret settings (`APP_HOSTNAME`, `ACME_EMAIL`, `ECR_REGISTRY`) to `.env`;
+  the backend loads its own secrets from AWS Secrets Manager (`bcc-cvote/prod/app`) at startup
 - `docker compose pull && docker compose up -d`, then prunes images older than 72h
 
-**`NEW_INSTANCE_ID`** (GitHub repo secret) is stable in practice — the Elastic IP survives an
+**`INSTANCE_ID`** (set in the workflow `env`) is stable in practice — the Elastic IP survives an
 instance stop/replace — but **not guaranteed**: if `terraform-new-account/main.tf`'s
 `user_data` ever changes, `user_data_replace_on_change = true` recreates the instance with a
-new ID, and this secret needs a manual update (`terraform output instance_id`) before the next
+new ID, and this value needs a manual update (`terraform output instance_id`) before the next
 deploy will work.
 
 `dev-ci.yml` runs on PRs — backend pytest, frontend vitest, `npm audit` / `pip audit`, Trivy
@@ -155,7 +156,7 @@ instead. `deploy.sh` already handles a missing value gracefully (`|| echo ""`) f
   same mechanism the deploy pipeline itself uses.
 - **EC2 replacement**: `terraform apply` in `terraform-new-account/` can replace the instance
   (e.g. changing `user_data`). The Elastic IP re-associates automatically, but the new instance
-  needs: (1) `NEW_INSTANCE_ID` GitHub secret updated, (2) SSM agent confirmed online + cloud-init
+  needs: (1) `INSTANCE_ID` in the workflow `env` updated, (2) SSM agent confirmed online + cloud-init
   finished, (3) one manual `/opt/bcc-cvote/deploy.sh` run via SSM (first deploy on a fresh
   instance has no images to pull until this runs).
 
