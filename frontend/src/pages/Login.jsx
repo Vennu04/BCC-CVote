@@ -44,7 +44,7 @@ export default function Login() {
           <h1 className="font-display font-extrabold text-5xl tracking-wide leading-none">
             BCC <span className="text-brand-gold">CVOTE</span>
           </h1>
-          <p className="text-[15px] text-white/80 leading-snug">Say if you're playing. Build your team at the live auction.</p>
+          <p className="text-[15px] text-white/80 leading-snug">Every great innings starts with 'I'm in.' Say it — then build your team live.</p>
         </div>
 
         <div className="bg-white text-brand-ink rounded-3xl p-6 shadow-soft-lg">
