@@ -53,7 +53,9 @@ export default function Stats() {
             ) : (
               <ol className="divide-y divide-gray-100">
                 {eligible.map((e, i) => (
-                  <li key={e.name} className={`flex items-center gap-3 py-2 ${e.is_me ? "font-bold" : ""}`}>
+                  // Names aren't unique (two Shashis) and the leaderboard sends no
+                  // ids; the list is a fixed ranking, so position is a stable key.
+                  <li key={`${i}-${e.name}`} className={`flex items-center gap-3 py-2 ${e.is_me ? "font-bold" : ""}`}>
                     <span className="w-6 text-right text-sm font-black text-brand-muted tabular-nums">{i + 1}</span>
                     <span className="flex-1">{e.name}{e.is_me ? " (you)" : ""}</span>
                     <span className="text-sm tabular-nums">{pct(e)}</span>
@@ -83,7 +85,7 @@ export default function Stats() {
               </div>
               <ol>
                 {board.map((e, i) => (
-                  <li key={e.name}
+                  <li key={`${i}-${e.name}`}
                     className={`flex items-center py-2 text-sm border-b border-gray-50 ${e.is_me ? "bg-amber-50 -mx-4 px-4 font-bold" : ""} ${i === lastEligible ? "border-b-2 border-b-brand-gold" : ""}`}>
                     <span className="w-8 font-black text-brand-muted tabular-nums">{i + 1}</span>
                     <span className="flex-1 min-w-0 truncate">

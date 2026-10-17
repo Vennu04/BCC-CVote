@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import AuctionRulesNote from "../components/AuctionRulesNote";
@@ -153,7 +153,7 @@ export default function Auction() {
   const { id } = useParams();
   const { user } = useAuth();
   const {
-    auction, loading, error, bidding, dropping, freePicking, sendingChat,
+    auction, loading, error, blocked, bidding, dropping, freePicking, sendingChat,
     placeBid, dropCurrentPlayer, freePick, sendChatMessage, refetch,
   } = useAuction(id);
   const [amount, setAmount] = useState("");
@@ -326,6 +326,30 @@ export default function Auction() {
       <div className="min-h-screen bg-brand-ground">
         <Navbar />
         <div className="max-w-3xl mx-auto px-4 py-8 text-brand-muted text-sm">Loading auction…</div>
+      </div>
+    );
+  }
+
+  if (!auction && blocked) {
+    // The link opened fine but this account can't see the auction (only its
+    // two captains and admins can) or it's gone — retrying won't help.
+    return (
+      <div className="min-h-screen bg-brand-ground">
+        <Navbar />
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <div className="card text-center py-12">
+            <Gavel className="mx-auto text-brand-muted mb-3" size={40} />
+            <p className="text-gray-700 font-medium">
+              {blocked === "forbidden" ? "This auction isn't open to you" : "This auction no longer exists"}
+            </p>
+            <p className="text-brand-muted text-sm mt-1 mb-4">
+              {blocked === "forbidden"
+                ? "Only the two captains in it and the admins can watch it."
+                : "It may have been deleted. Check the Auction tab for live ones."}
+            </p>
+            <Link to="/auction" className="btn-secondary inline-block">Go to Auction</Link>
+          </div>
+        </div>
       </div>
     );
   }

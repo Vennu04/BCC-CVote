@@ -9,6 +9,13 @@ import { Clock, Lock, AlertTriangle, Users, ChevronDown, ChevronUp, Check, X } f
 // weather, then the two vote buttons. Same behaviour as before the redesign
 // — only the look changed.
 
+// Hours-and-minutes only reads well up to two days out; past that
+// ("85362 h 1 min") show the closing date itself.
+export function closesLabel(hours, minutes, closesAt) {
+  if (hours >= 48) return closesAt ? `Voting closes ${closesAt}` : `Voting closes in ${Math.floor(hours / 24)} days`;
+  return `Voting closes in ${hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`}`;
+}
+
 function WindowStatus({ windowInfo }) {
   const { hours, minutes, expired } = useCountdown(windowInfo?.seconds_remaining);
 
@@ -45,7 +52,7 @@ function WindowStatus({ windowInfo }) {
     <span className={`inline-flex items-center gap-1.5 text-xs font-extrabold rounded-full px-2.5 py-1 ${
       urgency ? "bg-[#fce8e6] text-[#a1251b]" : "bg-[#fff3d1] text-[#7a4f00]"}`}>
       <Clock size={12} />
-      Voting closes in {hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`}
+      {closesLabel(hours, minutes, windowInfo?.closes_at)}
     </span>
   );
 }
