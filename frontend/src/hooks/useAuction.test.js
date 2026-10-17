@@ -100,4 +100,33 @@ describe("useAuction", () => {
     expect(api.post).toHaveBeenCalledWith("/auction/a1/free-pick", { player_id: "p1" });
     expect(toast.success).toHaveBeenCalledWith("Player picked for free!");
   });
+  // An old WhatsApp link to an auction this account can't watch used to
+  // toast "Access denied" and re-poll every 2.5 s forever.
+  it("stops polling and skips the toast when the auction is forbidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.get.mockRejectedValue({ response: { status: 403, data: { error: "Access denied" } } });
+      const { result } = renderHook(() => useAuction("other-team"));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.blocked).toBe("forbidden");
+      expect(result.current.error).toBe(false);
+      expect(toast.error).not.toHaveBeenCalled();
+
+      const calls = api.get.mock.calls.length;
+      await act(async () => { vi.advanceTimersByTime(10000); });
+      expect(api.get.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks a missing auction as not_found", async () => {
+    api.get.mockRejectedValueOnce({ response: { status: 404, data: { error: "Auction not found" } } });
+    const { result } = renderHook(() => useAuction("gone"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.blocked).toBe("not_found");
+    expect(toast.error).not.toHaveBeenCalled();
+  });
 });

@@ -8,6 +8,11 @@ export function useAuction(auctionId) {
   const [auction, setAuction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // 403/404 on the auction itself: the link is fine but this account can't
+  // see it (e.g. an old WhatsApp link to someone else's auction) or it no
+  // longer exists. Retrying can't fix either, so polling stops instead of
+  // hitting the server — and toasting — every 2.5 s forever.
+  const [blocked, setBlocked] = useState(null);
   const [bidding, setBidding] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [freePicking, setFreePicking] = useState(null);
@@ -22,6 +27,11 @@ export function useAuction(auctionId) {
       setError(false);
       hasLoadedOnce.current = true;
     } catch (err) {
+      const status = err.response?.status;
+      if (!hasLoadedOnce.current && (status === 403 || status === 404)) {
+        setBlocked(status === 403 ? "forbidden" : "not_found");
+        return;
+      }
       // Only surface a toast/error state for the first (pre-load) failure —
       // once the auction has loaded once, a single missed poll tick during
       // live bidding shouldn't interrupt captains with noise every 2.5s.
@@ -39,10 +49,10 @@ export function useAuction(auctionId) {
   // Live sync via short-interval polling — plenty for just 2 captains bidding at
   // once, and needs no WebSocket infra on top of the existing plain Flask/gunicorn stack.
   useEffect(() => {
-    if (!auctionId) return;
+    if (!auctionId || blocked) return;
     const interval = setInterval(fetchAuction, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [auctionId, fetchAuction]);
+  }, [auctionId, fetchAuction, blocked]);
 
   const placeBid = async (amount) => {
     // Same lesson as dropCurrentPlayer below: a successful bid used to give
@@ -125,7 +135,7 @@ export function useAuction(auctionId) {
   };
 
   return {
-    auction, loading, error, bidding, dropping, freePicking, sendingChat,
+    auction, loading, error, blocked, bidding, dropping, freePicking, sendingChat,
     placeBid, dropCurrentPlayer, freePick, sendChatMessage, refetch: fetchAuction,
   };
 }

@@ -10,6 +10,7 @@ import { TeamsVs } from "../../components/TeamCrest";
 import { LoadingState } from "../../components/LoadingState";
 import { STATUS_STYLES } from "../../utils/windowStatus";
 import { matchWhen } from "../../utils/matchLabel";
+import { categoryLabel } from "../../utils/categories";
 import { Download, RefreshCw, Users, BarChart2, ClipboardList, CalendarDays, ChevronDown, ChevronUp, ChevronRight, CheckCircle2 } from "lucide-react";
 
 // Live vote counts matter most here while a voting window is running, so it
@@ -186,7 +187,7 @@ export default function VotesInsights() {
                     items={insights.attendance_trend.map((m) => ({ label: m.label, value: m.attendee_count }))}
                     emptyLabel="No league matches recorded yet" valueSuffix=" present" />
                   <InsightBarCard title="Auction Spend by Category (pts)" icon={<BarChart2 size={16} className="text-brand-navy" />}
-                    items={Object.entries(insights.auction_spend_by_category).map(([label, value]) => ({ label, value }))}
+                    items={Object.entries(insights.auction_spend_by_category).map(([key, value]) => ({ label: categoryLabel(key), value }))}
                     emptyLabel="No auctioned players sold yet" valueSuffix=" pts" />
                   <InsightBarCard title="Voting Participation %" icon={<CalendarDays size={16} className="text-brand-navy" />}
                     items={insights.participation_trend.map((w) => ({
