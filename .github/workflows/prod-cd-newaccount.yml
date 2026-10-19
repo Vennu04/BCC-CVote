@@ -125,17 +125,17 @@ jobs:
 
       # CI secrets from AWS Secrets Manager -> masked env vars CI_<KEY>.
       - name: Read CI secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        uses: aws-actions/aws-secretsmanager-get-secrets@v3
         with:
           secret-ids: CI,bcc-cvote/ci
           parse-json-secrets: true
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Must match dev-ci.yml's PR build exactly (context, build args), so a
       # tree-<hash> image is the same whichever pipeline built it.
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.image }}
           load: true
