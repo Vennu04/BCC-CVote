@@ -103,7 +103,7 @@ jobs:
 
       - name: Read CI secrets
         if: github.actor != 'dependabot[bot]'
-        uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        uses: aws-actions/aws-secretsmanager-get-secrets@v3
         with:
           secret-ids: CI,bcc-cvote/ci
           parse-json-secrets: true
@@ -164,7 +164,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Read CI secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        uses: aws-actions/aws-secretsmanager-get-secrets@v3
         with:
           secret-ids: CI,bcc-cvote/ci
           parse-json-secrets: true
@@ -176,13 +176,13 @@ jobs:
             --image-ids imageTag="${{ steps.tag.outputs.TAG }}" --query 'images[0].imageId.imageDigest' --output text 2>/dev/null || echo None)
           if [ "$D" != "None" ]; then echo "built=true" >> "$GITHUB_OUTPUT"; echo "Already built: ${{ steps.tag.outputs.TAG }}"; else echo "built=false" >> "$GITHUB_OUTPUT"; fi
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         if: steps.have.outputs.built != 'true'
 
       # Must match prod-cd-newaccount.yml's build exactly.
       - name: Build image
         if: steps.have.outputs.built != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.image }}
           load: true
@@ -217,7 +217,7 @@ jobs:
         working-directory: terraform-new-account
     steps:
       - uses: actions/checkout@v7
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.8
       - run: terraform fmt -check -diff
